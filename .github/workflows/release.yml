@@ -4,7 +4,7 @@ name: 🚀 KizunaLink Release Pipeline
 # Host deployment consumes. The recommended artifact is
 # `kizunalink-linux-x86_64-musl` (fully static: no glibc or shared-library
 # requirement). `kizunalink-linux-amd64` is the standard glibc x86_64 build
-# (needs glibc >= 2.33 at runtime).
+# (needs glibc >= 2.34 at runtime).
 #
 # Triggers:
 #   * release: published  — the normal path: build and attach assets to the tag.
@@ -270,7 +270,7 @@ jobs:
             distro. No libopus (linked statically):
               * libgcc_s.so.1
               * libm.so.6
-              * libc.so.6   (glibc >= 2.33 — Debian 12+, Ubuntu 22.04+)
+              * libc.so.6   (glibc >= 2.34 — Debian 12+, Ubuntu 22.04+)
             If the host glibc is older (e.g. Debian 10 / Pterodactyl's stock
             ghcr.io/pterodactyl/yolks:debian is glibc 2.28), use the musl build.
 

@@ -17,7 +17,7 @@ From the repository's **Releases** page, download a binary asset, **not** the
 | Asset | When to use |
 |---|---|
 | **`kizunalink-linux-x86_64-musl`** | **Recommended.** Fully static — no shared libraries, no glibc version requirement. Works on every x86_64 Linux container, including Pterodactyl's Debian 10 images. |
-| `kizunalink-linux-amd64` | Standard glibc build. Smaller to link but requires **glibc ≥ 2.33** (Debian 12+/Ubuntu 22.04+). Use only if you know the container is recent. |
+| `kizunalink-linux-amd64` | Standard glibc build. Smaller to link but requires **glibc ≥ 2.34** (Debian 12+/Ubuntu 22.04+). Use only if you know the container is recent. |
 | `kizunalink-linux-arm64` | ARM64 hosts (`aarch64`). Same glibc notes as `amd64`. |
 
 Each asset ships with a sibling `.sha256` file. Verify the download:
@@ -145,7 +145,7 @@ With the **glibc** `amd64` binary, the only runtime libraries are `libgcc_s.so.1
 `libm.so.6` and `libc.so.6` — all part of the base OS. If startup fails with:
 
 ```
-error while loading shared libraries: libc.so.6: version `GLIBC_2.33' not found
+error while loading shared libraries: libc.so.6: version `GLIBC_2.34' not found
 ```
 
 the container's glibc is too old (Pterodactyl's stock `yolks:debian` is glibc
