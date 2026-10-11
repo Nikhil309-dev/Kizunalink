@@ -51,6 +51,10 @@ pub async fn update_player(
             .into_response();
     };
 
+    if let Err(e) = validate_player_update(&body, &session_id, &guild_id) {
+        return e.into_response();
+    }
+
     let no_replace = params
         .get("noReplace")
         .map(|v| v == "true")
@@ -75,7 +79,22 @@ pub async fn update_player(
         return e.into_response();
     }
 
-    if let Some(track_update) = resolve_track_update(&body) {
+    let track_update = match resolve_track_update(&body, &state).await {
+        TrackUpdateOutcome::Update(track_update) => Some(track_update),
+        TrackUpdateOutcome::None => None,
+        TrackUpdateOutcome::InvalidIdentifier(message) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(kizunalink::common::KizunaLinkError::bad_request(
+                    message,
+                    format!("/v4/sessions/{}/players/{}", session_id, guild_id),
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    if let Some(track_update) = track_update {
         let start_time_ms = if loading_new_track {
             body.position
         } else {
@@ -108,6 +127,59 @@ pub async fn update_player(
 
     let response = player.to_player_response().await;
     (StatusCode::OK, Json(response)).into_response()
+}
+
+/// Reject structurally invalid player updates before any player state is mutated.
+///
+/// Mirrors Lavalink's `PlayerRestHandler` preconditions:
+/// - `track` and the deprecated `encodedTrack`/`identifier` fields are mutually exclusive.
+/// - `encodedTrack` and `identifier` are mutually exclusive.
+/// - `endTime`, when present and non-null, must be greater than 0.
+///
+/// Validating up front keeps a rejected request from partially mutating the
+/// player (e.g. applying `filters` and then failing on the track).
+fn validate_player_update(
+    body: &PlayerUpdate,
+    session_id: &kizunalink::common::types::SessionId,
+    guild_id: &kizunalink::common::types::GuildId,
+) -> Result<(), (StatusCode, Json<kizunalink::common::KizunaLinkError>)> {
+    let path = format!("/v4/sessions/{}/players/{}", session_id, guild_id);
+    let bad_request = |message: &str| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(kizunalink::common::KizunaLinkError::bad_request(
+                message,
+                path.clone(),
+            )),
+        )
+    };
+
+    let legacy_track_present = body.encoded_track.is_some() || body.identifier.is_some();
+    if body.track.is_some() && legacy_track_present {
+        return Err(bad_request(
+            "Cannot specify both track and encodedTrack/identifier",
+        ));
+    }
+    if body.encoded_track.is_some() && body.identifier.is_some() {
+        return Err(bad_request(
+            "Cannot specify both encodedTrack and identifier",
+        ));
+    }
+    if let Some(track) = &body.track
+        && track.encoded.is_some()
+        && track.identifier.is_some()
+    {
+        return Err(bad_request(
+            "Cannot specify both encodedTrack and identifier",
+        ));
+    }
+    if let Some(kizunalink::discord::player::state::EndTime::Set(value)) = body.end_time
+        && value == 0
+    {
+        return Err(bad_request("End time must be greater than 0"));
+    }
+
+    Ok(())
 }
 
 fn handle_player_state(
@@ -287,25 +359,95 @@ async fn handle_voice(
     Ok(())
 }
 
-fn resolve_track_update(
-    body: &PlayerUpdate,
-) -> Option<kizunalink::discord::player::PlayerUpdateTrack> {
+/// Outcome of translating a `PATCH player` body into a track update.
+enum TrackUpdateOutcome {
+    /// A track (or user data) change to apply.
+    Update(kizunalink::discord::player::PlayerUpdateTrack),
+    /// No track-related field was present.
+    None,
+    /// An `identifier` could not be resolved to a single playable track.
+    /// The message is a client-facing 400 reason (Lavalink parity).
+    InvalidIdentifier(String),
+}
+
+/// Translate a player update body into an applyable track update.
+///
+/// `identifier` is resolved to a single track here (Lavalink resolves it via the
+/// audio player manager and rejects playlists/search results/empty results with
+/// `400`), so downstream playback always receives a base64 `encoded` track.
+async fn resolve_track_update(body: &PlayerUpdate, state: &AppState) -> TrackUpdateOutcome {
     if let Some(t) = &body.track {
-        Some(t.clone())
-    } else if let Some(et) = &body.encoded_track {
-        Some(kizunalink::discord::player::PlayerUpdateTrack {
+        return resolve_identifier_field(t.clone(), state).await;
+    }
+    if let Some(et) = &body.encoded_track {
+        return TrackUpdateOutcome::Update(kizunalink::discord::player::PlayerUpdateTrack {
             encoded: Some(et.clone()),
             identifier: body.identifier.clone(),
             user_data: None,
-        })
-    } else {
-        body.identifier
-            .as_ref()
-            .map(|ident| kizunalink::discord::player::PlayerUpdateTrack {
+        });
+    }
+    if let Some(ident) = &body.identifier {
+        return resolve_identifier_field(
+            kizunalink::discord::player::PlayerUpdateTrack {
                 encoded: None,
                 identifier: Some(ident.clone()),
                 user_data: None,
-            })
+            },
+            state,
+        )
+        .await;
+    }
+    TrackUpdateOutcome::None
+}
+
+/// If the update carries an `identifier` (and no `encoded`), resolve it to a
+/// single playable track. Playlists, searches, and empty results are rejected
+/// with `400`, matching Lavalink's `PlayerRestHandler`.
+async fn resolve_identifier_field(
+    mut track_update: kizunalink::discord::player::PlayerUpdateTrack,
+    state: &AppState,
+) -> TrackUpdateOutcome {
+    if track_update.encoded.is_some() {
+        return TrackUpdateOutcome::Update(track_update);
+    }
+    let Some(identifier) = track_update.identifier.take() else {
+        return TrackUpdateOutcome::Update(track_update);
+    };
+
+    let result = match tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        state
+            .source_manager
+            .load(&identifier, state.routeplanner.clone()),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            return TrackUpdateOutcome::InvalidIdentifier(
+                "Timed out resolving identifier".to_string(),
+            );
+        }
+    };
+    match result {
+        protocol::tracks::LoadResult::Track(track) => {
+            track_update.encoded = Some(kizunalink::discord::player::state::TrackEncoded::Set(
+                track.encoded,
+            ));
+            TrackUpdateOutcome::Update(track_update)
+        }
+        protocol::tracks::LoadResult::Empty {} => {
+            TrackUpdateOutcome::InvalidIdentifier("No matches found for identifier".to_string())
+        }
+        protocol::tracks::LoadResult::Error(err) => TrackUpdateOutcome::InvalidIdentifier(
+            err.message
+                .unwrap_or_else(|| "Failed to load identifier".to_string()),
+        ),
+        protocol::tracks::LoadResult::Playlist(_) | protocol::tracks::LoadResult::Search(_) => {
+            TrackUpdateOutcome::InvalidIdentifier(
+                "Cannot play a playlist or search result".to_string(),
+            )
+        }
     }
 }
 
@@ -354,7 +496,12 @@ async fn apply_track_update(
         )
         .await;
     } else if let Some(user_data) = track_update.user_data {
-        player.user_data = user_data;
+        // A userData-only update applies to the currently playing track and must
+        // be visible in the echoed Track object (Lavalink: `player.track?.userData = it`).
+        player.user_data = user_data.clone();
+        if let Some(info) = player.track_info.as_mut() {
+            info.user_data = user_data;
+        }
     }
 }
 

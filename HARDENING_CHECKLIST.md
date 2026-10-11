@@ -89,3 +89,27 @@ to preserve state across a long session.
   positive sizes). Unit tests added.
 - [x] Advertised DAVE protocol version pinned to the davey-supported version.
 
+## Upstream parity (Lavalink v4 `PlayerRestHandler`) — this pass
+Ported the PATCH `/v4/sessions/{id}/players/{guildId}` preconditions and the
+`identifier` / `userData` semantics that upstream Lavalink enforces. Diffed
+against `lavalink-devs/Lavalink` (`PlayerRestHandler.kt`, protocol `v4` Kotlin).
+- [x] **400 on mutually exclusive track fields** — `track` together with the
+  deprecated `encodedTrack`/`identifier`, and `encodedTrack` together with
+  `identifier` (also inside `track`), now return `400 Bad Request` instead of
+  silently preferring one field.
+- [x] **400 on non-positive `endTime`** — `endTime: 0` is rejected
+  (`End time must be greater than 0`); `endTime: null` still resets it.
+- [x] **`identifier` playback implemented** — `identifier` (top-level or inside
+  `track`) is resolved to a single playable track via the source manager; a
+  playlist, search result, empty result, or resolution error is answered with
+  `400` (`Cannot play a playlist or search result` / `No matches found for
+  identifier`). Previously the raw identifier was fed into base64 track decoding
+  and always failed with a `TrackException`, so `identifier`-based playback never
+  worked. Resolution is bounded by a 30 s timeout.
+- [x] **`userData` echoed** — a client-supplied `userData` (on a new track or a
+  userData-only update) now appears in the echoed `Track` object and in
+  `TrackStart`/`TrackEnd` events, matching upstream `newTrack.userData`.
+- [x] Regression tests added (`api::rest::tests`): mutual-exclusion, `endTime`
+  bounds, unresolvable identifier. `cargo test --workspace` **299 pass / 0 fail**;
+  clippy `-D warnings` clean; fmt clean.
+

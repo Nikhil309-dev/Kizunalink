@@ -560,3 +560,118 @@ async fn unknown_route_uses_json_error_shape() {
     assert_eq!(body["path"], "/v4/does-not-exist");
     assert!(body["timestamp"].as_u64().is_some());
 }
+
+/// Register a session on a fresh router and return the router plus the player path.
+fn router_with_session() -> (Router, String) {
+    let state = test_support::test_state();
+    let app = test_support::test_router(state.clone());
+
+    let (tx, _rx) = flume::unbounded();
+    let sid = kizunalink::common::types::SessionId::generate();
+    let session = Arc::new(crate::server::Session::new(
+        sid.clone(),
+        None,
+        tx,
+        state.config.server.max_event_queue_size,
+    ));
+    state.sessions.insert(sid.clone(), session);
+
+    let guild = kizunalink::common::types::GuildId::from("123456789012345678".to_string());
+    let path = format!("/v4/sessions/{sid}/players/{}", guild.0);
+    (app, path)
+}
+
+/// `track` and the deprecated `encodedTrack`/`identifier` fields are mutually
+/// exclusive (Lavalink answers 400).
+#[tokio::test]
+async fn patch_player_rejects_track_and_legacy_fields() {
+    let (app, path) = router_with_session();
+    let (status, body) = request_on(
+        app,
+        "PATCH",
+        &path,
+        Some(serde_json::json!({
+            "track": { "encoded": "abc" },
+            "encodedTrack": "def"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert_eq!(body["status"], 400);
+    assert!(
+        body["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("both track")),
+        "unexpected message: {body}"
+    );
+}
+
+/// `encodedTrack` and `identifier` are mutually exclusive, both at the top level
+/// and inside `track` (Lavalink answers 400).
+#[tokio::test]
+async fn patch_player_rejects_encoded_and_identifier() {
+    let (app, path) = router_with_session();
+    let (status, _) = request_on(
+        app.clone(),
+        "PATCH",
+        &path,
+        Some(serde_json::json!({ "encodedTrack": "def", "identifier": "ytsearch:x" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    let (status, _) = request_on(
+        app,
+        "PATCH",
+        &path,
+        Some(serde_json::json!({ "track": { "encoded": "def", "identifier": "ytsearch:x" } })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+/// `endTime` must be greater than 0 when set; `null`/omitted are allowed.
+#[tokio::test]
+async fn patch_player_rejects_non_positive_end_time() {
+    let (app, path) = router_with_session();
+    let (status, body) = request_on(
+        app.clone(),
+        "PATCH",
+        &path,
+        Some(serde_json::json!({ "endTime": 0 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert!(
+        body["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("End time")),
+        "unexpected message: {body}"
+    );
+
+    // `endTime: null` is a valid reset and must succeed.
+    let (status, _) = request_on(
+        app,
+        "PATCH",
+        &path,
+        Some(serde_json::json!({ "endTime": null })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+/// An `identifier` that matches no source must be rejected with 400 rather than
+/// silently failing inside playback (Lavalink parity).
+#[tokio::test]
+async fn patch_player_unresolvable_identifier_is_400() {
+    let (app, path) = router_with_session();
+    let (status, body) = request_on(
+        app,
+        "PATCH",
+        &path,
+        Some(serde_json::json!({ "identifier": "zzz-kizuna-no-source-matches-this" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert_eq!(body["status"], 400);
+}

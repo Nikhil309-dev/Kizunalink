@@ -75,7 +75,20 @@ pub async fn start_playback(player: &mut PlayerContext, config: PlaybackStartCon
     player.track = Some(config.track.clone());
     player.position = 0;
     player.end_time = config.end_time;
-    player.user_data = config.user_data.unwrap_or_else(|| serde_json::json!({}));
+    // A `userData` supplied by the client overrides the value decoded from the
+    // track token; both the player's copy and the echoed Track object must
+    // reflect it (Lavalink sets `newTrack.userData` and returns it).
+    let user_data = config.user_data.unwrap_or_else(|| {
+        player
+            .track_info
+            .as_ref()
+            .map(|t| t.user_data.clone())
+            .unwrap_or_else(|| serde_json::json!({}))
+    });
+    if let Some(info) = player.track_info.as_mut() {
+        info.user_data = user_data.clone();
+    }
+    player.user_data = user_data;
     player.stop_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     let identifier = track_info
