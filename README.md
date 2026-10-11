@@ -151,6 +151,10 @@ cargo build --release --workspace --locked
 
 Check the [releases page](https://github.com/codexdevsnik/Kizunalink/releases) for available platform assets. Release binaries may not include unmerged hardening work. Use the configuration corresponding to the downloaded release; do not assume every architecture has a published asset.
 
+#### Pterodactyl panel
+
+An importable egg and a Pterodactyl-compatible image live in [`pterodactyl/`](./pterodactyl/). The key detail: the port KizunaLink binds must equal the server's allocation port — set `KIZUNA_PORT` (and `KIZUNA_ADDRESS=0.0.0.0`) in the server's startup variables. See [`pterodactyl/README.md`](./pterodactyl/README.md) for the full walkthrough and gotchas.
+
 ### 4. Verify the API
 
 In another terminal, set `KIZUNA_AUTHORIZATION` to the same secret using your preferred secure environment-management method, then run:
