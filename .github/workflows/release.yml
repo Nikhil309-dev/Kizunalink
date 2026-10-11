@@ -1,8 +1,23 @@
 name: 🚀 KizunaLink Release Pipeline
 
+# Builds and publishes the prebuilt Linux binaries that the Pterodactyl/Nexio
+# Host deployment consumes. The recommended artifact is
+# `kizunalink-linux-x86_64-musl` (fully static: no glibc or shared-library
+# requirement). `kizunalink-linux-amd64` is the standard glibc x86_64 build
+# (needs glibc >= 2.33 at runtime).
+#
+# Triggers:
+#   * release: published  — the normal path: build and attach assets to the tag.
+#   * workflow_dispatch   — manual rebuild for an existing tag (see `tag` input).
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish assets to (e.g. v1.1.0). Leave empty to only build artifacts."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -10,11 +25,13 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # libopus is linked statically (vendored CMake build of native/opus) so the
+  # shipped binary has no runtime libopus dependency. See kizunalink/build.rs.
   LIBOPUS_STATIC: "1"
   OPUS_STATIC: "1"
 
 jobs:
-  # Build Linux Binaries
+  # Standard glibc-linked Linux binaries (x86_64 + aarch64).
   build-linux:
     name: 🐧 Build Linux (${{ matrix.arch }})
     runs-on: ubuntu-22.04
@@ -29,8 +46,10 @@ jobs:
             arch: arm64
 
     steps:
-      - name: 📥 Checkout source
+      - name: 📥 Checkout source (release tag or dispatched ref)
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       - name: 🦀 Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -79,121 +98,38 @@ jobs:
           export GIT_COMMIT_TIME_HUMAN="$(git log -1 --format=%cI)"
           cargo build --release --locked --target ${{ matrix.target }}
 
-      - name: 📦 Rename binary
+      - name: 📦 Rename binary and write SHA-256
         run: |
-          mv target/${{ matrix.target }}/release/kizuna-server \
-             target/${{ matrix.target }}/release/kizunalink-linux-${{ matrix.arch }}
+          cd target/${{ matrix.target }}/release
+          mv kizuna-server kizunalink-linux-${{ matrix.arch }}
+          sha256sum kizunalink-linux-${{ matrix.arch }} > kizunalink-linux-${{ matrix.arch }}.sha256
+          cat kizunalink-linux-${{ matrix.arch }}.sha256
 
       - name: 📤 Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: kizunalink-linux-${{ matrix.arch }}
-          path: target/${{ matrix.target }}/release/kizunalink-linux-${{ matrix.arch }}
-
-  # Build macOS + Windows
-  build-other:
-    name: 💻 Build ${{ matrix.os_name }}
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            os_name: macOS Intel
-            target: x86_64-apple-darwin
-            output: kizunalink-macos-amd64
-
-          - os: macos-latest
-            os_name: macOS ARM
-            target: aarch64-apple-darwin
-            output: kizunalink-macos-arm64
-
-          - os: windows-latest
-            os_name: Windows x64
-            target: x86_64-pc-windows-msvc
-            output: kizunalink-windows-amd64.exe
-
-          - os: windows-latest
-            os_name: Windows ARM64
-            target: aarch64-pc-windows-msvc
-            output: kizunalink-windows-arm64.exe
-
-    steps:
-      - name: 📥 Checkout source
-        uses: actions/checkout@v4
-
-      - name: 🦀 Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: 📦 Cache cargo registry
-        uses: actions/cache@v4
-        with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+            target/${{ matrix.target }}/release/kizunalink-linux-${{ matrix.arch }}
+            target/${{ matrix.target }}/release/kizunalink-linux-${{ matrix.arch }}.sha256
 
-      - name: 🎯 Cache target directory
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: 🔧 Install macOS dependencies
-        if: startsWith(matrix.os, 'macos')
-        run: brew install cmake pkg-config
-
-      - name: 🧬 Inject build metadata
-        shell: bash
-        run: |
-          echo "BUILD_TIME=$(date -u +%s)" >> "$GITHUB_ENV"
-          echo "BUILD_TIME_HUMAN=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-          echo "GIT_BRANCH=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
-          echo "GIT_COMMIT=${GITHUB_SHA}" >> "$GITHUB_ENV"
-          echo "GIT_COMMIT_SHORT=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
-          echo "GIT_COMMIT_TIME=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
-          echo "GIT_COMMIT_TIME_HUMAN=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
-
-      - name: 🏗 Build release binary
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: 3.5
-        run: cargo build --release --locked --target ${{ matrix.target }}
-
-      - name: 📦 Rename binary (Unix)
-        if: "!startsWith(matrix.os, 'windows')"
-        run: |
-          mv target/${{ matrix.target }}/release/kizuna-server \
-             target/${{ matrix.target }}/release/${{ matrix.output }}
-
-      - name: 📦 Rename binary (Windows)
-        if: startsWith(matrix.os, 'windows')
-        shell: bash
-        run: |
-          mv target/${{ matrix.target }}/release/kizuna-server.exe \
-             target/${{ matrix.target }}/release/${{ matrix.output }}
-
-      - name: 📤 Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.output }}
-          path: target/${{ matrix.target }}/release/${{ matrix.output }}
-
-  # Build Termux ARM64 Binary
-  build-termux:
-    name: 📱 Build Termux ARM64
+  # Fully static musl build: runs on any x86_64 Linux regardless of glibc
+  # version or installed shared libraries. This is the recommended Pterodactyl /
+  # Nexio Host artifact.
+  build-linux-musl:
+    name: 🐧 Build Linux (x86_64 static)
     runs-on: ubuntu-22.04
 
     steps:
-      - name: 📥 Checkout source
+      - name: 📥 Checkout source (release tag or dispatched ref)
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       - name: 🦀 Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: x86_64-unknown-linux-musl
 
       - name: 📦 Cache cargo registry
         uses: actions/cache@v4
@@ -202,56 +138,50 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
-
-      - name: 🎯 Cache target directory
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-termux-${{ hashFiles('Cargo.lock') }}
 
       - name: 🔧 Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libclang-dev clang git build-essential perl wget unzip
+          sudo apt-get install -y \
+            cmake \
+            pkg-config \
+            libclang-dev \
+            clang \
+            git \
+            build-essential \
+            perl \
+            musl-tools
 
-          ANDROID_NDK_VERSION=r27b
-          NDK_PATH=/opt/android-ndk-${ANDROID_NDK_VERSION}
-          wget -q https://dl.google.com/android/repository/android-ndk-${ANDROID_NDK_VERSION}-linux.zip -O /tmp/ndk.zip
-          sudo unzip -q /tmp/ndk.zip -d /opt
-
-          echo "NDK_HOME=${NDK_PATH}" >> $GITHUB_ENV
-          echo "CC_aarch64_linux_android=${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang" >> $GITHUB_ENV
-          echo "AR_aarch64_linux_android=${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${NDK_PATH}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang" >> $GITHUB_ENV
-
-      - name: 🧬 Inject build metadata
+      - name: 🏗 Build static release binary
         run: |
-          echo "BUILD_TIME=$(date -u +%s)" >> "$GITHUB_ENV"
-          echo "BUILD_TIME_HUMAN=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-          echo "GIT_BRANCH=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
-          echo "GIT_COMMIT=${GITHUB_SHA}" >> "$GITHUB_ENV"
-          echo "GIT_COMMIT_SHORT=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
-          echo "GIT_COMMIT_TIME=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
-          echo "GIT_COMMIT_TIME_HUMAN=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
+          # Explicit so the target is present on the exact toolchain that
+          # rust-toolchain.toml resolves to (channel = "stable").
+          rustup target add x86_64-unknown-linux-musl
+          export BUILD_TIME="$(date -u +%s)"
+          export BUILD_TIME_HUMAN="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export GIT_BRANCH="${GITHUB_REF_NAME}"
+          export GIT_COMMIT="${GITHUB_SHA}"
+          export GIT_COMMIT_SHORT="${GITHUB_SHA:0:7}"
+          export GIT_COMMIT_TIME="$(git log -1 --format=%ct)"
+          export GIT_COMMIT_TIME_HUMAN="$(git log -1 --format=%cI)"
+          cargo build --release --locked --target x86_64-unknown-linux-musl
 
-      - name: 🏗 Build Termux binary
-        env:
-          CC_aarch64_linux_android: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang
-          AR_aarch64_linux_android: ${{ env.NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
-        run: cargo build --release --locked --target aarch64-linux-android
-
-      - name: 📦 Rename binary
+      - name: 📦 Rename binary and write SHA-256
         run: |
-          mv target/aarch64-linux-android/release/kizuna-server \
-             target/aarch64-linux-android/release/kizunalink-termux-arm64
+          cd target/x86_64-unknown-linux-musl/release
+          mv kizuna-server kizunalink-linux-x86_64-musl
+          sha256sum kizunalink-linux-x86_64-musl > kizunalink-linux-x86_64-musl.sha256
+          cat kizunalink-linux-x86_64-musl.sha256
 
       - name: 📤 Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kizunalink-termux-arm64
-          path: target/aarch64-linux-android/release/kizunalink-termux-arm64
+          name: kizunalink-linux-x86_64-musl
+          path: |
+            target/x86_64-unknown-linux-musl/release/kizunalink-linux-x86_64-musl
+            target/x86_64-unknown-linux-musl/release/kizunalink-linux-x86_64-musl.sha256
 
-  # Build & Push Multi-Arch Docker Image
+  # Build & push the multi-arch container image from the glibc binaries.
   docker:
     name: 🐳 Build & Push Docker Image
     needs: build-linux
@@ -299,7 +229,7 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          # Use the 'ci' stage — builder stage is NOT triggered
+          # Use the 'ci' stage — builder stage is NOT triggered.
           target: ci
           platforms: linux/amd64,linux/arm64
           push: true
@@ -308,24 +238,65 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Publish GitHub Release Assets
+  # Publish all release assets (binaries, checksums, runtime-dependency list and
+  # the deployment guide).
   publish:
     name: 📦 Publish Release Assets
-    needs: [build-linux, build-other, build-termux]
+    needs: [build-linux, build-linux-musl]
     runs-on: ubuntu-latest
+    if: always() && needs.build-linux.result == 'success' && needs.build-linux-musl.result == 'success'
 
     steps:
+      - name: 📥 Checkout source (for docs)
+        uses: actions/checkout@v4
+
       - name: 📥 Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: kizunalink-*
 
-      - name: 🚀 Attach binaries to GitHub Release
+      - name: 📄 Build runtime-dependency list
+        run: |
+          cat > artifacts/runtime-deps.txt <<'EOF'
+          KizunaLink Linux release — runtime library requirements
+          ========================================================
+
+          kizunalink-linux-x86_64-musl  (RECOMMENDED for Pterodactyl / Nexio Host)
+            Statically linked. No external shared libraries, no Rust toolchain,
+            no glibc version requirement. Runs on any x86_64 Linux.
+
+          kizunalink-linux-amd64  (standard glibc x86_64)
+            Requires only the base C runtime shipped with every mainstream
+            distro. No libopus (linked statically):
+              * libgcc_s.so.1
+              * libm.so.6
+              * libc.so.6   (glibc >= 2.33 — Debian 12+, Ubuntu 22.04+)
+            If the host glibc is older (e.g. Debian 10 / Pterodactyl's stock
+            ghcr.io/pterodactyl/yolks:debian is glibc 2.28), use the musl build.
+
+          kizunalink-linux-arm64  (standard glibc aarch64)
+            Same runtime requirements as kizunalink-linux-amd64.
+
+          Verify a download with:
+            sha256sum -c kizunalink-linux-<arch>.sha256
+          Inspect a binary's dependencies with:
+            ldd ./kizunalink-linux-<arch>
+          EOF
+          # Strip the heredoc's leading indentation so the file is clean.
+          sed -i 's/^          //' artifacts/runtime-deps.txt
+          cat artifacts/runtime-deps.txt
+
+      - name: 📄 Stage deployment guide
+        run: |
+          cp DEPLOYMENT.md artifacts/DEPLOYMENT.md
+          ls -R artifacts
+
+      - name: 🚀 Attach assets to GitHub Release
         uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release' || inputs.tag != ''
         with:
           files: artifacts/**/*
           fail_on_unmatched_files: false
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ github.event.release.tag_name || inputs.tag }}
           overwrite_files: true
           token: ${{ secrets.GITHUB_TOKEN }}

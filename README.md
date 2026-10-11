@@ -149,11 +149,11 @@ cargo build --release --workspace --locked
 
 #### Pre-built binaries
 
-Check the [releases page](https://github.com/codexdevsnik/Kizunalink/releases) for available platform assets. Release binaries may not include unmerged hardening work. Use the configuration corresponding to the downloaded release; do not assume every architecture has a published asset.
+Check the [releases page](https://github.com/codexdevsnik/Kizunalink/releases) for available platform assets. The recommended asset is `kizunalink-linux-x86_64-musl` (fully static — no Cargo, Rustup, C++ compiler, CMake or shared libraries required). It is renamed from the crate binary `kizuna-server`; run it with `./kizunalink-linux-x86_64-musl`. Each asset ships with a `.sha256` checksum. Release binaries may not include unmerged hardening work. Use the configuration corresponding to the downloaded release; do not assume every architecture has a published asset.
 
 #### Pterodactyl panel
 
-An importable egg and a Pterodactyl-compatible image live in [`pterodactyl/`](./pterodactyl/). The key detail: the port KizunaLink binds must equal the server's allocation port — set `KIZUNA_PORT` (and `KIZUNA_ADDRESS=0.0.0.0`) in the server's startup variables. See [`pterodactyl/README.md`](./pterodactyl/README.md) for the full walkthrough and gotchas.
+For a panel whose image has no native build tools, use the prebuilt static binary path: upload `kizunalink-linux-x86_64-musl` to `/home/container/`, import [`pterodactyl/egg-kizunalink-binary.json`](./pterodactyl/egg-kizunalink-binary.json), and start. The full walkthrough (upload, permissions, config, startup command, port, environment variables, missing libraries, updates) is in [`DEPLOYMENT.md`](./DEPLOYMENT.md). An importable build-from-source egg and a Pterodactyl-compatible image also live in [`pterodactyl/`](./pterodactyl/). The key detail: the port KizunaLink binds must equal the server’s allocation port — set `KIZUNA_PORT` (and `KIZUNA_ADDRESS=0.0.0.0`) in the server’s startup variables. See [`pterodactyl/README.md`](./pterodactyl/README.md) for the source-path walkthrough and gotchas.
 
 ### 4. Verify the API
 
