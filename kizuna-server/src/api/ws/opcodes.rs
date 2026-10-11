@@ -10,6 +10,21 @@ use kizunalink::lavalink::protocol::opcodes::IncomingMessage;
 
 use crate::server::{AppState, Session};
 
+/// Upper bound on a client-requested session resume window.
+///
+/// `configureResuming.timeout` comes straight from the client. Without a cap a
+/// single authenticated client can ask for an arbitrarily long window, and the
+/// cleanup task spawned per disconnect sleeps that long before it can release
+/// the retained `Session` (players, mixer, decoder tasks). Upstream Lavalink's
+/// practical maximum is an hour; clamp there and report the value actually used.
+pub const MAX_RESUME_TIMEOUT_SECS: u64 = 3600;
+
+/// Clamp a client-requested resume timeout into `0..=MAX_RESUME_TIMEOUT_SECS`.
+/// `0` disables resuming and is preserved.
+fn clamp_resume_timeout(timeout: u64) -> u64 {
+    timeout.min(MAX_RESUME_TIMEOUT_SECS)
+}
+
 pub async fn handle_op(
     op: IncomingMessage,
     state: &Arc<AppState>,
@@ -44,12 +59,41 @@ pub async fn handle_op(
         IncomingMessage::Stop { guild_id } => {
             if let Some(player_arc) = session.players.get(&guild_id).map(|kv| kv.value().clone()) {
                 let mut player = player_arc.write().await;
-                player.stop_track();
+                let session_ctx: &dyn kizunalink::common::server_hooks::SessionContext =
+                    session.as_ref();
+                // Emit `TrackEnd: Stopped` for an active track. The old
+                // `player.stop_track()` aborted the monitor task before it could
+                // emit anything, so clients never saw the track end.
+                kizunalink::discord::player::manager::stop_playback(&mut player, session_ctx).await;
             }
             Ok(())
         }
         IncomingMessage::Destroy { guild_id } => {
             session.destroy_player(&guild_id).await;
+            Ok(())
+        }
+        IncomingMessage::ConfigureResuming { key, timeout } => {
+            // `timeout` of 0 disables resuming. Lavalink's optional `key` is not
+            // supported by this node (sessions resume by id); warn so operators
+            // notice clients that rely on it.
+            if key.is_some() {
+                tracing::warn!(
+                    "configureResuming: custom resume keys are not supported; \
+                     sessions resume by session id. Ignoring key for session={session_id}."
+                );
+            }
+            let timeout = clamp_resume_timeout(timeout);
+            session
+                .resumable
+                .store(timeout > 0, std::sync::atomic::Ordering::Relaxed);
+            session
+                .resume_timeout
+                .store(timeout, std::sync::atomic::Ordering::Relaxed);
+            tracing::info!(
+                "configureResuming: resuming={}, timeout={}s for session={session_id}",
+                timeout > 0,
+                timeout
+            );
             Ok(())
         }
     }
@@ -241,4 +285,24 @@ async fn handle_play(
     crate::monitoring::prometheus::observe_track_load(load_start.elapsed().as_secs_f64());
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_RESUME_TIMEOUT_SECS, clamp_resume_timeout};
+
+    #[test]
+    fn resume_timeout_is_clamped_to_the_maximum() {
+        assert_eq!(clamp_resume_timeout(0), 0, "0 must still disable resuming");
+        assert_eq!(clamp_resume_timeout(45), 45);
+        assert_eq!(
+            clamp_resume_timeout(MAX_RESUME_TIMEOUT_SECS),
+            MAX_RESUME_TIMEOUT_SECS
+        );
+        assert_eq!(
+            clamp_resume_timeout(u64::MAX),
+            MAX_RESUME_TIMEOUT_SECS,
+            "an arbitrarily large client timeout must not be honoured"
+        );
+    }
 }

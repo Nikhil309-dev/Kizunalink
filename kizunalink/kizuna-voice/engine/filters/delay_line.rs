@@ -9,6 +9,11 @@ pub struct DelayLine {
 
 impl DelayLine {
     pub fn new(size: usize) -> Self {
+        // `write`/`read` take a modulo by `size`, so a zero-sized line would
+        // divide by zero. The delay filters derive their size from the sample
+        // rate constants; clamp here so the invariant holds no matter how a
+        // call site computes it (e.g. a future sub-1ms delay at a low rate).
+        let size = size.max(1);
         Self {
             buffer: vec![0.0; size],
             size,
@@ -37,5 +42,30 @@ impl DelayLine {
 
     pub fn clear(&mut self) {
         self.buffer.fill(0.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DelayLine;
+
+    #[test]
+    fn zero_sized_delay_line_does_not_divide_by_zero() {
+        // Regression: a `size == 0` line made `write` panic on `% 0` and `read`
+        // underflow on `size - 1`. The constructor clamps to at least one slot.
+        let mut line = DelayLine::new(0);
+        line.write(1.0);
+        assert_eq!(line.read(0.0), 1.0);
+    }
+
+    #[test]
+    fn fractional_delay_interpolates_between_taps() {
+        let mut line = DelayLine::new(4);
+        line.write(0.0);
+        line.write(1.0);
+        // `read(1.0)` returns the most recently written sample; a half-sample
+        // delay interpolates halfway toward the previous one.
+        assert_eq!(line.read(1.0), 1.0);
+        assert_eq!(line.read(0.5), 0.5);
     }
 }

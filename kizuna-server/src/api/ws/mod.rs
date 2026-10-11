@@ -43,13 +43,20 @@ pub async fn websocket_handler(
         return Err((StatusCode::UNAUTHORIZED, "Unauthorized"));
     }
 
-    // 2. User-Id Check
-    let user_id = headers
+    // 2. User-Id Check. Official Lavalink rejects the handshake with 400 when
+    // this header is missing or unparseable; the id is required for every
+    // subsequent voice update, so accepting the connection without it only
+    // defers the failure to the first opcode.
+    let Some(user_id) = headers
         .get("user-id")
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.parse::<u64>().ok())
         .and_then(std::num::NonZeroU64::new)
-        .map(|n| UserId(n.get()));
+        .map(|n| UserId(n.get()))
+    else {
+        warn!("Client connected without a valid 'User-Id' header");
+        return Err((StatusCode::BAD_REQUEST, "Missing or invalid User-Id header"));
+    };
 
     // 3. Client-Name Check
     if let Some(name) = headers.get("client-name").and_then(|h| h.to_str().ok()) {
@@ -74,7 +81,8 @@ pub async fn websocket_handler(
     let ws = ws
         .max_message_size(MAX_CLIENT_WS_MESSAGE_SIZE)
         .max_frame_size(MAX_CLIENT_WS_MESSAGE_SIZE);
-    let upgrade_callback = move |socket| handle_socket(socket, state, user_id, client_session_id);
+    let upgrade_callback =
+        move |socket| handle_socket(socket, state, Some(user_id), client_session_id);
     let mut response = ws.on_upgrade(upgrade_callback).into_response();
 
     let resumed_val = if resuming {

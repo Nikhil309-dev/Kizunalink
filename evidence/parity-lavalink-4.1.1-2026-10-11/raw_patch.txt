@@ -1,0 +1,26 @@
+REF sessionId=2ylhl3kzu4f7b9fe
+KIZ sessionId=nxwu8po8ox6vq6l4
+
+### track + encodedTrack (mutex)  body={"track": {"encoded": "abc"}, "encodedTrack": "def"}
+  REF: 400  {"timestamp":1791687912887,"status":400,"error":"Bad Request","message":"Cannot specify both track and encodedTrack/identifier","path":"/v4/sessions/2ylhl3kzu4f7b9fe/players/123456789012345678"}
+  KIZ: 400  {"timestamp":1791687912888,"status":400,"error":"Bad Request","message":"Cannot specify both track and encodedTrack/identifier","path":"/v4/sessions/nxwu8po8ox6vq6l4/players/123456789012345678"}
+
+### encodedTrack + identifier (mutex)  body={"encodedTrack": "def", "identifier": "ytsearch:x"}
+  REF: 400  {"timestamp":1791687912890,"status":400,"error":"Bad Request","message":"Cannot specify both encodedTrack and identifier","path":"/v4/sessions/2ylhl3kzu4f7b9fe/players/123456789012345678"}
+  KIZ: 400  {"timestamp":1791687912891,"status":400,"error":"Bad Request","message":"Cannot specify both encodedTrack and identifier","path":"/v4/sessions/nxwu8po8ox6vq6l4/players/123456789012345678"}
+
+### endTime 0  body={"endTime": 0}
+  REF: 400  {"timestamp":1791687912893,"status":400,"error":"Bad Request","message":"End time must be greater than 0","path":"/v4/sessions/2ylhl3kzu4f7b9fe/players/123456789012345678"}
+  KIZ: 400  {"timestamp":1791687912894,"status":400,"error":"Bad Request","message":"End time must be greater than 0","path":"/v4/sessions/nxwu8po8ox6vq6l4/players/123456789012345678"}
+
+### endTime null  body={"endTime": null}
+  REF: 200  {"guildId":"123456789012345678","track":null,"volume":100,"paused":false,"state":{"time":1791687912895,"position":0,"connected":false,"ping":-1},"voice":{"token":"","endpoint":"","sessionId":""},"filters":{}}
+  KIZ: 200  {"guildId":"123456789012345678","track":null,"volume":100,"paused":false,"state":{"time":1791687912896,"position":0,"connected":false,"ping":-1},"voice":{"token":"","endpoint":"","sessionId":"","channelId":null},"filters
+
+### garbage encodedTrack  body={"encodedTrack": "not-a-real-track!!"}
+  REF: 500  {"timestamp":1791687912899,"status":500,"error":"Internal Server Error","message":"Request processing failed: java.lang.IllegalArgumentException: Illegal base64 character 2d","path":"/v4/sessions/2ylhl3kzu4f7b9fe/players
+  KIZ: 200  {"guildId":"123456789012345678","track":null,"volume":100,"paused":false,"state":{"time":1791687912900,"position":0,"connected":false,"ping":-1},"voice":{"token":"","endpoint":"","sessionId":"","channelId":null},"filters
+
+### identifier valid url  body={"identifier": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}
+  REF: 400  {"timestamp":1791687912990,"status":400,"error":"Bad Request","message":"Something went wrong while looking up the track.","path":"/v4/sessions/2ylhl3kzu4f7b9fe/players/123456789012345678"}
+  KIZ: 200  {"guildId":"123456789012345678","track":{"encoded":"QAAA5wMARFJpY2sgQXN0bGV5IC0gTmV2ZXIgR29ubmEgR2l2ZSBZb3UgVXAgKE9mZmljaWFsIFZpZGVvKSAoNEsgUmVtYXN0ZXIpAAtSaWNrIEFzdGxleQAAAAAAA0AIAAtkUXc0dzlXZ1hjUQABACtodHRwczovL3d3dy55

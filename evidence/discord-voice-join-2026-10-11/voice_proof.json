@@ -1,0 +1,131 @@
+{
+  "events": [
+    {
+      "type": "TrackStartEvent",
+      "title": "Kesariya"
+    }
+  ],
+  "player_samples": [
+    {
+      "t": 0,
+      "connected": true,
+      "position": 580,
+      "ping": 536,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 1,
+      "connected": true,
+      "position": 2580,
+      "ping": 536,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 2,
+      "connected": true,
+      "position": 4600,
+      "ping": 536,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 3,
+      "connected": true,
+      "position": 6600,
+      "ping": 536,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 4,
+      "connected": true,
+      "position": 8600,
+      "ping": 536,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 5,
+      "connected": true,
+      "position": 10600,
+      "ping": 536,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 6,
+      "connected": true,
+      "position": 12600,
+      "ping": 536,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 7,
+      "connected": true,
+      "position": 14600,
+      "ping": 282,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 8,
+      "connected": true,
+      "position": 16600,
+      "ping": 282,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 9,
+      "connected": true,
+      "position": 18600,
+      "ping": 282,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 10,
+      "connected": true,
+      "position": 20620,
+      "ping": 282,
+      "track": "Kesariya",
+      "dave_ready": true
+    },
+    {
+      "t": 11,
+      "connected": true,
+      "position": 22620,
+      "ping": 282,
+      "track": "Kesariya",
+      "dave_ready": true
+    }
+  ],
+  "stats": {
+    "players": 1,
+    "playingPlayers": 1,
+    "uptime": 4081450,
+    "memory": {
+      "free": 13368553472,
+      "used": 56950784,
+      "allocated": 56950784,
+      "reservable": 16767217664
+    },
+    "cpu": {
+      "cores": 4,
+      "systemLoad": 0.06076469898223877,
+      "lavalinkLoad": 0.004154433536303837
+    },
+    "frameStats": null
+  },
+  "session_id": "vl1xd8aywk2oaphy",
+  "voice_join": {
+    "guild": 1558468405604913235,
+    "guild_name": "Audium Devlopment Orginisation",
+    "channel": 1558469631898034246,
+    "channel_name": "Testing playback",
+    "connected": true
+  }
+}
