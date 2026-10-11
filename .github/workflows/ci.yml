@@ -32,7 +32,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake pkg-config libclang-dev clang build-essential perl libopus-dev
-      - name: Guard: every `| tee` pipeline sets `set -o pipefail`
+      - name: "Guard: every `| tee` pipeline sets `set -o pipefail`"
         run: python3 scripts/check_ci_pipefail.py
       - name: cargo check
         run: |
@@ -242,7 +242,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
-      - name: Guard: vulnerable libcrux crates stay out of the build graph
+      - name: "Guard: vulnerable libcrux crates stay out of the build graph"
         run: python3 scripts/check_libcrux_backend.py
       - name: cargo deny check advisories
         run: |
