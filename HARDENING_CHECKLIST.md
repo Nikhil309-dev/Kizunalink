@@ -47,3 +47,31 @@ to preserve state across a long session.
   Remaining: a two-party **DAVE v2** (protocol ≥ 2) capture — v1 is the current
   Discord default and what was exercised; the vendored `davey` is pinned to the
   v1 MLS version.
+
+## DAVE v2 feasibility (investigated, not actionable yet)
+- The official protocol whitepaper (`discord/dave-protocol`) is at *document
+  revision* "protocol version 1.1" but still defines only **one wire protocol
+  version, v1** - a single MLS parameter set (MLS 1.0, ciphersuite
+  `MLS_128_DHKEMP256_AES128GCM_SHA256_P256`, basic credentials). There is no
+  specification of a version 2 ciphersuite, capability set, or frame format.
+- `identify` advertises `max_dave_protocol_version = DAVE_INITIAL_VERSION = 1`
+  (`constants.rs`), matching `davey::DAVE_PROTOCOL_VERSION`. A regression test
+  (`advertised_dave_version_is_implementable`) now fails loudly if these drift,
+  so the node can never advertise a version its crypto cannot implement.
+- `dave_protocol_version_to_ciphersuite` / `..._to_capabilities` in the vendored
+  `davey` accept **only** version 1 and reject everything else with
+  `UnsupportedProtocolVersion`. Upstream `davey` master is identical (verified
+  against the raw `session.rs`): no version 2 yet.
+- The node's `DaveHandler` already handles protocol-version *transitions* and
+  rejects `> DAVE_INITIAL_VERSION` (`setup_session`, `prepare_transition`,
+  `prepare_epoch`), so it degrades safely rather than mis-encrypting.
+- Conclusion: supporting DAVE v2 requires a v2 specification **and** a `davey`
+  that maps it to an MLS ciphersuite/capabilities set. Until both exist there is
+  no safe implementation to write; added a pin test instead of speculative code.
+
+## Additional hardening (this pass)
+- [x] `DelayLine::new(0)` no longer panics on `% 0` / underflows on `size - 1`;
+  constructor clamps to >= 1 slot (defensive; all current call sites pass
+  positive sizes). Unit tests added.
+- [x] Advertised DAVE protocol version pinned to the davey-supported version.
+
