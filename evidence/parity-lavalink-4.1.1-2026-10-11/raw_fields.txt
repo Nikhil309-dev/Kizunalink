@@ -1,0 +1,32 @@
+
+### volume 5000 (clamp?)  body={"volume": 5000}
+  REF: 200  {"volume": 1000, "paused": false, "track": null, "filters": {}}
+  KIZ: 200  {"volume": 1000, "paused": false, "track": null, "filters": {}}
+
+### volume -10 (clamp?)  body={"volume": -10}
+  REF: 200  {"volume": 0, "paused": false, "track": null, "filters": {}}
+  KIZ: 200  {"volume": 0, "paused": false, "track": null, "filters": {}}
+
+### paused true  body={"paused": true}
+  REF: 200  {"volume": 0, "paused": true, "track": null, "filters": {}}
+  KIZ: 200  {"volume": 0, "paused": true, "track": null, "filters": {}}
+
+### position 12345 no track  body={"position": 12345}
+  REF: 200  {"volume": 0, "paused": true, "track": null, "filters": {}}
+  KIZ: 200  {"volume": 0, "paused": true, "track": null, "filters": {}}
+
+### filters unknown key  body={"filters": {"bogusFilter": {"x": 1}}}
+  REF: 200  {"volume": 0, "paused": true, "track": null, "filters": {}}
+  KIZ: 200  {"volume": 0, "paused": true, "track": null, "filters": {}}
+
+### filters volume 300  body={"filters": {"volume": 3.0}}
+  REF: 200  {"volume": 0, "paused": true, "track": null, "filters": {"volume": 3.0}}
+  KIZ: 200  {"volume": 0, "paused": true, "track": null, "filters": {"volume": 3.0}}
+
+### empty body {}  body={}
+  REF: 200  {"volume": 0, "paused": true, "track": null, "filters": {"volume": 3.0}}
+  KIZ: 200  {"volume": 0, "paused": true, "track": null, "filters": {"volume": 3.0}}
+
+### GET player response keys
+  REF: 200  keys=['filters', 'guildId', 'paused', 'state', 'track', 'voice', 'volume']
+  KIZ: 200  keys=['dave', 'filters', 'guildId', 'paused', 'state', 'track', 'voice', 'volume']

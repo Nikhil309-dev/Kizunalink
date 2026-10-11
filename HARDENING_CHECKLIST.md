@@ -113,3 +113,19 @@ against `lavalink-devs/Lavalink` (`PlayerRestHandler.kt`, protocol `v4` Kotlin).
   bounds, unresolvable identifier. `cargo test --workspace` **299 pass / 0 fail**;
   clippy `-D warnings` clean; fmt clean.
 
+## Live Lavalink 4.1.1 parity pass — this pass
+Ran a real Lavalink 4.1.1 jar (Lavaplayer 2.2.3) side-by-side with the running
+KizunaLink binary, driving both through identical REST + WS flows. Full evidence
+in `evidence/parity-lavalink-4.1.1-2026-10-11/` (`COMPARISON.md` + raw logs).
+- [x] **`GET /version`** now returns the v4 protocol version (was the crate
+  semver `1.1.0`); it and `/v4/info.version.semver` share one `protocol_version()`
+  helper and are asserted equal in a test.
+- [x] **`preRelease` / `frameStats`** are always serialized (`""` / `null`),
+  matching official nodes; previously the keys were omitted.
+- [x] **WS handshake requires `User-Id`** — missing/unparseable now returns 400
+  like upstream, instead of accepting a session that can never do a voice update.
+- [x] Confirmed exact-match parity on the PATCH preconditions, `identifier`
+  resolution, volume clamping, and session/player/routeplanner status codes.
+- [x] `cargo test --workspace` **303 pass / 0 fail**; clippy `-D warnings` clean;
+  fmt clean.
+
