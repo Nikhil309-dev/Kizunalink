@@ -479,6 +479,19 @@ mod tests {
     use crate::common::types::{ChannelId, UserId};
 
     #[test]
+    fn advertised_dave_version_is_implementable() {
+        // identify() sends this as `max_dave_protocol_version`, so the node must
+        // never advertise a version the vendored davey cannot implement. When a
+        // future davey adds a newer version, this test fails loudly and forces the
+        // constant (and the ciphersuite plumbing behind it) to be revisited.
+        assert_eq!(
+            crate::discord::gateway::constants::DAVE_INITIAL_VERSION,
+            davey::DAVE_PROTOCOL_VERSION,
+            "max_dave_protocol_version must equal the davey-supported version"
+        );
+    }
+
+    #[test]
     fn test_handshake_buffering_logic() {
         let mut handler = DaveHandler::new(UserId(1), ChannelId(1));
 
