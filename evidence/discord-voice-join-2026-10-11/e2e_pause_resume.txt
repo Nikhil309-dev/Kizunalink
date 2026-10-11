@@ -1,0 +1,24 @@
+[04:10:42] READY as Yuna#6520 (id 1528943321974571098)
+[04:10:42] PASS :: discord.guild+channel.resolve :: guild='Audium Devlopment Orginisation' channel='Testing playback'
+[04:10:42] PASS :: lavalink.node.connect :: uri=http://127.0.0.1:2333 session_id=elj63ahiwhhwt4n6
+[04:10:43] PASS :: discord.voice.connect :: channel='Testing playback'
+[04:10:44] PASS :: track.play :: identifier=jssearch:Kesariya track='Kesariya'
+[04:10:44] TrackStartEvent: 'Kesariya'
+[04:10:48] PASS :: baseline.position_advancing :: 920 -> 2920
+[04:10:48] BURST: 6x pause/resume with 120ms gap
+[04:10:49] PASS :: burst.pause_resume :: paused_ok=True resumed_ok=True
+[04:10:53] PASS :: post_burst.still_playing :: paused=False track='Kesariya'
+[04:10:53] PASS :: post_burst.position_advancing :: 5280 -> 8280  (pinned tape = no advance)
+
+================================================================
+RESULT: 8 PASS / 0 FAIL / 0 SKIP  (of 8)
+  PASS discord.guild+channel.resolve :: guild='Audium Devlopment Orginisation' channel='Testing playback'
+  PASS lavalink.node.connect :: uri=http://127.0.0.1:2333 session_id=elj63ahiwhhwt4n6
+  PASS discord.voice.connect :: channel='Testing playback'
+  PASS track.play :: identifier=jssearch:Kesariya track='Kesariya'
+  PASS baseline.position_advancing :: 920 -> 2920
+  PASS burst.pause_resume :: paused_ok=True resumed_ok=True
+  PASS post_burst.still_playing :: paused=False track='Kesariya'
+  PASS post_burst.position_advancing :: 5280 -> 8280  (pinned tape = no advance)
+================================================================
+[04:10:53] TrackEndEvent: reason=cleanup

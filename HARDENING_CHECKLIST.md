@@ -137,3 +137,11 @@ Idle control-plane latency (n=300/endpoint, same host) vs a real Lavalink 4.1.1:
 - Idle RSS: KizunaLink ~46 MB vs Lavalink JVM ~344 MB (~7.5x less).
 - Raw logs + method in `evidence/parity-lavalink-4.1.1-2026-10-11/` (`raw_perf.txt`).
   Control-plane only; does not exercise the audio/Discord path.
+
+## Discord voice-join proof — 2026-10-11
+- Real bot `Yuna#6520` joined guild `1558468405604913235` channel `1558469631898034246`
+  with a second human present; node `connected=true`, DAVE `privacyCode` present.
+- `scripts/e2e_pause_resume.py`: 8 PASS / 0 FAIL / 0 SKIP (position 920->2920, 5280->8280).
+- Voice path captured: position advanced 580->22620 ms (~1x realtime), voice ping 536->282 ms.
+- `GET /v4/stats` frameStats=null while playing is correct parity (Lavalink REST path is null too).
+- Evidence: `evidence/discord-voice-join-2026-10-11/`.
