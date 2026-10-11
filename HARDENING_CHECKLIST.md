@@ -39,6 +39,11 @@ to preserve state across a long session.
 - [x] `stop`/`destroy` on an unknown guild are safe no-ops.
 - [x] Session resumption round-trips (`resumed:true`, same session id).
 - [x] `cargo test --workspace` 255 pass; clippy `-D warnings` clean; fmt clean.
-- [ ] Live Discord voice/audio E2E NOT re-run: `DISCORD_TOKEN` is absent in this
-  environment after a reset (prior-tested SHA 2a4bb41; HEAD c1901ea is a
-  descendant). Cannot produce fresh audible-audio proof without the token.
+- [x] Live Discord voice/audio E2E PASS at HEAD `3b27f6b`: real bot Yuna joined
+  voice, played `jssearch:Kesariya`, DAVE v1 READY, sustained encrypted frames
+  (`speak_loop: 1500 ticks, frames_sent=1481`), and the 8/8 pause/resume listen
+  gate passed with a live second member present. Evidence:
+  `evidence/live-dave-e2e-2026-10-10-rerun/` (token/sessionId redacted).
+  Remaining: a two-party **DAVE v2** (protocol ≥ 2) capture — v1 is the current
+  Discord default and what was exercised; the vendored `davey` is pinned to the
+  v1 MLS version.
