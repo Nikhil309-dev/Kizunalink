@@ -64,18 +64,27 @@ The egg runs:
 
 ```bash
 cd /home/container/repo && \
-  export CARGO_HOME=/home/container/.cargo RUSTUP_HOME=/home/container/.rustup \
-         PATH=/home/container/.cargo/bin:$PATH && \
+  export PATH=/home/container/.cargo/bin:/usr/local/cargo/bin:$PATH \
+         KIZUNA_CONFIG_PATH=/home/container/config.toml && \
   cargo run --release --locked --bin kizuna-server
 ```
 
-`CARGO_HOME`/`RUSTUP_HOME` point at the server volume so the toolchain and build
-cache survive restarts. On the image from `Dockerfile` you can drop those exports
-(the toolchain is global) and run the binary directly:
+`PATH` is ordered so a toolchain installed into the volume (`/home/container/.cargo/bin`)
+wins, falling back to a global one from the image (`/usr/local/cargo/bin`). This one
+command works for both options above.
 
-```bash
-cd /home/container/repo && ./target/release/kizuna-server
-```
+Two things this deliberately avoids:
+
+- **Do not set `RUSTUP_HOME` to the volume** unless you installed rustup there. A
+  global image toolchain needs its real `RUSTUP_HOME` (e.g. `/usr/local/rustup`), or
+  `rustc` cannot find its sysroot.
+- **Do not set `CARGO_HOME` to the volume** on the global-toolchain image; `cargo`
+  needs a writable registry there (the `Dockerfile` makes `/usr/local/cargo`
+  writable for exactly this reason).
+
+`KIZUNA_CONFIG_PATH` points the process at the config on the volume root, so the
+working directory can be the repo without the config silently falling back to
+`config.example.toml`.
 
 ## Startup variables
 
@@ -90,17 +99,16 @@ cd /home/container/repo && ./target/release/kizuna-server
 
 ## Gotchas
 
-- **Config location.** The process reads `config.toml` from its working
-  directory, i.e. `/home/container/repo/config.toml` in this layout. The installer
-  writes the minimal file to `/mnt/server/config.toml`; if you prefer it at the
-  repo root, either move it or set `KIZUNA_CONFIG_PATH`. Env vars override the
-  file either way, so the secret/port always win.
-- **Missing config falls back to `config.example.toml`** with a warning. That
-  file has `address = "0.0.0.0"` and a placeholder secret; the env override makes
-  the secret real, but keep an explicit `config.toml` to avoid surprises.
-- **`logs/` must be writable.** The default log path is `./logs/kizunalink.log`.
-  The installer creates `/mnt/server/logs`; make sure the repo-relative `logs/`
-  exists too if you keep the default path with the repo as CWD.
+- **Config location.** The egg sets `KIZUNA_CONFIG_PATH=/home/container/config.toml`
+  and writes that file, so it is read regardless of the working directory. Env vars
+  override the file, so the secret/port always win.
+- **Missing config falls back to `config.example.toml`** with a warning. That file
+  has `address = "0.0.0.0"` and a placeholder secret; the env override makes the
+  secret real, but keep an explicit `config.toml` to avoid surprises.
+- **`logs/` must be writable.** The egg sets an absolute log path
+  (`/home/container/logs/kizunalink.log`) and the installer creates that directory.
+  If you keep the default relative path instead, the process writes relative to its
+  working directory (`repo/logs/`), which must exist and be writable.
 - **First build is heavy** (native `libopus`/`symphonia` + the whole tree). Give
   the container real CPU and RAM; a 1-core/512 MB allocation may OOM the linker.
 - **libopus.** The stock binary links `libopus.so.0`. The installer sets

@@ -36,9 +36,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         && rm -rf /var/lib/apt/lists/*
 
 # Global Rust toolchain so the `container` user can build without owning rustup.
+# The panel's `container` user is not root, so the registry/build caches under
+# CARGO_HOME must be writable; rustup's toolchain dir only needs read.
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
         | sh -s -- -y --default-toolchain stable --no-modify-path \
-    && chmod -R a+rx /usr/local/rustup /usr/local/cargo
+    && chmod -R a+rX /usr/local/rustup \
+    && chmod -R a+rwX /usr/local/cargo
 
 # The panel creates and owns this user; match its uid/gid.
 RUN useradd -m -d /home/container container
