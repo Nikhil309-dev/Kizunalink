@@ -156,3 +156,18 @@ path).
   to the network I/O done under the player write lock in the REST/WS handlers.
 - `docker-compose.yml` runs the image `read_only`; the default config logs to
   `./logs/kizunalink.log`, so the compose file mounts a `kizuna-logs` volume there.
+- `TrackHandle` stores a single `AtomicU64` sample counter; `get_position`,
+  `seek` and `Mixer::mix` all update it, so the WS `position` and `/players`
+  agree. Both directions of the ms↔samples conversion saturate — the client
+  controls `position_ms` via `PATCH /players`, and a wrapping `u64` mul used to
+  let one oversized value desync the two. Keep them consistent, not just
+  panic-free.
+- `configureResuming.timeout` is clamped to `MAX_RESUME_TIMEOUT_SECS` (1 h).
+  The retained session (players, mixer, decoder tasks) lives for that window, so
+  an unbounded value was a cheap DoS. Upstream Lavalink clamps to the same order
+  of magnitude.
+- The lavalink protocol codec (`lavalink/protocol/codec`) is a binary decoder on
+  client input. String fields are `u16`-length-prefixed (`read_string`), so they
+  are bounded at 64 KiB and cannot drive a huge allocation; truncated buffers
+  error via `read_exact`. When extending it, keep lengths bounded before
+  allocating.
