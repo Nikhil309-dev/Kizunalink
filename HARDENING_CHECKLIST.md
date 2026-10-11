@@ -19,8 +19,8 @@ to preserve state across a long session.
 - [x] PERF-002 mixer re-enable after stop_all — RESOLVED, test-pinned
 - [x] Tape pin on pause/resume mid-ramp — FIXED (8c6f674) + E2E harness
 
-## Findings (open)
-- [ ] LOW/DoS: `configureResuming.timeout` is client-controlled and was unbounded.
+## Findings (all resolved)
+- [x] LOW/DoS: `configureResuming.timeout` was client-controlled and unbounded.
   A single authenticated socket could request an arbitrarily long resume window,
   pinning the retained `Session` (players, mixer, decoder tasks) for that long.
   Upstream Lavalink clamps to ~1 h. **FIXED** (see below).
@@ -38,7 +38,9 @@ to preserve state across a long session.
   `TrackExceptionEvent` + `TrackEndEvent` (no panic, no hang).
 - [x] `stop`/`destroy` on an unknown guild are safe no-ops.
 - [x] Session resumption round-trips (`resumed:true`, same session id).
-- [x] `cargo test --workspace` 255 pass; clippy `-D warnings` clean; fmt clean.
+- [x] `cargo test --workspace` **295 pass / 0 fail** (at `83019a9`); clippy `-D warnings`
+  clean; fmt clean. (Earlier 255-count snapshot was taken before the delay-line and
+  DAVE-version pin tests were added.)
 - [x] Live Discord voice/audio E2E PASS at HEAD `3b27f6b`: real bot Yuna joined
   voice, played `jssearch:Kesariya`, DAVE v1 READY, sustained encrypted frames
   (`speak_loop: 1500 ticks, frames_sent=1481`), and the 8/8 pause/resume listen
