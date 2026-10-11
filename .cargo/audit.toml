@@ -1,45 +1,54 @@
 # cargo-audit configuration for KizunaLink.
 #
 # CI runs BOTH `cargo deny check advisories` (deny.toml) and `cargo audit`.
-# cargo-deny silently SKIPS the five `affected.functions`-only libcrux
-# advisories below (RUSTSEC-2026-0209/0211/0124/0330/0331); cargo-audit does
-# not, so it is the authoritative gate. Every ignore here mirrors an entry in
-# deny.toml and is either a no-safe-upgrade case or a non-reachable code path.
+# cargo-deny silently SKIPS advisories that only constrain `affected.functions`
+# (no floor/ceiling in [versions]); cargo-audit does not, so cargo-audit is the
+# authoritative gate. Every ignore here mirrors an entry in deny.toml.
 #
-# All eight are transitive inside the DAVE/MLS crypto stack
-# (davey -> openmls_rust_crypto -> hpke-rs -> hpke-rs-libcrux -> libcrux-*),
-# whose exact libcrux version is pinned upstream; there is no upgrade path
-# available to us. The reachability notes below are specific to how KizunaLink
-# uses that stack for Discord voice E2EE.
+# Reachability was verified against the *compiled* dependency graph, not just
+# Cargo.lock (which also lists optional deps that are never built):
+#
+#   * `hpke-rs` is resolved with features hazmat,serde,serialization,std,tls_codec
+#     ONLY. Its optional `libcrux` feature is OFF, so `hpke-rs-libcrux` (and its
+#     transitive libcrux-kem / libcrux-aesgcm / libcrux-chacha20poly1305) is
+#     never compiled or linked (0 fingerprints, 0 symbols in the binary).
+#     DAVE/MLS uses the RustCrypto backend `hpke-rs-rust-crypto`
+#     (openmls_rust_crypto -> hpke-rs with default rustcrypto backend).
+#   * The only libcrux crates actually compiled are `libcrux-sha3`,
+#     `libcrux-secrets` (transitively via libcrux-sha3) and their support crates.
+#
+# `scripts/check_libcrux_backend.py` (run in CI) fails the build if any of the
+# non-compiled crates enters the graph or if hpke-rs' `libcrux` feature turns on,
+# so these ignores cannot silently go stale.
 [advisories]
 ignore = [
     # RUSTSEC-2026-0212: libcrux-secrets 0.0.5 constant-time swap/select is
-    # wrong only on aarch64. Deterministic hashing primitives only.
+    # wrong only on aarch64. COMPILED but the affected `Select`/`Swap` methods
+    # are only invoked from the libcrux-aesgcm AEAD path (not compiled) and from
+    # libcrux-secrets' own internals; no compiled caller uses them (0 symbols).
     "RUSTSEC-2026-0212",
-    # RUSTSEC-2026-0207: libcrux-sha3 0.0.8 incremental SHAKE squeeze is wrong
-    # only when squeezing in multiple non-RATE-aligned calls. MLS hashes the
-    # whole message at once, so the incremental path is not hit.
+    # RUSTSEC-2026-0207: libcrux-sha3 0.0.8. COMPILED, but the affected API is
+    # the portable *incremental* XOF `squeeze`; hpke-rs calls only the one-shot
+    # `shake256::<N>` (32/64), never the multi-call incremental squeeze.
     "RUSTSEC-2026-0207",
-    # RUSTSEC-2026-0208: libcrux-sha3 0.0.8 AVX2 SHAKE-256 panics only for
-    # output lengths > 32 not divisible by 8 outside ML-KEM/ML-DSA. Not used.
+    # RUSTSEC-2026-0208: libcrux-sha3 0.0.8. COMPILED, but the affected API is
+    # `avx2::x4::shake256`; the linked impl is `simd::portable` (no avx2 symbols
+    # in the binary) and the 32/64-byte output never triggers the >32/non-8 case.
     "RUSTSEC-2026-0208",
-    # RUSTSEC-2026-0209: libcrux-aesgcm 0.0.7 does not enforce the 2^64-bit AAD
-    # length limit. Not reachable: the caller's AAD is a small struct of public
-    # group/epoch fields, never attacker-sized.
+    # RUSTSEC-2026-0209: libcrux-aesgcm 0.0.7 is NOT compiled or linked (see
+    # header). Not reachable.
     "RUSTSEC-2026-0209",
-    # RUSTSEC-2026-0211: libcrux-aesgcm 0.0.7 tag check is not constant-time in
-    # certain codegen. Value never crosses a trust boundary; the AEAD key is
-    # derived from the E2EE handshake.
+    # RUSTSEC-2026-0211: libcrux-aesgcm 0.0.7 is NOT compiled or linked (see
+    # header); the RustCrypto backend provides AEAD. Not reachable.
     "RUSTSEC-2026-0211",
-    # RUSTSEC-2026-0124: libcrux-chacha20poly1305 0.0.7 panics on an overlong
-    # ciphertext buffer. KizunaLink calls the `aead::Aead` trait, which sizes
-    # the buffer itself; the raw overlong-input path is not reachable.
+    # RUSTSEC-2026-0124: libcrux-chacha20poly1305 0.0.7 is NOT compiled or
+    # linked (see header). Not reachable.
     "RUSTSEC-2026-0124",
-    # RUSTSEC-2026-0330: libcrux-kem 0.0.7 panics encapsulating from a short
-    # seed. Not reachable: encapsulation is randomized; no seed is supplied.
+    # RUSTSEC-2026-0330: libcrux-kem 0.0.7 is NOT compiled or linked (see
+    # header); no seed-based hybrid encapsulation path exists. Not reachable.
     "RUSTSEC-2026-0330",
-    # RUSTSEC-2026-0331: libcrux-kem 0.0.7 panics decoding short hybrid keys.
-    # Reachable only by a peer that already passed the MLS credential checks;
-    # DTLS already authenticates the voice peer.
+    # RUSTSEC-2026-0331: libcrux-kem 0.0.7 is NOT compiled or linked (see
+    # header); hpke-rs-libcrux decode path is unused and DAVE negotiates ECDH
+    # P-256/X25519, not the hybrid ML-KEM KEMs. Not reachable.
     "RUSTSEC-2026-0331",
 ]

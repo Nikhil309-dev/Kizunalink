@@ -13,6 +13,18 @@ to preserve state across a long session.
 - [x] SEC-001 SSRF: connect-time resolver + redirect re-validation + IP pin — RESOLVED (tests in client.rs)
 - [x] SEC-002 empty authorization is rejected — already in config validate()
 - [x] SEC-003 blocking DNS moved to spawn_blocking — RESOLVED
+- [x] SEC-004 crypto advisories (8 libcrux RUSTSEC ignores) — re-verified
+  against the *compiled* graph: hpke-rs resolves with the `libcrux` backend
+  feature OFF, so `hpke-rs-libcrux`/`libcrux-kem`/`libcrux-aesgcm`/
+  `libcrux-chacha20poly1305` are never compiled or linked (0 fingerprints,
+  0 binary symbols); DAVE uses `hpke-rs-rust-crypto`. `libcrux-sha3`/
+  `libcrux-secrets` are compiled but the affected APIs are unused (one-shot
+  `shake256::<N>`, no incremental XOF, no avx2). `cargo audit` fails with
+  `"error: 8 vulnerabilities found!"` when the ignores are removed, proving the
+  gate is meaningful. Guarded by `scripts/check_libcrux_backend.py` in CI.
+- [x] SEC-005 CI `cargo audit` step ran without `set -o pipefail`, so a failing
+  audit piped through `tee` was reported as success — FIXED, plus a regression
+  guard (`scripts/check_ci_pipefail.py`) wired into CI.
 - [x] PERF-001 same as SEC-003
 - [x] ROBBUST-001 panic=unwind + run_guarded — RESOLVED
 - [x] COMPAT-002/003 /v4/info version contract — RESOLVED, test-pinned
