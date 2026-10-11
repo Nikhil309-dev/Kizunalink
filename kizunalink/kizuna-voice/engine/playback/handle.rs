@@ -114,7 +114,7 @@ impl TrackHandle {
 
     pub fn get_position(&self) -> u64 {
         let samples = self.position.load(Ordering::Acquire);
-        (samples * 1000) / OPUS_SAMPLE_RATE
+        samples.saturating_mul(1000) / OPUS_SAMPLE_RATE
     }
 
     pub fn is_buffering(&self) -> bool {
@@ -122,7 +122,11 @@ impl TrackHandle {
     }
 
     pub fn seek(&self, position_ms: u64) {
-        let samples = (position_ms * OPUS_SAMPLE_RATE) / 1000;
+        // `position_ms` is client-supplied; saturate so a hostile or buggy value
+        // cannot wrap the sample count (or the later `get_position`) into a
+        // nonsense timestamp. `position_ms` and `samples` share the same inner
+        // representation, so they always report a consistent time.
+        let samples = position_ms.saturating_mul(OPUS_SAMPLE_RATE) / 1000;
         self.position.store(samples, Ordering::Release);
         let _ = self.command_tx.send(DecoderCommand::Seek(position_ms));
     }
@@ -135,5 +139,36 @@ impl TrackHandle {
     /// mixer (the mixer holds a clone of the same `Arc`).
     pub fn state_arc(&self) -> Arc<AtomicU8> {
         self.state.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn handle() -> (TrackHandle, flume::Receiver<DecoderCommand>) {
+        let (tx, rx) = flume::bounded(8);
+        let (h, ..) = TrackHandle::new(tx, Arc::new(AtomicBool::new(false)));
+        (h, rx)
+    }
+
+    #[test]
+    fn seek_saturates_instead_of_wrapping() {
+        let (h, _rx) = handle();
+        h.seek(u64::MAX);
+        let pos = h.get_position();
+        // A wrapping multiply would land on a tiny value; saturation keeps it huge
+        // and, crucially, the same inner sample count means seek/get_position agree.
+        assert!(
+            pos > 1_000_000_000_000,
+            "seek(u64::MAX) wrapped to {pos} ms"
+        );
+    }
+
+    #[test]
+    fn seek_round_trips_normal_positions() {
+        let (h, _rx) = handle();
+        h.seek(90_000);
+        assert_eq!(h.get_position(), 90_000);
     }
 }
