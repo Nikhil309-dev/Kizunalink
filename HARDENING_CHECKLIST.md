@@ -129,3 +129,11 @@ in `evidence/parity-lavalink-4.1.1-2026-10-11/` (`COMPARISON.md` + raw logs).
 - [x] `cargo test --workspace` **303 pass / 0 fail**; clippy `-D warnings` clean;
   fmt clean.
 
+
+## Performance sanity — this pass
+Idle control-plane latency (n=300/endpoint, same host) vs a real Lavalink 4.1.1:
+- `GET /v4/info`: KizunaLink 3024 req/s, p99 0.41 ms vs Lavalink 998 req/s, p99 2.78 ms.
+- `GET /v4/stats`: KizunaLink 1847 req/s, p99 0.65 ms vs Lavalink 1230 req/s, p99 2.59 ms.
+- Idle RSS: KizunaLink ~46 MB vs Lavalink JVM ~344 MB (~7.5x less).
+- Raw logs + method in `evidence/parity-lavalink-4.1.1-2026-10-11/` (`raw_perf.txt`).
+  Control-plane only; does not exercise the audio/Discord path.

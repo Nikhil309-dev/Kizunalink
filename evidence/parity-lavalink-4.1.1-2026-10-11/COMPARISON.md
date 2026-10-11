@@ -103,3 +103,28 @@ WS with User-Id     REF ready      KIZ ready
 KizunaLink is ~9x the LOC because it reimplements the audio engine, sources,
 DAVE/E2EE, and the Lavalink wire protocol natively in Rust; Lavalink delegates
 playback to Lavaplayer and networking to JDA.
+
+## Performance sanity (informational)
+
+Sequential HTTP latency, n=300 per endpoint after 20 warmup requests, on the same
+host, both nodes idle (raw log: `raw_perf.txt`). This measures control-plane
+overhead, not audio throughput.
+
+| Endpoint | Node | req/s | p50 | p99 |
+|---|---|---|---|---|
+| `GET /v4/info` | Lavalink 4.1.1 | 998 | 0.89 ms | 2.78 ms |
+| `GET /v4/info` | KizunaLink | **3024** | **0.33 ms** | **0.41 ms** |
+| `GET /v4/stats` | Lavalink 4.1.1 | 1230 | 0.79 ms | 2.59 ms |
+| `GET /v4/stats` | KizunaLink | **1847** | **0.54 ms** | **0.65 ms** |
+
+Resident memory while idle:
+
+| Node | RSS |
+|---|---|
+| Lavalink 4.1.1 (JVM 21) | ~344 MB |
+| KizunaLink (release) | ~46 MB |
+
+KizunaLink is faster on both endpoints with a much tighter tail, and uses ~7.5x
+less resident memory. These are single-host, loopback, idle figures — they do not
+exercise the audio path, Discord voice, or source resolution.
+
