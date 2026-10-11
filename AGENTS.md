@@ -171,3 +171,7 @@ path).
   are bounded at 64 KiB and cannot drive a huge allocation; truncated buffers
   error via `read_exact`. When extending it, keep lengths bounded before
   allocating.
+- `/version` and `/v4/info.version.semver` must agree: both come from `api::rest::routes::stats::info::protocol_version()`. `/version` used to return the crate semver, which breaks clients that gate on the Lavalink protocol version. Do not read `CARGO_PKG_VERSION` for either.
+- Official Lavalink always emits `preRelease` (`""`) and `frameStats` (`null`) keys on `/v4/info` and `/v4/stats` even when empty, so those `Option`s are serialized unconditionally — do not add `skip_serializing_if`.
+- The `/v4/websocket` upgrade requires a parseable `User-Id` header (400 otherwise) and rejects missing/bad `Authorization` (401/403); `Client-Name` is optional. A session created without a user id can never send a voice update.
+- A real Lavalink 4.1.1 jar is the parity oracle for this repo, not the docs (the docs are stale on `frameStats` and `POST /v4/sessions`). Run it on a spare port and drive both nodes through identical REST+WS calls; see `evidence/parity-lavalink-4.1.1-2026-10-11/`.
