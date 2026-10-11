@@ -11,35 +11,8 @@ use crate::{discord::player::Filters, protocol, server::AppState};
 pub async fn get_info(State(state): State<Arc<AppState>>) -> Json<protocol::Info> {
     tracing::info!("GET /v4/info");
 
-    let version_str = env!("CARGO_PKG_VERSION");
-    let (crate_major, minor, patch, mut pre_release) = parse_semver(version_str);
-
-    if pre_release.is_none()
-        && let Some(pre) = option_env!("KIZUNALINK_PRE_RELEASE")
-    {
-        pre_release = valid_pre_release(pre).map(str::to_string);
-    }
-
-    // Clients compare `version.major` against the *Lavalink protocol* version
-    // (official nodes report `4.x.y` here). The crate's own semver (1.x.y) is
-    // the server release, not the wire protocol — reporting it made clients
-    // that gate on `major >= 4` refuse this node.
-    let major = if crate_major == 0 { 4 } else { crate_major };
-    let major = if major < 4 { 4 } else { major };
-
     Json(protocol::Info {
-        version: protocol::Version {
-            // Report protocol-consistent semver: crate major 1.x → wire "4.x.y"
-            semver: match &pre_release {
-                Some(pre) => format!("{major}.{minor}.{patch}-{pre}"),
-                None => format!("{major}.{minor}.{patch}"),
-            },
-            major,
-            minor,
-            patch,
-            pre_release,
-            build: option_env!("BUILD_NUMBER").map(|s| s.to_string()),
-        },
+        version: protocol_version(),
         build_time: option_env!("BUILD_TIME")
             .and_then(|s| s.parse().ok())
             .unwrap_or(0),
@@ -93,6 +66,37 @@ fn parse_semver(v: &str) -> (u32, u32, u32, Option<String>) {
     (major, minor, patch, pre_release)
 }
 
+/// Wire-protocol version reported by `/v4/info` and `/version`.
+///
+/// Clients compare `major` against the *Lavalink protocol* version (official
+/// nodes report `4.x.y`); the crate's own semver (`1.x.y`) is the server
+/// release, not the wire protocol, so it is normalised to `4.x.y` here. Both
+/// endpoints derive from this single helper so they can never disagree.
+fn protocol_version() -> protocol::Version {
+    let version_str = env!("CARGO_PKG_VERSION");
+    let (crate_major, minor, patch, mut pre_release) = parse_semver(version_str);
+
+    if pre_release.is_none()
+        && let Some(pre) = option_env!("KIZUNALINK_PRE_RELEASE")
+    {
+        pre_release = valid_pre_release(pre).map(str::to_string);
+    }
+
+    let major = if crate_major < 4 { 4 } else { crate_major };
+
+    protocol::Version {
+        semver: match &pre_release {
+            Some(pre) => format!("{major}.{minor}.{patch}-{pre}"),
+            None => format!("{major}.{minor}.{patch}"),
+        },
+        major,
+        minor,
+        patch,
+        pre_release: pre_release.unwrap_or_default(),
+        build: option_env!("BUILD_NUMBER").map(|s| s.to_string()),
+    }
+}
+
 pub async fn get_stats(State(state): State<Arc<AppState>>) -> Json<protocol::Stats> {
     tracing::info!("GET /v4/stats");
     Json(crate::monitoring::collect_stats(&state, None))
@@ -100,7 +104,7 @@ pub async fn get_stats(State(state): State<Arc<AppState>>) -> Json<protocol::Sta
 
 pub async fn get_version() -> String {
     tracing::info!("GET /version");
-    env!("CARGO_PKG_VERSION").to_string()
+    protocol_version().semver
 }
 
 #[cfg(test)]

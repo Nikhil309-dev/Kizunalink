@@ -90,6 +90,26 @@ async fn ws_handshake_requires_authorization() {
     assert!(result.is_err(), "bad password must be rejected");
 }
 
+/// Official Lavalink rejects the WS upgrade with 400 when `User-Id` is absent;
+/// a missing id can never produce a usable voice session.
+#[tokio::test]
+async fn ws_handshake_requires_user_id() {
+    let (base, _state) = spawn_test_server().await;
+    let url = format!("{base}/v4/websocket").replace("http", "ws");
+
+    let stream = tokio::net::TcpStream::connect(base.trim_start_matches("http://"))
+        .await
+        .unwrap();
+    let mut req =
+        tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(&url)
+            .unwrap();
+    req.headers_mut()
+        .insert(header::AUTHORIZATION, AUTH_TOKEN.parse().unwrap());
+    // Deliberately no `User-Id`.
+    let result = tokio_tungstenite::client_async(req, stream).await;
+    assert!(result.is_err(), "missing User-Id must be rejected");
+}
+
 #[tokio::test]
 async fn ws_ready_handshake_and_stats_event() {
     let (base, _state) = spawn_test_server().await;

@@ -24,7 +24,9 @@ pub struct Version {
     pub major: u32,
     pub minor: u32,
     pub patch: u32,
-    pub pre_release: Option<String>,
+    // Official nodes serialize `preRelease` as an empty string when absent
+    // (never `null`); match that so strict clients don't choke.
+    pub pre_release: String,
     pub build: Option<String>,
 }
 

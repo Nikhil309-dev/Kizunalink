@@ -131,9 +131,37 @@ async fn version_endpoint_returns_headers_and_version() {
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(resp.headers().get("Lavalink-Api-Version").unwrap(), "4");
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-    // The endpoint returns a bare crate version string (`1.1.0`), not JSON.
+    // The endpoint returns a bare version string, and it must be the Lavalink
+    // wire-protocol version (`4.x.y`) — official nodes return the protocol
+    // version here, and clients gate on it.
     let version = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(version.starts_with("1."), "unexpected version: {version}");
+    assert!(
+        version.starts_with("4."),
+        "GET /version must report the v4 protocol version, got: {version}"
+    );
+}
+
+/// `/version` and `/v4/info.version.semver` must never disagree.
+#[tokio::test]
+async fn version_and_info_agree() {
+    let (status, body) = get("/v4/info").await;
+    assert_eq!(status, StatusCode::OK);
+    let info_semver = body["version"]["semver"].as_str().unwrap().to_string();
+
+    let app = test_support::test_router(test_support::test_state());
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/version")
+                .header(header::AUTHORIZATION, AUTH_TOKEN)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let version = String::from_utf8(bytes.to_vec()).unwrap();
+    assert_eq!(version, info_semver, "/version and /v4/info must match");
 }
 
 #[tokio::test]
