@@ -1,0 +1,9 @@
+# Local release node, config player_update_interval = 5 (default)
+# http-source track, WS client session (seq_probe)
+recv op=event type=TrackStartEvent
+t+ 4.5  playerUpdate pos=0 connected=False
+t+ 9.5  playerUpdate pos=0 connected=False
+t+14.5  playerUpdate pos=0 connected=False
+t+19.5  playerUpdate pos=0 connected=False
+t+24.5  playerUpdate pos=0 connected=False
+# cadence ~5.0s  (pre-fix: 0 frames observed within 30s; effective 125s)

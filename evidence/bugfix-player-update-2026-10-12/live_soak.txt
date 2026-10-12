@@ -1,0 +1,3 @@
+soak churn ok: 40 cycles x 48 create/destroy, sessions reaped to 0
+soak ok: 8 sessions x 16 players, 71808 REST updates in 5.008645949s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 5.05s
