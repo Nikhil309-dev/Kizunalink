@@ -1,5 +1,13 @@
 # Running KizunaLink on Pterodactyl
 
+> **Fastest path — prebuilt static binary (no build tools needed).**
+> Download `kizunalink-linux-x86_64-musl` from the GitHub Releases page, upload it
+> to `/home/container/`, and start. This avoids `cargo`, Rustup and the missing
+> `c++`/`cmake` tools entirely. See [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for the
+> full walkthrough and [`egg-kizunalink-binary.json`](./egg-kizunalink-binary.json)
+> for an importable egg that runs the uploaded binary. The sections below cover
+> the build-from-source variants.
+
 Pterodactyl runs each server in a container it controls: the panel mounts the
 server volume at `/home/container`, drops to the `container` user, runs from
 `/home/container`, and executes the egg's **startup command**. It does **not**
@@ -12,8 +20,9 @@ This directory ships:
 
 | File | Purpose |
 |---|---|
+| `egg-kizunalink-binary.json` | Importable egg that runs a prebuilt static binary (**recommended**; no build tools). |
 | `egg-kizunalink.json` | Importable egg (builds from source on first install). |
-| `Dockerfile` | Pterodactyl-compatible image (Rust + native deps). |
+| `Dockerfile` | Pterodactyl-compatible image (Rust + native deps, for the source path). |
 
 ## The one hard rule: port
 
