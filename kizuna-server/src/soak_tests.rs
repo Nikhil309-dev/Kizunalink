@@ -37,6 +37,12 @@ async fn ws_connect(base: &str) -> WsStream {
             .unwrap();
     req.headers_mut()
         .insert(header::AUTHORIZATION, AUTH_TOKEN.parse().unwrap());
+    // The WS upgrade rejects clients without a parseable `User-Id` (400), so the
+    // harness must send one exactly like a real Lavalink client does.
+    req.headers_mut()
+        .insert("user-id", "424242".parse().unwrap());
+    req.headers_mut()
+        .insert("client-name", "soak-harness".parse().unwrap());
     let stream = tokio::net::TcpStream::connect(base.trim_start_matches("http://"))
         .await
         .unwrap();

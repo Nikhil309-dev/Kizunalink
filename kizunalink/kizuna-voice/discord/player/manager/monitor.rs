@@ -18,6 +18,11 @@ use crate::{
     },
 };
 
+/// Wall-clock period of one `monitor_loop` tick. `MonitorCtx::update_every_n`
+/// is expressed in these ticks, so the player-update cadence is
+/// `MONITOR_TICK * update_every_n`.
+pub const MONITOR_TICK: std::time::Duration = std::time::Duration::from_millis(500);
+
 pub struct MonitorCtx {
     pub guild_id: GuildId,
     pub handle: TrackHandle,
@@ -40,7 +45,7 @@ pub struct MonitorCtx {
 }
 
 pub async fn monitor_loop(ctx: MonitorCtx) {
-    let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
+    let mut interval = tokio::time::interval(MONITOR_TICK);
     let mut tick: u64 = 0;
     let mut last_pos = ctx.handle.get_position();
     let mut last_pos_changed_at = std::time::Instant::now();

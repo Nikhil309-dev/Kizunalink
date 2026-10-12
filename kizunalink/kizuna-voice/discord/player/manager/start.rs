@@ -202,10 +202,15 @@ pub async fn start_playback(player: &mut PlayerContext, config: PlaybackStartCon
         });
     }
 
-    // One mixer tick is 20 ms. Round up so sub-second intervals are not
-    // truncated to a single 20 ms update, and never schedule zero ticks.
+    // `update_every_n` counts `monitor_loop` ticks, and each tick is
+    // `MONITOR_TICK` (500 ms) — not the 20 ms mixer period this previously
+    // assumed. Dividing by 20 made the default 5 s interval fire every
+    // 250 * 500 ms = 125 s, so clients saw `playerUpdate` roughly every two
+    // minutes and treated the progress bar as frozen. Round up so sub-second
+    // intervals still produce at least one tick.
     let interval_ms = config.update_interval.as_millis().max(20);
-    let update_every_n = interval_ms.div_ceil(20) as u64;
+    let tick_ms = super::monitor::MONITOR_TICK.as_millis().max(1);
+    let update_every_n = interval_ms.div_ceil(tick_ms) as u64;
 
     let ctx = MonitorCtx {
         guild_id: player.guild_id.clone(),
@@ -457,6 +462,29 @@ mod tests {
     #[test]
     fn malformed_encoded_track_fails_to_decode() {
         assert!(Track::decode("not-a-real-encoded-track").is_none());
+    }
+
+    /// `update_every_n` must be expressed in monitor-loop ticks (500 ms), not the
+    /// 20 ms mixer period. The old divisor made the default 5 s interval fire
+    /// every 125 s, so clients saw a frozen progress bar.
+    #[test]
+    fn update_cadence_matches_configured_interval() {
+        let tick_ms = super::super::monitor::MONITOR_TICK.as_millis() as u64;
+
+        for secs in [1u64, 5, 10, 30] {
+            let interval_ms = std::time::Duration::from_secs(secs).as_millis().max(20) as u64;
+            let n = interval_ms.div_ceil(tick_ms);
+            let effective_ms = n * tick_ms;
+            assert!(
+                effective_ms <= interval_ms + tick_ms,
+                "interval {secs}s produced {effective_ms}ms cadence (n={n})"
+            );
+            assert_eq!(
+                n,
+                secs * 2,
+                "default {secs}s interval should be {secs}*2 ticks of 500ms, got {n}"
+            );
+        }
     }
 
     #[tokio::test]
