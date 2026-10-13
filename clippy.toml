@@ -1,4 +1,4 @@
-# Clippy configuration for KizunaLink
+# Clippy configuration for Audium
 # See https://doc.rust-lang.org/clippy/configuration.html
 
 # N05: Warn on print macros in non-test code

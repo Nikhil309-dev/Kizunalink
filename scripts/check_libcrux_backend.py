@@ -4,7 +4,7 @@
 `.cargo/audit.toml` ignores several libcrux advisories on the basis that the
 crates carrying them are pulled into `Cargo.lock` (via `hpke-rs`'s optional,
 *disabled* `libcrux` backend) but are **not** compiled or linked into the
-KizunaLink binary. DAVE/MLS uses the RustCrypto HPKE backend
+Audium binary. DAVE/MLS uses the RustCrypto HPKE backend
 (`hpke-rs-rust-crypto`), not `hpke-rs-libcrux`.
 
 If anyone ever enables `hpke-rs`'s `libcrux` feature, or a dependency starts

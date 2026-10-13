@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# KizunaLink — Pterodactyl-compatible image.
+# Audium — Pterodactyl-compatible image.
 #
 # Pterodactyl does not run a server container's own ENTRYPOINT/USER/WORKDIR: the
 # panel mounts the server volume at /home/container, drops to the `container`
@@ -9,9 +9,9 @@
 # native build/runtime libraries), laid out the way the panel expects.
 #
 # Build (from the repo root):
-#   docker build -f pterodactyl/Dockerfile -t your-registry/kizunalink-ptero:latest .
+#   docker build -f pterodactyl/Dockerfile -t your-registry/audium-ptero:latest .
 # Push:
-#   docker push your-registry/kizunalink-ptero:latest
+#   docker push your-registry/audium-ptero:latest
 # Then reference the pushed tag as a docker image in the egg / server.
 #
 # NOTE: this image installs the toolchain under /usr/local (global), which the

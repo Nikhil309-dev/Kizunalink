@@ -8,7 +8,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in KizunaLink, please report it responsibly:
+If you discover a security vulnerability in Audium, please report it responsibly:
 
 1. **Do NOT** open a public GitHub issue.
 2. Email security concerns to the maintainers or use GitHub's private vulnerability reporting.
@@ -23,7 +23,7 @@ We aim to acknowledge reports within 48 hours and provide a fix or mitigation pl
 ## Security Best Practices for Deployment
 
 - Always use a strong, unique `authorization` token in `config.toml` or via
-  `KIZUNA_AUTHORIZATION`. There is no default: the server refuses to start if the
+  `AUDIUM_AUTHORIZATION`. There is no default: the server refuses to start if the
   secret is missing, empty, or a known placeholder (including `youshallnotpass`),
   on every bind address including loopback.
 - Never expose the REST/WebSocket port directly to the internet without a reverse proxy.

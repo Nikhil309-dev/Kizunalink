@@ -1,0 +1,326 @@
+// Copyright (c) 2026 nikcodex (Audium)
+// Licensed under the MIT License
+
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    str::FromStr,
+    sync::Mutex,
+};
+
+use async_trait::async_trait;
+use ipnet::IpNet;
+use rand::Rng;
+use tracing::{debug, info};
+
+use crate::lavalink::protocol::{
+    BalancingIpDetails, FailingAddress, IpBlock, RotatingIpDetails, RoutePlannerStatus,
+};
+
+#[async_trait]
+pub trait RoutePlanner: Send + Sync {
+    fn get_status(&self) -> RoutePlannerStatus;
+    fn free_address(&self, address: &str);
+    fn free_all_addresses(&self);
+    fn mark_failed(&self, address: &str);
+    fn get_address(&self) -> Option<std::net::IpAddr>;
+}
+
+pub struct BalancingIpRoutePlanner {
+    ip_blocks: Vec<IpBlock>,
+    parsed_blocks: Vec<IpNet>,
+    failing_addresses: Mutex<HashMap<String, u64>>,
+    block_index: Mutex<usize>,
+    ip_indices: Mutex<Vec<u128>>,
+}
+
+impl BalancingIpRoutePlanner {
+    pub fn new(cidrs: Vec<String>) -> Result<Self, String> {
+        let mut ip_blocks = Vec::with_capacity(cidrs.len());
+        let mut parsed_blocks = Vec::with_capacity(cidrs.len());
+
+        let mut total_ips = 0;
+        for cidr in cidrs.iter() {
+            let parsed = match IpNet::from_str(cidr) {
+                Ok(net) => net,
+                Err(_) => {
+                    let suffix = if cidr.contains(':') { "/128" } else { "/32" };
+                    IpNet::from_str(&format!("{}{}", cidr, suffix)).map_err(|e| {
+                        format!("Invalid CIDR or IP '{}' for route planner: {}", cidr, e)
+                    })?
+                }
+            };
+
+            let block_type = match parsed {
+                IpNet::V4(_) => "Inet4Address",
+                IpNet::V6(_) => "Inet6Address",
+            }
+            .to_string();
+
+            let size = match parsed {
+                IpNet::V4(net) => {
+                    let prefix_len = net.prefix_len();
+                    if prefix_len >= 32 {
+                        1
+                    } else {
+                        2u128.pow(32 - prefix_len as u32)
+                    }
+                }
+                IpNet::V6(net) => {
+                    let prefix_len = net.prefix_len();
+                    if prefix_len >= 128 {
+                        1
+                    } else if prefix_len <= 64 {
+                        u128::MAX
+                    } else {
+                        2u128.pow(128 - prefix_len as u32)
+                    }
+                }
+            };
+
+            if size == u128::MAX {
+                info!(
+                    "Added {} block: {} (virtually unlimited addresses)",
+                    block_type, cidr
+                );
+            } else {
+                info!("Added {} block: {} ({} addresses)", block_type, cidr, size);
+                total_ips += size;
+            }
+
+            ip_blocks.push(IpBlock {
+                block_type,
+                size: cidr.clone(),
+            });
+            parsed_blocks.push(parsed);
+        }
+
+        if total_ips > 0 && total_ips != u128::MAX {
+            info!(
+                "Route planner initialized with {} total addresses",
+                total_ips
+            );
+        } else if total_ips == u128::MAX {
+            info!("Route planner initialized with virtually unlimited addresses");
+        }
+
+        Ok(Self {
+            ip_blocks,
+            parsed_blocks,
+            failing_addresses: Mutex::new(HashMap::new()),
+            block_index: Mutex::new(0),
+            ip_indices: Mutex::new(vec![0; cidrs.len()]),
+        })
+    }
+
+    fn calculate_ip(block: &IpNet, index: u128) -> IpAddr {
+        let prefix_len = block.prefix_len();
+        match block {
+            IpNet::V4(net) => {
+                let addr_u32 = u32::from(net.addr());
+                let offset = if prefix_len >= 32 {
+                    0
+                } else if prefix_len == 0 {
+                    index as u32
+                } else {
+                    (index as u32) & (!0u32 >> prefix_len)
+                };
+                IpAddr::V4(Ipv4Addr::from(addr_u32 + offset))
+            }
+            IpNet::V6(net) => {
+                let addr_u128 = u128::from(net.addr());
+                let offset = if prefix_len >= 128 {
+                    0
+                } else if prefix_len == 0 {
+                    index
+                } else {
+                    index & (!0u128 >> prefix_len)
+                };
+                IpAddr::V6(Ipv6Addr::from(addr_u128 + offset))
+            }
+        }
+    }
+
+    fn next_ip(&self) -> IpAddr {
+        let mut b_idx = self.block_index.lock().unwrap_or_else(|e| e.into_inner());
+        let mut indices = self.ip_indices.lock().unwrap_or_else(|e| e.into_inner());
+
+        // B06: Defensive check against empty blocks (would cause division by zero)
+        if self.parsed_blocks.is_empty() {
+            return std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
+        }
+        let block_idx = *b_idx % self.parsed_blocks.len();
+        let block = &self.parsed_blocks[block_idx];
+
+        let prefix_len = block.prefix_len();
+        let max_bits = match block {
+            IpNet::V4(_) => 32,
+            IpNet::V6(_) => 128,
+        };
+        let size_bits = max_bits - prefix_len;
+
+        let increment = if size_bits > 7 {
+            rand::thread_rng().gen_range(10..20) as u128
+        } else {
+            1
+        };
+
+        let current_index = indices[block_idx];
+        indices[block_idx] = current_index.wrapping_add(increment);
+        let final_index = indices[block_idx];
+
+        *b_idx = (*b_idx + 1) % self.parsed_blocks.len();
+
+        let ip = Self::calculate_ip(block, final_index);
+        debug!("Route planner picked IP: {}", ip);
+        ip
+    }
+
+    fn get_address_internal(&self) -> Option<IpAddr> {
+        for _ in 0..100 {
+            let ip = self.next_ip();
+            let ip_str = ip.to_string();
+
+            let mut failing = self
+                .failing_addresses
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+
+            if let Some(&timestamp) = failing.get(&ip_str) {
+                if crate::common::utils::now_ms()
+                    > timestamp + crate::engine::constants::ROUTE_PLANNER_FAIL_EXPIRE_MS
+                {
+                    failing.remove(&ip_str);
+                } else {
+                    continue;
+                }
+            }
+
+            return Some(ip);
+        }
+
+        None
+    }
+}
+
+#[async_trait]
+impl RoutePlanner for BalancingIpRoutePlanner {
+    fn get_status(&self) -> RoutePlannerStatus {
+        let failing = self
+            .failing_addresses
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let failing_vec: Vec<FailingAddress> = failing
+            .iter()
+            .map(|(addr, &ts)| FailingAddress {
+                failing_address: addr.clone(),
+                failing_timestamp: ts,
+                failing_time: String::new(),
+            })
+            .collect();
+
+        if self.ip_blocks.len() == 1 {
+            let indices = self.ip_indices.lock().unwrap_or_else(|e| e.into_inner());
+            let index = indices.first().copied().unwrap_or(0);
+            drop(indices); // B06: release lock before computing IP
+            let current_ip = Self::calculate_ip(&self.parsed_blocks[0], index).to_string();
+
+            RoutePlannerStatus::RotatingIpRoutePlanner(RotatingIpDetails {
+                ip_block: self.ip_blocks[0].clone(),
+                failing_addresses: failing_vec,
+                rotate_index: "0".to_string(),
+                ip_index: index.to_string(),
+                current_address: current_ip,
+            })
+        } else {
+            RoutePlannerStatus::BalancingIpRoutePlanner(BalancingIpDetails {
+                ip_block: self.ip_blocks[0].clone(),
+                failing_addresses: failing_vec,
+            })
+        }
+    }
+
+    fn free_address(&self, address: &str) {
+        self.failing_addresses
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(address);
+    }
+
+    fn free_all_addresses(&self) {
+        self.failing_addresses
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+
+    fn mark_failed(&self, address: &str) {
+        self.failing_addresses
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(address.to_string(), crate::common::utils::now_ms());
+    }
+
+    fn get_address(&self) -> Option<std::net::IpAddr> {
+        self.get_address_internal()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::{IpAddr, Ipv4Addr};
+
+    use super::{BalancingIpRoutePlanner, RoutePlanner};
+
+    #[test]
+    fn invalid_cidr_is_returned_as_an_error() {
+        let result = BalancingIpRoutePlanner::new(vec!["not-a-cidr".to_owned()]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .err()
+                .is_some_and(|error| error.contains("Invalid CIDR"))
+        );
+    }
+
+    #[test]
+    fn raw_ip_is_accepted_as_a_single_address_block() {
+        let planner = BalancingIpRoutePlanner::new(vec!["192.0.2.10".to_owned()])
+            .expect("a valid IPv4 address should initialize the route planner");
+        assert_eq!(
+            planner.get_address(),
+            Some(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 10)))
+        );
+    }
+
+    /// A malformed entry anywhere in the list must fail construction with a named
+    /// error rather than panicking the caller (startup) or silently dropping the
+    /// bad block.
+    #[test]
+    fn one_invalid_cidr_fails_construction_even_with_valid_siblings() {
+        let result = BalancingIpRoutePlanner::new(vec![
+            "192.0.2.0/24".to_owned(),
+            "not-a-cidr".to_owned(),
+            "2001:db8::/32".to_owned(),
+        ]);
+        let err = result.err().expect("construction must fail");
+        assert!(err.contains("Invalid CIDR"), "got: {err}");
+    }
+
+    /// IPv6 blocks parse and yield IPv6 addresses (no V4/V6 mix-up).
+    #[test]
+    fn ipv6_cidr_yields_ipv6_addresses() {
+        let planner = BalancingIpRoutePlanner::new(vec!["2001:db8::/64".to_owned()])
+            .expect("valid IPv6 CIDR should initialize");
+        assert!(matches!(planner.get_address(), Some(IpAddr::V6(_))));
+    }
+
+    /// With no blocks configured, the defensive empty-block guard returns a
+    /// placeholder instead of dividing by zero.
+    #[test]
+    fn empty_block_list_does_not_panic() {
+        let planner =
+            BalancingIpRoutePlanner::new(Vec::new()).expect("empty list is a valid configuration");
+        assert_eq!(planner.get_address(), Some(IpAddr::V4(Ipv4Addr::LOCALHOST)));
+    }
+}

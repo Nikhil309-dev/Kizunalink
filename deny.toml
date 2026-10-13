@@ -1,4 +1,4 @@
-# cargo-deny configuration for KizunaLink
+# cargo-deny configuration for Audium
 # See https://embarkstudios.github.io/cargo-deny/
 # Run locally with: cargo deny check
 #
@@ -34,7 +34,7 @@ ignore = [
 ]
 
 [licenses]
-# KizunaLink is MIT-licensed. Allow-list permissive licenses explicitly; anything not
+# Audium is MIT-licensed. Allow-list permissive licenses explicitly; anything not
 # listed here (strong copyleft included) fails `cargo deny check licenses`.
 # (cargo-deny >= 0.16 removed the `default`/`copyleft` keys — see EmbarkStudios/cargo-deny#611.)
 allow = [

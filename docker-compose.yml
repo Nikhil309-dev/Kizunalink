@@ -1,20 +1,24 @@
 services:
-  kizunalink:
+  audium:
     build: .
+    # Start the PoToken provider sidecar before audium so YouTube token minting
+    # is available at launch.
+    depends_on:
+      - bgutil-pot
     volumes:
       # Mounted into WORKDIR (/app) so AppConfig::load() finds it. Prefer
-      # injecting secrets via KIZUNA_* env vars (below) instead of baking them
+      # injecting secrets via AUDIUM_* env vars (below) instead of baking them
       # into the file.
       - ./config.toml:/app/config.toml:ro
-      # The default config writes ./logs/kizunalink.log. The image root is
+      # The default config writes ./logs/audium.log. The image root is
       # `read_only`, so without a writable mount that file log silently fails;
       # a named volume keeps logs across restarts and leaves the root FS immutable.
-      - kizuna-logs:/app/logs
+      - audium-logs:/app/logs
     # REQUIRED: server.authorization has no default and must not be a known
     # placeholder. Set a strong secret here (e.g. `openssl rand -hex 32`) or, for
     # secrets managers, via a `.env` file / Docker secret. Startup fails without it.
     environment:
-      KIZUNA_AUTHORIZATION: "${KIZUNA_AUTHORIZATION:?set KIZUNA_AUTHORIZATION to a strong secret}"
+      AUDIUM_AUTHORIZATION: "${AUDIUM_AUTHORIZATION:?set AUDIUM_AUTHORIZATION to a strong secret}"
     ports:
       # Bind to loopback by default. Put a TLS-terminating reverse proxy in front
       # and keep the backend private; a proxy is not a substitute for the secret.
@@ -28,5 +32,22 @@ services:
     tmpfs:
       - /tmp
 
+  bgutil-pot:
+    # YouTube Proof-of-Origin (PoToken) provider sidecar. Mints tokens required
+    # by WEB/ANDROID/IOS clients to prevent HTTP 403 on googlevideo.com formats.
+    # Reachable by the `audium` service at http://bgutil-pot:4416 on the default
+    # compose network.
+    image: brainicism/bgutil-ytdlp-pot-provider
+    restart: unless-stopped
+    # Do not publish the port publicly; audium reaches the sidecar over the
+    # default compose network. Uncomment the loopback mapping below only when
+    # debugging the provider directly from the host.
+    # ports:
+    #   - "127.0.0.1:4416:4416"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
-  kizuna-logs:
+  audium-logs:

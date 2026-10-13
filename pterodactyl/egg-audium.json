@@ -1,0 +1,93 @@
+{
+    "_comment": "Audium (Lavalink v4 node) — Pterodactyl egg. See pterodactyl/README.md.",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-10-11T00:00:00+00:00",
+    "name": "Audium",
+    "author": "openhands@all-hands.dev",
+    "description": "Audium — a native Rust Lavalink v4 audio node (no JVM, integrated sources). Runs from source via cargo on first boot; see the README for the faster prebuilt-binary path.",
+    "features": null,
+    "docker_images": {
+        "ghcr.io/pterodactyl/yolks:debian": "ghcr.io/pterodactyl/yolks:debian",
+        "ghcr.io/pterodactyl/yolks:java_21": "ghcr.io/pterodactyl/yolks:java_21"
+    },
+    "file_denylist": [],
+    "startup": "cd /home/container/repo && export PATH=/home/container/.cargo/bin:/usr/local/cargo/bin:$PATH AUDIUM_CONFIG_PATH=/home/container/config.toml && cargo run --release --locked --bin audium-server",
+    "config": {
+        "files": "{}",
+        "startup": "{\r\n    \"done\": \"Audium Server listening on\"\r\n}",
+        "logs": "{}",
+        "stop": "^^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# Audium installer — runs once inside the egg's container.\n# During install the server volume is mounted at /mnt/server; at runtime it is\n# /home/container. We install everything under the volume so it persists.\nset -e\n\napt update\napt install -y --no-install-recommends \\\n    curl git ca-certificates build-essential cmake pkg-config \\\n    libclang-dev clang perl libopus-dev\n\n# opus is linked statically so the resulting binary has no runtime opus dep.\nexport LIBOPUS_STATIC=1\nexport OPUS_STATIC=1\n\n# Rust toolchain into the server volume so it persists across restarts.\nexport CARGO_HOME=/mnt/server/.cargo\nexport RUSTUP_HOME=/mnt/server/.rustup\nexport PATH=\"${CARGO_HOME}/bin:${PATH}\"\ncurl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --no-modify-path\n\ncd /mnt/server\ngit clone https://github.com/Nikhil309-dev/Kizunalink.git repo\ncd repo\ngit checkout main\n\n# Minimal config.toml; the panel's AUDIUM_* variables override it at runtime.\ncat > /mnt/server/config.toml <<'EOF'\n[server]\naddress = \"0.0.0.0\"\nport = 2333\nauthorization = \"replace-with-your-strong-secret\"\n\n[logging]\nlevel = \"info\"\n\n[logging.file]\npath = \"/home/container/logs/audium.log\"\nmax_lines = 10000\nmax_files = 7\nEOF\n\nmkdir -p /mnt/server/logs\n\n# Pre-build so the first start is fast; failures here are non-fatal.\ncargo build --release --locked || echo \"[installer] prebuild failed; will build on start\"\n\necho \"Audium install complete.\"\n",
+            "container": "ghcr.io/pterodactyl/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Authorization Secret",
+            "description": "Required. Strong random secret clients use as the Lavalink password. Generate with: openssl rand -hex 32",
+            "env_variable": "AUDIUM_AUTHORIZATION",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|min:16",
+            "field_type": "text"
+        },
+        {
+            "name": "Bind Address",
+            "description": "Interface to listen on. Keep 0.0.0.0 so the panel can route the allocation to the process.",
+            "env_variable": "AUDIUM_ADDRESS",
+            "default_value": "0.0.0.0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string",
+            "field_type": "text"
+        },
+        {
+            "name": "Port",
+            "description": "Port to listen on. Must equal the primary allocation port the panel shows for this server.",
+            "env_variable": "AUDIUM_PORT",
+            "default_value": "2333",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:1,65535",
+            "field_type": "text"
+        },
+        {
+            "name": "Log Level",
+            "description": "trace | debug | info | warn | error | off",
+            "env_variable": "AUDIUM_LOG_LEVEL",
+            "default_value": "info",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|in:trace,debug,info,warn,error,off",
+            "field_type": "text"
+        },
+        {
+            "name": "Rate Limit (per minute)",
+            "description": "Max REST + WS requests per client IP per minute. 0 disables.",
+            "env_variable": "AUDIUM_RATE_LIMIT_PER_MINUTE",
+            "default_value": "2000",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|min:0",
+            "field_type": "text"
+        },
+        {
+            "name": "Prometheus Metrics",
+            "description": "Enable the authenticated Prometheus metrics endpoint.",
+            "env_variable": "AUDIUM_METRICS_ENABLED",
+            "default_value": "false",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|in:true,false",
+            "field_type": "text"
+        }
+    ]
+}

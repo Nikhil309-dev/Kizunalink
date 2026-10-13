@@ -1,5 +1,5 @@
 [workspace]
-members = [ "kizunalink", "kizuna-server",]
+members = [ "audium", "audium-server",]
 resolver = "2"
 
 [patch.crates-io]

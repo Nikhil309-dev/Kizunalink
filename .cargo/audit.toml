@@ -1,4 +1,4 @@
-# cargo-audit configuration for KizunaLink.
+# cargo-audit configuration for Audium.
 #
 # CI runs BOTH `cargo deny check advisories` (deny.toml) and `cargo audit`.
 # cargo-deny silently SKIPS advisories that only constrain `affected.functions`

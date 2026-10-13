@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# KizunaLink — single multi-stage Dockerfile.
+# Audium — single multi-stage Dockerfile.
 #
 # Stages:
 #   builder       — compiles the release binary from source.
@@ -9,8 +9,8 @@
 #   local         — DEFAULT target: runtime image built from source in this repo.
 #
 # Usage:
-#   docker build -t kizunalink .            # builds from source (default target)
-#   docker build --target ci -t kizunalink . # assembles from bin/linux/<arch>/kizunalink
+#   docker build -t audium .            # builds from source (default target)
+#   docker build --target ci -t audium . # assembles from bin/linux/<arch>/audium
 
 # ---------------------------------------------------------------------------
 # Stage 1: builder — compile from source.
@@ -62,29 +62,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     curl \
     && rm -rf /var/lib/apt/lists/* \
-    && addgroup --system kizunalink \
-    && adduser --system --ingroup kizunalink kizunalink
+    && addgroup --system audium \
+    && adduser --system --ingroup audium audium
 
 WORKDIR /app
-USER kizunalink
+USER audium
 EXPOSE 2333
 ENV RUST_LOG=info
 # `/health` is unauthenticated and cheap, so it is safe to poll from orchestrators.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD curl -fsS http://127.0.0.1:2333/health || exit 1
-ENTRYPOINT ["/app/kizunalink"]
+ENTRYPOINT ["/app/audium"]
 
 # ---------------------------------------------------------------------------
 # Stage 3: ci — assemble from a prebuilt binary.
 # ---------------------------------------------------------------------------
 FROM runtime-base AS ci
 ARG TARGETARCH
-COPY --chown=kizunalink:kizunalink bin/linux/${TARGETARCH}/kizunalink /app/kizunalink
-RUN chmod +x /app/kizunalink
+COPY --chown=audium:audium bin/linux/${TARGETARCH}/audium /app/audium
+RUN chmod +x /app/audium
 
 # ---------------------------------------------------------------------------
 # Stage 4 (DEFAULT): local — run the binary built in stage 1.
 # ---------------------------------------------------------------------------
 FROM runtime-base AS local
-COPY --from=builder --chown=kizunalink:kizunalink /build/target/release/kizuna-server /app/kizunalink
-RUN chmod +x /app/kizunalink
+COPY --from=builder --chown=audium:audium /build/target/release/audium-server /app/audium
+RUN chmod +x /app/audium

@@ -19,7 +19,7 @@ local.config.toml
 .env
 .env.local
 .env.*.local
-kizuna.local.json
+audium.local.json
 
 # Node
 docs/node_modules/
@@ -31,5 +31,5 @@ docs/.vitepress/cache/
 
 /librust_out.rlib
 /bin/
-kizunalink-linux-*
+audium-linux-*
 test_bot.py

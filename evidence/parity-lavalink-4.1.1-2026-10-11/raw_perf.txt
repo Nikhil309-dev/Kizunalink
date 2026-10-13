@@ -1,8 +1,0 @@
-
-### GET /v4/info  (n=300)
-  REF: rps=  1779.8  p50=  0.55ms  p99=   1.38ms  mean=  0.56ms
-  KIZ: rps=  2966.2  p50=  0.34ms  p99=   0.61ms  mean=  0.34ms
-
-### GET /v4/stats  (n=300)
-  REF: rps=  1602.7  p50=  0.58ms  p99=   2.31ms  mean=  0.62ms
-  KIZ: rps=  1830.9  p50=  0.54ms  p99=   0.77ms  mean=  0.55ms

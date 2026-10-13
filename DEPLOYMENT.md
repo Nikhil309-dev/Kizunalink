@@ -1,10 +1,10 @@
-# Deploying a prebuilt KizunaLink binary on Nexio Host (Pterodactyl)
+# Deploying a prebuilt Audium binary on Nexio Host (Pterodactyl)
 
-This guide deploys a **precompiled** KizunaLink executable. The server does not
+This guide deploys a **precompiled** Audium executable. The server does not
 compile Rust: no Cargo, no Rustup, no C++ compiler, and no CMake are needed on
 the host. It is the path to use when the panel image lacks native build tools.
 
-> The egg in `pterodactyl/egg-kizunalink.json` builds from source (`cargo run`).
+> The egg in `pterodactyl/egg-audium.json` builds from source (`cargo run`).
 > That is a **different** deployment path and is what fails on the stock
 > `ghcr.io/ptero-eggs/yolks:rust_latest` image (no `c++`/`cmake`). The steps
 > below replace the startup command with one that runs the uploaded binary.
@@ -34,7 +34,7 @@ ldd kizunalink-linux-x86_64-musl       # "statically linked" / "not a dynamic ex
 ```
 
 The process that runs is named **`kizunalink-linux-x86_64-musl`** (the binary was
-renamed from the crate binary `kizuna-server`). Use that exact name in the
+renamed from the crate binary `audium-server`). Use that exact name in the
 startup command.
 
 ## 2. Upload the executable
@@ -61,7 +61,7 @@ can run the same `chmod`.
 
 ## 3. Configuration
 
-KizunaLink reads `config.toml` from its working directory, so create
+Audium reads `config.toml` from its working directory, so create
 `/home/container/config.toml`. Minimal contents:
 
 ```toml
@@ -74,7 +74,7 @@ authorization = "CHANGE-ME"  # REQUIRED; no default, placeholders rejected
 level = "info"
 
 [logging.file]
-path = "/home/container/logs/kizunalink.log"
+path = "/home/container/logs/audium.log"
 max_lines = 10000
 max_files = 7
 ```
@@ -87,18 +87,18 @@ panel variable below; environment variables always override the file.
 
 ## 4. Startup command
 
-Set the server's **Startup Command** (Admin → Nests → the KizunaLink egg → or
+Set the server's **Startup Command** (Admin → Nests → the Audium egg → or
 the server's startup parameters) to:
 
 ```bash
 cd /home/container && ./kizunalink-linux-x86_64-musl
 ```
 
-No `cargo`, no `PATH` mangling, no `KIZUNA_CONFIG_PATH` needed when the config
+No `cargo`, no `PATH` mangling, no `AUDIUM_CONFIG_PATH` needed when the config
 sits in `/home/container`.
 
 > If the egg's startup command is **locked** (greyed out / not editable), you
-> must edit the egg itself: **Admin → Nests → KizunaLink → Startup Command**.
+> must edit the egg itself: **Admin → Nests → Audium → Startup Command**.
 > Change the default from the `cargo run ...` line to the command above, then
 > restart the server. A locked startup cannot be changed per-server; clone the
 > nest or edit the egg as an admin.
@@ -106,34 +106,34 @@ sits in `/home/container`.
 ### Panel "done" detection
 
 The egg watches console output for
-`KizunaLink Server listening on`. The binary prints exactly that line on a
+`Audium Server listening on`. The binary prints exactly that line on a
 successful bind, so the server shows as **running** automatically. If your egg's
-done-string differs, set it to `KizunaLink Server listening on`.
+done-string differs, set it to `Audium Server listening on`.
 
 ## 5. Port and environment variables
 
 ### Port
 
 Pterodactyl routes only the server's **primary allocation** port into the
-container. KizunaLink must bind that same port.
+container. Audium must bind that same port.
 
-- Set the egg variable **Port** / `KIZUNA_PORT` to the allocation port.
-- Keep `KIZUNA_ADDRESS=0.0.0.0`.
+- Set the egg variable **Port** / `AUDIUM_PORT` to the allocation port.
+- Keep `AUDIUM_ADDRESS=0.0.0.0`.
 
-The `KIZUNA_*` environment variables override `config.toml`, so the panel
+The `AUDIUM_*` environment variables override `config.toml`, so the panel
 variables always win:
 
 | Variable | Required | Notes |
 |---|---|---|
-| `KIZUNA_AUTHORIZATION` | yes | Lavalink password. No default; weak/placeholder values are rejected. |
-| `KIZUNA_ADDRESS` | yes | `0.0.0.0`. |
-| `KIZUNA_PORT` | yes | Must equal the allocation port. |
-| `KIZUNA_LOG_LEVEL` | no | `trace`..`off`. |
-| `KIZUNA_RATE_LIMIT_PER_MINUTE` | no | `0` disables. |
-| `KIZUNA_METRICS_ENABLED` | no | Prometheus endpoint. |
-| `KIZUNA_CONFIG_PATH` | no | Absolute path if `config.toml` is not in the working directory. |
+| `AUDIUM_AUTHORIZATION` | yes | Lavalink password. No default; weak/placeholder values are rejected. |
+| `AUDIUM_ADDRESS` | yes | `0.0.0.0`. |
+| `AUDIUM_PORT` | yes | Must equal the allocation port. |
+| `AUDIUM_LOG_LEVEL` | no | `trace`..`off`. |
+| `AUDIUM_RATE_LIMIT_PER_MINUTE` | no | `0` disables. |
+| `AUDIUM_METRICS_ENABLED` | no | Prometheus endpoint. |
+| `AUDIUM_CONFIG_PATH` | no | Absolute path if `config.toml` is not in the working directory. |
 
-Set `KIZUNA_AUTHORIZATION` in the server's Startup variables — the panel injects
+Set `AUDIUM_AUTHORIZATION` in the server's Startup variables — the panel injects
 it into the process environment at launch. It is never written to a file.
 
 ## 6. Missing shared libraries
@@ -161,8 +161,8 @@ build avoids this entirely.
 From the panel console you should see:
 
 ```
-KizunaLink Server starting...
-KizunaLink Server listening on http://0.0.0.0:<port>
+Audium Server starting...
+Audium Server listening on http://0.0.0.0:<port>
 ```
 
 Because the allocation port is usually not published to your own machine, use
@@ -190,7 +190,7 @@ for the C runtime. Two options:
   `ghcr.io/pterodactyl/yolks:debian` is glibc 2.28 — prefer a Debian 12+ based
   image, or keep the user's `ghcr.io/ptero-eggs/yolks:rust_latest` (Debian 13,
   glibc 2.41) which already satisfies the glibc build. Apply the change in
-  **Admin → Nests → KizunaLink → Docker Images**, then restart.
+  **Admin → Nests → Audium → Docker Images**, then restart.
 
 ## 9. Updating the binary
 
@@ -204,6 +204,83 @@ for the C runtime. Two options:
 
 Because the deployment never compiled on the host, no `cargo clean`, no toolchain
 upgrade and no rebuild are involved — a binary swap is the whole update.
+
+## YouTube PoToken provider (bgutil)
+
+### Why it is needed
+
+YouTube enforces a Proof-of-Origin token (PoToken) on `googlevideo.com` format
+URLs. Datacenter and cloud egress IPs (such as VPS providers, container hosts, or
+cloud panels) routinely receive `HTTP 403` errors ("Sign in to confirm you're not
+a bot") when requesting video streams without a token. Running an external
+bgutil provider mints these integrity tokens so format streams can be fetched
+reliably without HTTP 403 blocks.
+
+> **Note:** The provider only affects GVS tokens for the `WEB`, `ANDROID`, and
+> `IOS` clients. Alternative clients such as `ANDROID_VR` and muxed format
+> `itag 18` do not require a PoToken.
+
+### Standalone Docker deployment
+
+To run the provider as a standalone container on the host:
+
+```bash
+docker run --name bgutil-pot -d -p 4416:4416 brainicism/bgutil-ytdlp-pot-provider
+```
+
+### Docker Compose sidecar usage
+
+In `docker-compose.yml`, run the provider alongside `audium` as a hardened sidecar
+service:
+
+```yaml
+services:
+  audium:
+    build: .
+    depends_on:
+      - bgutil-pot
+    # ...
+
+  bgutil-pot:
+    image: brainicism/bgutil-ytdlp-pot-provider
+    restart: unless-stopped
+    # ports:
+    #   - "127.0.0.1:4416:4416"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+```
+
+### Configuring `config.toml`
+
+Point `sources.youtube.pot.url` to your provider:
+
+- **Docker Compose:** `http://bgutil-pot:4416` (reachable across the internal compose network)
+- **Standalone:** `http://127.0.0.1:4416` (reachable on the host loopback interface)
+
+```toml
+[sources.youtube.pot]
+enabled = true
+url = "http://bgutil-pot:4416"    # Use "http://127.0.0.1:4416" for standalone host deployments
+bypass_cache = false
+```
+
+### Proxy interaction
+
+When `sources.youtube.proxy` is configured:
+
+- A **loopback** provider URL (`127.0.0.1` or `localhost`) is automatically bypassed
+  (`no_proxy`) so Audium connects directly to the local provider without routing
+  through the outbound proxy.
+- A **non-loopback** compose hostname (such as `http://bgutil-pot:4416`) is **not**
+  treated as loopback and will be sent through the configured proxy. If that proxy
+  cannot resolve Docker-internal network hostnames, requests to the provider will
+  fail.
+
+Therefore, when using a YouTube proxy, either keep the provider on loopback (e.g.
+publish `127.0.0.1:4416:4416` and set `url = "http://127.0.0.1:4416"`) or leave
+`sources.youtube.proxy` unset.
 
 ## Known limitations
 

@@ -1,4 +1,4 @@
-name: 🚀 KizunaLink Release Pipeline
+name: 🚀 Audium Release Pipeline
 
 # Builds and publishes the prebuilt Linux binaries that the Pterodactyl/Nexio
 # Host deployment consumes. The recommended artifact is
@@ -26,7 +26,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   # libopus is linked statically (vendored CMake build of native/opus) so the
-  # shipped binary has no runtime libopus dependency. See kizunalink/build.rs.
+  # shipped binary has no runtime libopus dependency. See audium/build.rs.
   LIBOPUS_STATIC: "1"
   OPUS_STATIC: "1"
 
@@ -101,7 +101,7 @@ jobs:
       - name: 📦 Rename binary and write SHA-256
         run: |
           cd target/${{ matrix.target }}/release
-          mv kizuna-server kizunalink-linux-${{ matrix.arch }}
+          mv audium-server kizunalink-linux-${{ matrix.arch }}
           sha256sum kizunalink-linux-${{ matrix.arch }} > kizunalink-linux-${{ matrix.arch }}.sha256
           cat kizunalink-linux-${{ matrix.arch }}.sha256
 
@@ -169,7 +169,7 @@ jobs:
       - name: 📦 Rename binary and write SHA-256
         run: |
           cd target/x86_64-unknown-linux-musl/release
-          mv kizuna-server kizunalink-linux-x86_64-musl
+          mv audium-server kizunalink-linux-x86_64-musl
           sha256sum kizunalink-linux-x86_64-musl > kizunalink-linux-x86_64-musl.sha256
           cat kizunalink-linux-x86_64-musl.sha256
 
@@ -200,9 +200,9 @@ jobs:
       - name: 📂 Organize binaries
         run: |
           mkdir -p bin/linux/amd64 bin/linux/arm64
-          mv bin/kizunalink-linux-amd64/kizunalink-linux-amd64 bin/linux/amd64/kizunalink
-          mv bin/kizunalink-linux-arm64/kizunalink-linux-arm64 bin/linux/arm64/kizunalink
-          chmod +x bin/linux/amd64/kizunalink bin/linux/arm64/kizunalink
+          mv bin/kizunalink-linux-amd64/kizunalink-linux-amd64 bin/linux/amd64/audium
+          mv bin/kizunalink-linux-arm64/kizunalink-linux-arm64 bin/linux/arm64/audium
+          chmod +x bin/linux/amd64/audium bin/linux/arm64/audium
 
       - name: 🔧 Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -258,7 +258,7 @@ jobs:
       - name: 📄 Build runtime-dependency list
         run: |
           cat > artifacts/runtime-deps.txt <<'EOF'
-          KizunaLink Linux release — runtime library requirements
+          Audium Linux release — runtime library requirements
           ========================================================
 
           kizunalink-linux-x86_64-musl  (RECOMMENDED for Pterodactyl / Nexio Host)
