@@ -21,8 +21,8 @@ use crate::{
 
 const CLIENT_NAME: &str = "ANDROID_VR";
 const CLIENT_ID: &str = "28";
-const CLIENT_VERSION: &str = "1.71.26";
-const USER_AGENT: &str = "com.google.android.apps.youtube.vr.oculus/1.71.26 (Linux; U; Android 15; eureka-user Build/AP4A.250205.002) gzip";
+const CLIENT_VERSION: &str = "1.60.19";
+const USER_AGENT: &str = "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
 
 pub struct AndroidVrClient {
     http: Arc<reqwest::Client>,
@@ -41,8 +41,8 @@ impl AndroidVrClient {
             user_agent: USER_AGENT,
             device_make: Some("Google"),
             os_name: Some("Android"),
-            os_version: Some("15"),
-            android_sdk_version: Some("35"),
+            os_version: Some("12L"),
+            android_sdk_version: Some("32"),
             ..Default::default()
         }
     }
@@ -288,5 +288,36 @@ impl YouTubeClient for AndroidVrClient {
         self.player_request(track_id, visitor_data, None, &oauth)
             .await
             .ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ANDROID_VR clientVersion must stay <= 1.65. YouTube returns SABR-only
+    /// adaptive formats (adaptive formats carry no direct URL) for versions above
+    /// that, and KizunaLink has no SABR playback path, so audio selection fails.
+    /// Lavalink's `youtube-source` and yt-dlp both pin 1.60.19/1.65.10.
+    #[test]
+    fn android_vr_version_stays_below_sabr_threshold() {
+        let minor: u32 = CLIENT_VERSION
+            .split('.')
+            .nth(1)
+            .and_then(|s| s.parse().ok())
+            .expect("client version has a minor component");
+        assert!(
+            minor <= 65,
+            "ANDROID_VR clientVersion {CLIENT_VERSION} exceeds 1.65; YouTube returns SABR-only \
+             adaptive formats above this and KizunaLink cannot play SABR"
+        );
+    }
+
+    #[test]
+    fn android_vr_uses_matching_user_agent() {
+        assert!(
+            USER_AGENT.contains(CLIENT_VERSION),
+            "USER_AGENT must advertise the same version as CLIENT_VERSION"
+        );
     }
 }
