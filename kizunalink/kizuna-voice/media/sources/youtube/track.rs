@@ -48,6 +48,10 @@ impl PlayableTrack for YoutubeTrack {
 
             let mut current_seek_ms = 0u64;
             let mut current_client_index = 0;
+            // YouTube occasionally rate-limits a burst of resolutions (all clients
+            // answer "no playable format"). One short, backoff retry rides over the
+            // transient window instead of failing the track outright.
+            let mut all_clients_failed_retries = 0u32;
 
             'playback_loop: loop {
                 // Resolve a playback URL using any available client.
@@ -108,6 +112,23 @@ impl PlayableTrack for YoutubeTrack {
                             identifier_async,
                             failures.join("; ")
                         );
+                        // A burst of resolutions can trip YouTube's rate limiter,
+                        // making every client report "no playable format". Retry a
+                        // couple of times with backoff before surfacing the error.
+                        if all_clients_failed_retries < 2 {
+                            all_clients_failed_retries += 1;
+                            current_client_index = 0;
+                            tracing::debug!(
+                                "YoutubeTrack: all clients failed for '{}', retry {}/2 after backoff",
+                                identifier_async,
+                                all_clients_failed_retries
+                            );
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                750 * all_clients_failed_retries as u64,
+                            ))
+                            .await;
+                            continue 'playback_loop;
+                        }
                         error!("{}", msg);
                         let _ = err_tx.send(msg);
                         return;
@@ -149,6 +170,19 @@ impl PlayableTrack for YoutubeTrack {
                         );
                         current_client_index += 1;
                         if current_client_index < clients_async.len() {
+                            continue 'playback_loop;
+                        } else if all_clients_failed_retries < 2 {
+                            all_clients_failed_retries += 1;
+                            current_client_index = 0;
+                            tracing::debug!(
+                                "YoutubeTrack: all clients failed to initialize reader for '{}', retry {}/2 after backoff",
+                                identifier_async,
+                                all_clients_failed_retries
+                            );
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                750 * all_clients_failed_retries as u64,
+                            ))
+                            .await;
                             continue 'playback_loop;
                         } else {
                             error!(
