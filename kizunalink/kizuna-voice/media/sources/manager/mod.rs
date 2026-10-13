@@ -9,8 +9,11 @@ use crate::{
 };
 
 mod best_match;
+mod fallback;
 mod registration;
 mod resolver;
+
+pub use fallback::TransparentFallbackTrack;
 
 /// Source Manager handles the lifecycle and coordination of all audio sources.
 pub struct SourceManager {
@@ -20,6 +23,10 @@ pub struct SourceManager {
         Option<Arc<crate::media::sources::youtube::cipher::YouTubeCipherManager>>,
     pub youtube_stream_ctx: Option<Arc<crate::media::sources::youtube::YoutubeStreamContext>>,
     pub http_pool: Arc<HttpClientPool>,
+    /// Weak handle to the `Arc<SourceManager>` that owns this value, set once by
+    /// [`Self::set_self_weak`]. Lets a per-track fallback wrapper (which cannot
+    /// hold a strong `Arc` back to its owner) re-enter mirror resolution.
+    self_weak: std::sync::OnceLock<std::sync::Weak<SourceManager>>,
 }
 
 impl SourceManager {
@@ -37,7 +44,19 @@ impl SourceManager {
             youtube_cipher_manager,
             youtube_stream_ctx,
             http_pool,
+            self_weak: std::sync::OnceLock::new(),
         }
+    }
+
+    /// Record a weak self-reference so per-track fallbacks can re-enter the
+    /// manager. Called once, right after the manager is placed in its `Arc`.
+    pub fn set_self_weak(self: &Arc<Self>) {
+        let _ = self.self_weak.set(Arc::downgrade(self));
+    }
+
+    /// Weak handle to the owning `Arc<SourceManager>`, for fallback wrappers.
+    pub fn self_weak(&self) -> std::sync::Weak<SourceManager> {
+        self.self_weak.get().cloned().unwrap_or_default()
     }
 }
 
@@ -111,7 +130,22 @@ impl SourceManager {
                 );
 
                 if let Some(track) = source.get_track(identifier, routeplanner.clone()).await {
-                    return Ok(track);
+                    let transparent = self
+                        .mirrors
+                        .as_ref()
+                        .is_some_and(|m| m.mirror_on_stream_failure);
+                    if !transparent {
+                        return Ok(track);
+                    }
+                    // Keep the original metadata; if this source fails at stream
+                    // time (e.g. YouTube 403 on a datacenter IP) playback continues
+                    // from a mirror without the client noticing.
+                    return Ok(TransparentFallbackTrack::wrap(
+                        track,
+                        track_info.clone(),
+                        self.self_weak(),
+                        routeplanner,
+                    ));
                 }
                 break;
             }
@@ -132,6 +166,22 @@ impl SourceManager {
             "Failed to resolve playable track for: {}",
             identifier
         ))
+    }
+
+    /// Resolve a mirror for `track_info`, skipping loop-backs to the track's own
+    /// source. Used by the stream-time fallback in
+    /// [`TransparentFallbackTrack`]. Returns an error when mirrors are disabled
+    /// or no suitable match is found.
+    pub async fn resolve_mirror(
+        &self,
+        track_info: &crate::lavalink::protocol::tracks::TrackInfo,
+        routeplanner: Option<Arc<dyn crate::lavalink::routeplanner::RoutePlanner>>,
+    ) -> Result<BoxedTrack, String> {
+        let Some(mirrors) = &self.mirrors else {
+            return Err("mirrors are not configured".to_string());
+        };
+        let identifier = track_info.uri.as_deref().unwrap_or(&track_info.identifier);
+        resolver::resolve_with_mirrors(self, track_info, identifier, mirrors, routeplanner).await
     }
 
     /// Get names of all registered sources.

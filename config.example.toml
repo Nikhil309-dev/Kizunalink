@@ -46,6 +46,7 @@ categories = ["sponsor", "intro", "outro", "interaction", "selfpromo", "music_of
 # api_url = "https://sponsor.ajay.app"
 
 [player.mirrors]
+mirror_on_stream_failure = true
 # Fallback providers tried, in order, when a track's own source cannot stream it
 # (e.g. a Spotify/Apple URL that must be re-resolved elsewhere).
 #

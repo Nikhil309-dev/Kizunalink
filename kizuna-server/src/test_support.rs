@@ -41,6 +41,7 @@ pub fn test_state() -> Arc<AppState> {
             .expect("minimal config parses");
 
     let source_manager = Arc::new(kizunalink::media::sources::SourceManager::new(&config));
+    source_manager.set_self_weak();
     let lyrics_manager = Arc::new(kizunalink::media::lyrics::LyricsManager::new(&config));
 
     // `ProcessStat::cur` reads the process CPU time; on Linux (CI + prod) this

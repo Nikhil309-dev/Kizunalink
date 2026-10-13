@@ -155,6 +155,12 @@ pub struct RoutePlannerConfig {
 pub struct MirrorsConfig {
     pub providers: Vec<String>,
     pub best_match: BestMatchConfig,
+    /// When true, a track that fails at stream time (not during metadata
+    /// resolution) is silently re-sourced from a mirror of the same metadata
+    /// while the client keeps seeing the original source. The main use case is
+    /// YouTube, whose metadata resolves fine but whose CDN `403`s on blocked
+    /// (e.g. datacenter) egresses. Default: false (opt-in).
+    pub mirror_on_stream_failure: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

@@ -495,6 +495,7 @@ mod tests {
             toml::from_str("[server]\nauthorization = \"test-suite-secret-9f2c\"\n")
                 .expect("minimal config parses");
         let source_manager = Arc::new(crate::media::sources::SourceManager::new(&config));
+        source_manager.set_self_weak();
         let lyrics_manager = Arc::new(crate::media::lyrics::LyricsManager::new(&config));
 
         start_playback(

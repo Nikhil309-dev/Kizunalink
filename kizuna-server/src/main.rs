@@ -65,6 +65,7 @@ async fn run() -> AnyResult<()> {
     };
 
     let source_manager = Arc::new(kizunalink::media::sources::SourceManager::new(&config));
+    source_manager.set_self_weak();
     let lyrics_manager = Arc::new(kizunalink::media::lyrics::LyricsManager::new(&config));
     let youtube_ctx = source_manager.youtube_stream_ctx.clone();
 
