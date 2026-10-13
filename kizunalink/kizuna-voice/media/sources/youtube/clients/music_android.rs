@@ -395,12 +395,26 @@ impl YouTubeClient for MusicAndroidClient {
             .player_request(track_id, visitor_data, None, &oauth)
             .await?;
 
-        let playability = body
-            .get("playabilityStatus")
-            .and_then(|p| p.get("status"))
-            .and_then(|s| s.as_str())
-            .unwrap_or("UNKNOWN");
-        if playability != "OK" {
+        let playability = crate::media::sources::youtube::clients::common::classify_playability(
+            body.get("playabilityStatus")
+                .and_then(|p| p.get("status"))
+                .and_then(|s| s.as_str())
+                .unwrap_or("UNKNOWN"),
+            body.get("playabilityStatus")
+                .and_then(|p| p.get("reason"))
+                .and_then(|r| r.as_str())
+                .unwrap_or(""),
+        );
+        if playability == crate::media::sources::youtube::clients::common::FailureClass::BotCheck {
+            return Err(Box::new(
+                crate::media::sources::youtube::clients::common::YoutubeFailure::new(
+                    playability,
+                    format!("video {track_id} requires sign-in / bot verification"),
+                ),
+            ));
+        }
+        if playability == crate::media::sources::youtube::clients::common::FailureClass::Definitive
+        {
             return Ok(None);
         }
 

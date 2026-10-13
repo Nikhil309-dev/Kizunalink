@@ -304,25 +304,197 @@ pub struct PlayerRequestOptions<'a> {
     pub serialized_third_party_embed_config: bool,
 }
 
-pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Value> {
+/// How a YouTube player failure should be handled by the client fallback loop.
+///
+/// This is the difference between "try another client" and "stop and tell the
+/// operator": retrying a request that requires new credentials or a video that
+/// is simply gone wastes the request budget and hides the real cause.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FailureClass {
+    /// No client on any IP can play this: private, deleted, region-locked, or
+    /// this client is structurally unsupported. Do not retry.
+    Definitive,
+    /// YouTube demands a signed-in / non-bot session (login prompt, bot check,
+    /// age gate). Another client may have a laxer requirement, but a blind retry
+    /// of the same client will not help.
+    BotCheck,
+    /// Rate limiting, a momentarily unavailable stream, or a network hiccup. A
+    /// single backed-off retry, or another client, is reasonable.
+    Transient,
+    /// Could not classify from the response. Treated as transient.
+    Unknown,
+}
+
+impl std::fmt::Display for FailureClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            FailureClass::Definitive => "definitive",
+            FailureClass::BotCheck => "bot-check",
+            FailureClass::Transient => "transient",
+            FailureClass::Unknown => "unknown",
+        };
+        f.write_str(s)
+    }
+}
+
+/// A classified YouTube failure that is carried through the `AnyResult` chain so
+/// the playback loop can inspect it with `downcast_ref` without changing the
+/// `YouTubeClient` trait signatures.
+#[derive(Debug, Clone)]
+pub struct YoutubeFailure {
+    pub class: FailureClass,
+    pub reason: String,
+}
+
+impl YoutubeFailure {
+    pub fn new(class: FailureClass, reason: impl Into<String>) -> Self {
+        Self {
+            class,
+            reason: reason.into(),
+        }
+    }
+    pub fn definitive(reason: impl Into<String>) -> Self {
+        Self::new(FailureClass::Definitive, reason)
+    }
+    pub fn bot_check(reason: impl Into<String>) -> Self {
+        Self::new(FailureClass::BotCheck, reason)
+    }
+    pub fn transient(reason: impl Into<String>) -> Self {
+        Self::new(FailureClass::Transient, reason)
+    }
+    pub fn is_definitive(&self) -> bool {
+        self.class == FailureClass::Definitive
+    }
+}
+
+impl std::fmt::Display for YoutubeFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.reason)
+    }
+}
+
+impl std::error::Error for YoutubeFailure {}
+
+/// Classify a `playabilityStatus` (status + reason) into a [`FailureClass`].
+pub fn classify_playability(status: &str, reason: &str) -> FailureClass {
+    let r = reason.to_ascii_lowercase();
+    let s = status.to_ascii_uppercase();
+
+    // Sign-in / bot-verification / age gate: needs credentials, not a retry.
+    let bot = s == "LOGIN_REQUIRED"
+        || s == "AGE_CHECK_REQUIRED"
+        || r.contains("not a bot")
+        || r.contains("sign in")
+        || r.contains("confirm your age")
+        || r.contains("verify your age");
+    if bot {
+        return FailureClass::BotCheck;
+    }
+
+    // Structurally unplayable regardless of client or IP.
+    let definitive = s == "UNPLAYABLE"
+        || s == "LIVE_STREAM_OFFLINE"
+        || s == "REGION_BLOCKED"
+        || s == "CONTENT_CHECK_REQUIRED"
+        || r.contains("private")
+        || r.contains("unavailable")
+        || r.contains("removed")
+        || r.contains("not available in your country")
+        || r.contains("not available in this app")
+        || r.contains("no longer supported")
+        || r.contains("no longer available")
+        || (s == "ERROR" && !reason.trim().is_empty());
+    if definitive {
+        return FailureClass::Definitive;
+    }
+
+    FailureClass::Unknown
+}
+
+/// Classify a non-2xx HTTP status from the InnerTube endpoint.
+pub fn classify_http_status(status: u16) -> FailureClass {
+    match status {
+        429 => FailureClass::Transient,
+        500..=599 => FailureClass::Transient,
+        401 | 403 => FailureClass::BotCheck,
+        400 | 404 => FailureClass::Definitive,
+        _ => FailureClass::Unknown,
+    }
+}
+
+/// Shorten a response body for inclusion in an error message.
+pub fn truncate(s: &str, max: usize) -> String {
+    let s = s.trim();
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max).collect();
+    out.push('…');
+    out
+}
+
+/// Validate a player body for playback and return its `streamingData`, or a
+/// classified failure explaining why no stream can be produced.
+///
+/// Used by every client's `get_track_url`. A `Definitive` failure (private,
+/// removed, region-locked, structurally unsupported) is returned as an error so
+/// the playback loop stops instead of hammering the remaining clients; the
+/// caller can map it back to `Ok(None)` if it deliberately wants to try a peer.
+pub fn ensure_playable(body: &Value, client_name: &str) -> Result<(), YoutubeFailure> {
+    let status = body
+        .get("playabilityStatus")
+        .and_then(|p| p.get("status"))
+        .and_then(|s| s.as_str())
+        .unwrap_or("UNKNOWN");
+    let reason = body
+        .get("playabilityStatus")
+        .and_then(|p| p.get("reason"))
+        .and_then(|r| r.as_str())
+        .unwrap_or("");
+
+    let sd = body.get("streamingData");
+    if status != "OK" && sd.is_none() {
+        let class = classify_playability(status, reason);
+        let detail = if reason.trim().is_empty() {
+            status.to_string()
+        } else {
+            format!("{status}: {reason}")
+        };
+        tracing::warn!("{client_name} player: not playable ({detail})");
+        return Err(YoutubeFailure::new(class, detail));
+    }
+
+    if sd.is_none() {
+        return Err(YoutubeFailure::transient(format!(
+            "player response contained no streamingData (status={status})"
+        )));
+    }
+    Ok(())
+}
+
+/// Build the InnerTube `player` request body from already-resolved inputs.
+///
+/// Kept pure (no HTTP, no provider calls) so the exact payload — including
+/// whether a PoToken was attached — is deterministically unit-testable.
+#[allow(clippy::too_many_arguments)]
+pub fn build_player_body(
+    config: &ClientConfig<'_>,
+    visitor_data: Option<&str>,
+    video_id: &str,
+    params: Option<&str>,
+    signature_timestamp: Option<u32>,
+    po_token: Option<&str>,
+    encrypted_host_flags: Option<&str>,
+    serialized_third_party_embed_config: bool,
+) -> Value {
     let mut body = json!({
-        "context": opts.config.build_context(opts.visitor_data),
-        "videoId": opts.video_id,
+        "context": config.build_context(visitor_data),
+        "videoId": video_id,
         "contentCheckOk": true,
         "racyCheckOk": true
     });
 
-    // Attach a Proof-of-Origin token when a provider is configured; YouTube
-    // requires it on GVS format URLs for the WEB/ANDROID/IOS clients. The token
-    // is bound to the video id.
-    let po_token: Option<String> = match opts.po_token {
-        Some(t) => Some(t.to_string()),
-        None => crate::media::sources::youtube::pot::fetch_global(opts.video_id).await,
-    };
-
-    if opts.serialized_third_party_embed_config
-        && let Some(obj) = body.as_object_mut()
-    {
+    if serialized_third_party_embed_config && let Some(obj) = body.as_object_mut() {
         obj.insert(
             "serializedThirdPartyEmbedConfig".to_string(),
             "{\"hideInfoBar\":true,\"disableRelatedVideos\":true}".into(),
@@ -330,6 +502,7 @@ pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Va
     }
 
     if let Some(token) = po_token
+        && !token.is_empty()
         && let Some(obj) = body.as_object_mut()
     {
         obj.insert(
@@ -338,13 +511,13 @@ pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Va
         );
     }
 
-    if let Some(p) = opts.params
+    if let Some(p) = params
         && let Some(obj) = body.as_object_mut()
     {
         obj.insert("params".to_string(), p.into());
     }
 
-    if let Some(sts) = opts.signature_timestamp
+    if let Some(sts) = signature_timestamp
         && let Some(obj) = body.as_object_mut()
     {
         obj.insert(
@@ -357,7 +530,7 @@ pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Va
         );
     }
 
-    if let Some(flags) = opts.encrypted_host_flags
+    if let Some(flags) = encrypted_host_flags
         && let Some(obj) = body.as_object_mut()
     {
         let playback_context = obj
@@ -373,6 +546,46 @@ pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Va
             .unwrap()
             .insert("encryptedHostFlags".to_string(), flags.into());
     }
+
+    body
+}
+
+pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Value> {
+    // Attach a Proof-of-Origin token when a provider is configured; YouTube
+    // requires it on GVS format URLs for the WEB/ANDROID/IOS clients. The token
+    // is bound to the video id. An externally supplied token wins; otherwise we
+    // ask the process-wide provider.
+    //
+    // We deliberately do NOT silently swallow provider failures: a provider that
+    // is configured but unreachable is an operator error that will surface as an
+    // HTTP 403 later, so we log it loudly here while still issuing the request
+    // (a token is not required by every client/IP).
+    let po_token: Option<String> = match opts.po_token {
+        Some(t) if !t.is_empty() => Some(t.to_string()),
+        _ => match crate::media::sources::youtube::pot::fetch_global_typed(opts.video_id).await {
+            Ok(token) => token,
+            Err(e) => {
+                tracing::warn!(
+                    "PoToken unavailable for video {} ({}); issuing untokened player request — \
+                     expect HTTP 403 if this client requires a token",
+                    opts.video_id,
+                    e
+                );
+                None
+            }
+        },
+    };
+
+    let body = build_player_body(
+        opts.config,
+        opts.visitor_data,
+        opts.video_id,
+        opts.params,
+        opts.signature_timestamp,
+        po_token.as_deref(),
+        opts.encrypted_host_flags.as_deref(),
+        opts.serialized_third_party_embed_config,
+    );
 
     let url = format!("{}/youtubei/v1/player?prettyPrint=false", INNERTUBE_API);
 
@@ -403,11 +616,18 @@ pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Va
     let res = req.json(&body).send().await?;
     let status = res.status();
     if !status.is_success() {
+        let code = status.as_u16();
         let text = res
             .text()
             .await
             .unwrap_or_else(|_| "Unknown error".to_string());
-        return Err(format!("Player request failed (status={}): {}", status, text).into());
+        return Err(Box::new(YoutubeFailure::new(
+            classify_http_status(code),
+            format!(
+                "player request failed (status={code}): {}",
+                truncate(&text, 300)
+            ),
+        )));
     }
 
     Ok(res.json().await?)
@@ -464,4 +684,169 @@ pub async fn make_next_request(
     }
 
     Ok(res.json().await?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_config() -> ClientConfig<'static> {
+        ClientConfig {
+            client_name: "WEB",
+            client_version: "2.20260114.01.00",
+            client_id: "1",
+            user_agent: "test-agent",
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn player_body_includes_configured_po_token() {
+        let cfg = test_config();
+        let body = build_player_body(
+            &cfg,
+            Some("visitor-abc"),
+            "dQw4w9WgXcQ",
+            None,
+            None,
+            Some("po-token-xyz"),
+            None,
+            false,
+        );
+        assert_eq!(
+            body.get("serviceIntegrityDimensions")
+                .and_then(|s| s.get("poToken"))
+                .and_then(|v| v.as_str()),
+            Some("po-token-xyz")
+        );
+        // visitorData must be embedded in the client context, not just headers.
+        assert_eq!(
+            body.get("context")
+                .and_then(|c| c.get("client"))
+                .and_then(|c| c.get("visitorData"))
+                .and_then(|v| v.as_str()),
+            Some("visitor-abc")
+        );
+        assert_eq!(
+            body.get("videoId").and_then(|v| v.as_str()),
+            Some("dQw4w9WgXcQ")
+        );
+    }
+
+    #[test]
+    fn player_body_omits_service_integrity_without_token() {
+        let cfg = test_config();
+        let body = build_player_body(&cfg, None, "vid", None, None, None, None, false);
+        assert!(body.get("serviceIntegrityDimensions").is_none());
+    }
+
+    #[test]
+    fn empty_token_is_not_attached() {
+        let cfg = test_config();
+        let body = build_player_body(&cfg, None, "vid", None, None, Some(""), None, false);
+        assert!(body.get("serviceIntegrityDimensions").is_none());
+    }
+
+    #[test]
+    fn token_and_playback_context_coexist() {
+        // A client may send both an encrypted-host-flag playbackContext and a
+        // token; the token must not clobber the signatureTimestamp.
+        let cfg = test_config();
+        let body = build_player_body(
+            &cfg,
+            None,
+            "vid",
+            None,
+            Some(20000),
+            Some("tok"),
+            Some("flags-blob"),
+            true,
+        );
+        assert_eq!(
+            body.get("serviceIntegrityDimensions")
+                .and_then(|s| s.get("poToken"))
+                .and_then(|v| v.as_str()),
+            Some("tok")
+        );
+        let cpc = body
+            .get("playbackContext")
+            .and_then(|p| p.get("contentPlaybackContext"))
+            .unwrap();
+        assert_eq!(
+            cpc.get("signatureTimestamp").and_then(|v| v.as_u64()),
+            Some(20000)
+        );
+        assert_eq!(
+            cpc.get("encryptedHostFlags").and_then(|v| v.as_str()),
+            Some("flags-blob")
+        );
+        assert!(body.get("serializedThirdPartyEmbedConfig").is_some());
+    }
+
+    #[test]
+    fn classify_login_required_is_bot_check() {
+        assert_eq!(
+            classify_playability("LOGIN_REQUIRED", "Sign in to confirm you're not a bot"),
+            FailureClass::BotCheck
+        );
+        assert_eq!(
+            classify_playability("LOGIN_REQUIRED", "This video may be inappropriate"),
+            FailureClass::BotCheck
+        );
+        assert_eq!(
+            classify_playability("AGE_CHECK_REQUIRED", ""),
+            FailureClass::BotCheck
+        );
+    }
+
+    #[test]
+    fn classify_unplayable_and_private_are_definitive() {
+        assert_eq!(
+            classify_playability("UNPLAYABLE", "This video is unavailable"),
+            FailureClass::Definitive
+        );
+        assert_eq!(
+            classify_playability("ERROR", "This video is private"),
+            FailureClass::Definitive
+        );
+        assert_eq!(
+            classify_playability("UNPLAYABLE", "Playback on other websites has been disabled"),
+            FailureClass::Definitive
+        );
+    }
+
+    #[test]
+    fn classify_http_statuses() {
+        assert_eq!(classify_http_status(429), FailureClass::Transient);
+        assert_eq!(classify_http_status(503), FailureClass::Transient);
+        assert_eq!(classify_http_status(403), FailureClass::BotCheck);
+        assert_eq!(classify_http_status(401), FailureClass::BotCheck);
+        assert_eq!(classify_http_status(404), FailureClass::Definitive);
+    }
+
+    #[test]
+    fn ensure_playable_reports_definitive_for_private_video() {
+        let body = json!({
+            "playabilityStatus": { "status": "ERROR", "reason": "This video is private" }
+        });
+        let err = ensure_playable(&body, "Web").unwrap_err();
+        assert_eq!(err.class, FailureClass::Definitive);
+        assert!(err.reason.contains("private"));
+    }
+
+    #[test]
+    fn ensure_playable_passes_when_streaming_data_present() {
+        let body = json!({
+            "playabilityStatus": { "status": "OK" },
+            "streamingData": { "adaptiveFormats": [] }
+        });
+        assert!(ensure_playable(&body, "Web").is_ok());
+    }
+
+    #[test]
+    fn ensure_playable_flags_missing_streaming_data_as_transient() {
+        let body = json!({ "playabilityStatus": { "status": "OK" } });
+        let err = ensure_playable(&body, "Web").unwrap_err();
+        assert_eq!(err.class, FailureClass::Transient);
+    }
 }

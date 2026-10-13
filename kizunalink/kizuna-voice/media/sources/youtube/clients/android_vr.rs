@@ -202,20 +202,7 @@ impl YouTubeClient for AndroidVrClient {
             .player_request(track_id, visitor_data, None, &oauth)
             .await?;
 
-        let playability = body
-            .get("playabilityStatus")
-            .and_then(|p| p.get("status"))
-            .and_then(|s| s.as_str())
-            .unwrap_or("UNKNOWN");
-
-        if playability != "OK" {
-            tracing::warn!(
-                "AndroidVR player: video {} not playable (status={})",
-                track_id,
-                playability
-            );
-            return Ok(None);
-        }
+        crate::media::sources::youtube::clients::common::ensure_playable(&body, "AndroidVR")?;
 
         let streaming_data = match body.get("streamingData") {
             Some(sd) => sd,

@@ -13,6 +13,7 @@
 //! [`bgutil-ytdlp-pot-provider`]: https://github.com/Brainicism/bgutil-ytdlp-pot-provider
 
 use std::{
+    fmt,
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
@@ -25,6 +26,61 @@ pub type SharedPotProvider = Arc<YouTubePotProvider>;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 /// bgutil tokens are valid for hours; cache comfortably below that.
 const CACHE_TTL: Duration = Duration::from_secs(4 * 60 * 60);
+
+/// Why a PoToken could not be obtained.
+///
+/// Distinguishing these is the difference between an actionable operator error
+/// and a silent, untokened request that YouTube answers with HTTP 403 later.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PotError {
+    /// `sources.youtube.pot.enabled` is false — no provider is configured.
+    Disabled,
+    /// A provider is configured but the request to it failed at the transport
+    /// layer (connection refused, DNS, TLS, timeout). The provider is down or
+    /// unreachable.
+    Unreachable(String),
+    /// The provider answered with a non-success HTTP status.
+    ProviderStatus(u16, String),
+    /// The provider answered 2xx but the body was not valid JSON, or lacked a
+    /// usable token field.
+    InvalidResponse(String),
+    /// The request could not be bound to a video id (empty id).
+    NotBound,
+}
+
+impl fmt::Display for PotError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PotError::Disabled => write!(f, "PoToken provider is disabled"),
+            PotError::Unreachable(e) => write!(
+                f,
+                "PoToken provider is unreachable (is the bgutil server running and is \
+                 `sources.youtube.pot.url` correct?): {e}"
+            ),
+            PotError::ProviderStatus(code, body) => write!(
+                f,
+                "PoToken provider returned HTTP {code}: {}",
+                truncate(body, 200)
+            ),
+            PotError::InvalidResponse(e) => {
+                write!(f, "PoToken provider returned an unusable response: {e}")
+            }
+            PotError::NotBound => write!(f, "PoToken cannot be bound to an empty video id"),
+        }
+    }
+}
+
+impl std::error::Error for PotError {}
+
+fn truncate(s: &str, max: usize) -> String {
+    let s = s.trim();
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max).collect();
+    out.push('…');
+    out
+}
 
 struct CachedToken {
     token: String,
@@ -66,22 +122,31 @@ impl YouTubePotProvider {
         }
     }
 
-    /// Mint (or reuse) a PoToken bound to `video_id`.
+    /// Whether a provider is configured at all (i.e. `pot.enabled = true` with a
+    /// URL). Disabled providers are not an error condition, just an absent token.
+    pub fn enabled(&self) -> bool {
+        self.base_url.is_some()
+    }
+
+    /// The provider base URL, for diagnostics.
+    pub fn base_url(&self) -> Option<&str> {
+        self.base_url.as_deref()
+    }
+
+    /// Mint (or reuse) a PoToken bound to `video_id`, reporting *why* it failed.
     ///
     /// GVS format URLs from the WEB/ANDROID/IOS clients are bound to the video id
-    /// (the `content` binding), so the token must be minted per video. Returns
-    /// `None` when the provider is disabled or the request fails; the caller then
-    /// sends the player request without a token.
-    pub async fn fetch(&self, video_id: &str) -> Option<String> {
-        let base = self.base_url.as_deref()?;
+    /// (the `content` binding), so the token must be minted per video.
+    pub async fn fetch_typed(&self, video_id: &str) -> Result<String, PotError> {
+        let base = self.base_url.as_deref().ok_or(PotError::Disabled)?;
         if video_id.is_empty() {
-            return None;
+            return Err(PotError::NotBound);
         }
 
         if !self.bypass_cache
             && let Some(token) = self.cached(video_id)
         {
-            return Some(token);
+            return Ok(token);
         }
 
         let body = serde_json::json!({
@@ -90,46 +155,56 @@ impl YouTubePotProvider {
         });
         let url = format!("{}/get_pot", base);
 
-        let response = match self
+        let response = self
             .http
             .post(&url)
             .timeout(REQUEST_TIMEOUT)
             .json(&body)
             .send()
             .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::warn!("PoToken provider request failed: {}", e);
-                return None;
-            }
-        };
+            .map_err(|e| PotError::Unreachable(e.to_string()))?;
 
-        if !response.status().is_success() {
-            tracing::warn!(
-                "PoToken provider returned {} ({})",
-                response.status(),
-                response.text().await.unwrap_or_default()
-            );
-            return None;
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return Err(PotError::ProviderStatus(status.as_u16(), text));
         }
 
-        let json: Value = match response.json().await {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::warn!("PoToken provider returned invalid JSON: {}", e);
-                return None;
-            }
-        };
+        let json: Value = response
+            .json()
+            .await
+            .map_err(|e| PotError::InvalidResponse(e.to_string()))?;
 
-        let token = parse_token(&json)?;
+        let token = parse_token(&json)
+            .ok_or_else(|| PotError::InvalidResponse(truncate(&json.to_string(), 200)))?;
         tracing::debug!("PoToken acquired for video {}…", prefix(video_id));
         *self.cache.lock().unwrap() = Some(CachedToken {
             token: token.clone(),
             binding: video_id.to_string(),
             expires: Instant::now() + CACHE_TTL,
         });
-        Some(token)
+        Ok(token)
+    }
+
+    /// Convenience wrapper that collapses the typed error to `Option`, preserving
+    /// the old behaviour for callers that only need "a token or not".
+    pub async fn fetch(&self, video_id: &str) -> Option<String> {
+        match self.fetch_typed(video_id).await {
+            Ok(t) => Some(t),
+            Err(PotError::Disabled) => None,
+            Err(e) => {
+                tracing::warn!("PoToken provider request failed: {e}");
+                None
+            }
+        }
+    }
+
+    /// Probe the provider with a throwaway binding to confirm it is reachable and
+    /// well-formed. Used once at startup so misconfiguration surfaces loudly
+    /// instead of as an HTTP 403 during playback.
+    pub async fn probe(&self) -> Result<(), PotError> {
+        // A dedicated binding keeps the probe out of the real token cache.
+        self.fetch_typed("kizunalink-pot-probe").await.map(|_| ())
     }
 
     fn cached(&self, video_id: &str) -> Option<String> {
@@ -212,6 +287,21 @@ pub async fn fetch_global(video_id: &str) -> Option<String> {
     provider.fetch(video_id).await
 }
 
+/// Typed variant of [`fetch_global`]: reports whether the provider is disabled or
+/// failed, so callers can log an actionable message instead of silently dropping
+/// the token. Returns `Ok(None)` only when no provider is installed or it is
+/// explicitly disabled.
+pub async fn fetch_global_typed(video_id: &str) -> Result<Option<String>, PotError> {
+    match global() {
+        None => Ok(None),
+        Some(provider) => match provider.fetch_typed(video_id).await {
+            Ok(token) => Ok(Some(token)),
+            Err(PotError::Disabled) => Ok(None),
+            Err(e) => Err(e),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,8 +329,32 @@ mod tests {
     fn disabled_provider_returns_no_token() {
         let p = disabled_provider();
         assert!(p.base_url.is_none());
+        assert!(!p.enabled());
         let rt = tokio::runtime::Runtime::new().unwrap();
         assert_eq!(rt.block_on(p.fetch("vd")), None);
+        assert_eq!(rt.block_on(p.fetch_typed("vd")), Err(PotError::Disabled));
+    }
+
+    #[test]
+    fn empty_video_id_is_not_bound() {
+        let p = YouTubePotProvider::new(
+            Arc::new(reqwest::Client::new()),
+            "http://127.0.0.1:1".into(),
+            false,
+        );
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        assert_eq!(rt.block_on(p.fetch_typed("")), Err(PotError::NotBound));
+    }
+
+    #[test]
+    fn enabled_reports_configured_provider() {
+        let p = YouTubePotProvider::new(
+            Arc::new(reqwest::Client::new()),
+            "http://127.0.0.1:4416".into(),
+            false,
+        );
+        assert!(p.enabled());
+        assert_eq!(p.base_url(), Some("http://127.0.0.1:4416"));
     }
 
     #[test]
@@ -250,5 +364,122 @@ mod tests {
         assert!(host_is_loopback("http://[::1]:4416"));
         assert!(!host_is_loopback("http://pot.example.com:4416"));
         assert!(!host_is_loopback("http://10.0.0.5:4416"));
+    }
+
+    /// Spawn an in-process mock bgutil provider and return its base URL.
+    async fn spawn_mock_provider(
+        responder: impl Fn(&str) -> axum::response::Response + Send + Sync + 'static,
+    ) -> String {
+        use axum::{Router, routing::post};
+
+        let responder = std::sync::Arc::new(responder);
+        let app = Router::new().route(
+            "/get_pot",
+            post(move |body: String| {
+                let responder = responder.clone();
+                async move { responder(&body) }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        format!("http://{addr}")
+    }
+
+    fn provider_for(base: String) -> YouTubePotProvider {
+        YouTubePotProvider::new(Arc::new(reqwest::Client::new()), base, false)
+    }
+
+    #[tokio::test]
+    async fn fetch_typed_returns_token_and_binds_to_video() {
+        let base = spawn_mock_provider(|body| {
+            assert!(
+                body.contains("\"content_binding\":\"vid1\""),
+                "body: {body}"
+            );
+            axum::response::Response::builder()
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(r#"{"poToken":"tok-from-mock"}"#))
+                .unwrap()
+        })
+        .await;
+        let p = provider_for(base);
+        assert_eq!(p.fetch_typed("vid1").await.unwrap(), "tok-from-mock");
+    }
+
+    #[tokio::test]
+    async fn fetch_typed_caches_per_binding() {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let calls2 = calls.clone();
+        let base = spawn_mock_provider(move |_body| {
+            calls2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            axum::response::Response::builder()
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(r#"{"poToken":"cached"}"#))
+                .unwrap()
+        })
+        .await;
+        let p = provider_for(base);
+        // Same binding twice -> one network call; a different binding -> two.
+        let _ = p.fetch_typed("a").await.unwrap();
+        let _ = p.fetch_typed("a").await.unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let _ = p.fetch_typed("b").await.unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn fetch_typed_reports_provider_status() {
+        let base = spawn_mock_provider(|_body| {
+            axum::response::Response::builder()
+                .status(500)
+                .body(axum::body::Body::from("boom"))
+                .unwrap()
+        })
+        .await;
+        let p = provider_for(base);
+        assert!(matches!(
+            p.fetch_typed("vid1").await,
+            Err(PotError::ProviderStatus(500, _))
+        ));
+    }
+
+    #[tokio::test]
+    async fn fetch_typed_reports_invalid_response() {
+        let base = spawn_mock_provider(|_body| {
+            axum::response::Response::builder()
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(r#"{"unexpected":true}"#))
+                .unwrap()
+        })
+        .await;
+        let p = provider_for(base);
+        assert!(matches!(
+            p.fetch_typed("vid1").await,
+            Err(PotError::InvalidResponse(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn probe_uses_mock_provider() {
+        let base = spawn_mock_provider(|body| {
+            assert!(body.contains("kizunalink-pot-probe"));
+            axum::response::Response::builder()
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(r#"{"poToken":"probe-ok"}"#))
+                .unwrap()
+        })
+        .await;
+        let p = provider_for(base);
+        assert!(p.probe().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn probe_fails_when_provider_down() {
+        // Nothing is listening on this port.
+        let p = provider_for("http://127.0.0.1:1".into());
+        assert!(matches!(p.probe().await, Err(PotError::Unreachable(_))));
     }
 }

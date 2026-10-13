@@ -81,3 +81,40 @@ impl Default for HttpClientPool {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn proxy(url: &str) -> HttpProxyConfig {
+        HttpProxyConfig {
+            url: Some(url.to_string()),
+            username: None,
+            password: None,
+        }
+    }
+
+    #[test]
+    fn proxy_configs_are_cached_keyed_by_value() {
+        let pool = HttpClientPool::new();
+        let a = pool.get(Some(proxy("http://127.0.0.1:8080")));
+        let b = pool.get(Some(proxy("http://127.0.0.1:8080")));
+        // Same proxy config reuses the same pooled client.
+        assert!(Arc::ptr_eq(&a, &b));
+
+        let c = pool.get(None);
+        // A direct client is distinct from a proxied one.
+        assert!(!Arc::ptr_eq(&a, &c));
+    }
+
+    #[test]
+    fn direct_and_proxied_clients_do_not_collide() {
+        let pool = HttpClientPool::new();
+        let direct1 = pool.get(None);
+        let direct2 = pool.get(None);
+        assert!(Arc::ptr_eq(&direct1, &direct2));
+        assert_eq!(pool.clients.len(), 1);
+        let _ = pool.get(Some(proxy("http://127.0.0.1:8081")));
+        assert_eq!(pool.clients.len(), 2);
+    }
+}

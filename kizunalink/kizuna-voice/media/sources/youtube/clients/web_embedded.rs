@@ -237,25 +237,7 @@ impl YouTubeClient for WebEmbeddedClient {
             )
             .await?;
 
-        let playability = body
-            .get("playabilityStatus")
-            .and_then(|p| p.get("status"))
-            .and_then(|s| s.as_str())
-            .unwrap_or("UNKNOWN");
-
-        if playability != "OK" {
-            let reason = body
-                .get("playabilityStatus")
-                .and_then(|p| p.get("reason"))
-                .and_then(|r| r.as_str())
-                .unwrap_or("unknown reason");
-            tracing::warn!(
-                "WebEmbedded player: video {} not playable (status={}, reason={}); attempting streamingData fallback",
-                track_id,
-                playability,
-                reason
-            );
-        }
+        crate::media::sources::youtube::clients::common::ensure_playable(&body, "WebEmbedded")?;
 
         let streaming_data = match body.get("streamingData") {
             Some(sd) => sd,

@@ -278,26 +278,7 @@ impl YouTubeClient for AndroidClient {
             .player_request(track_id, visitor_data, None, &oauth)
             .await?;
 
-        let playability = body
-            .get("playabilityStatus")
-            .and_then(|p| p.get("status"))
-            .and_then(|s| s.as_str())
-            .unwrap_or("UNKNOWN");
-
-        if playability != "OK" {
-            let reason = body
-                .get("playabilityStatus")
-                .and_then(|p| p.get("reason"))
-                .and_then(|r| r.as_str())
-                .unwrap_or("unknown reason");
-            tracing::warn!(
-                "Android player: video {} not playable (status={}, reason={})",
-                track_id,
-                playability,
-                reason
-            );
-            return Ok(None);
-        }
+        crate::media::sources::youtube::clients::common::ensure_playable(&body, "Android")?;
 
         let streaming_data = match body.get("streamingData") {
             Some(sd) => sd,

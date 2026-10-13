@@ -100,14 +100,32 @@ impl YouTubeSource {
         let pot = if config.pot.enabled {
             if let Some(url) = config.pot.url.clone() {
                 tracing::info!("YouTube PoToken provider enabled at {}", url);
-                Arc::new(pot::YouTubePotProvider::new(
+                let provider = Arc::new(pot::YouTubePotProvider::new(
                     http.clone(),
                     url,
                     config.pot.bypass_cache,
-                ))
+                ));
+                // Confirm the provider is actually reachable and well-formed before
+                // playback traffic starts. A configured-but-dead provider is an
+                // operator error that would otherwise surface later as an opaque
+                // HTTP 403, so it must be loud here.
+                let probe = provider.clone();
+                tokio::spawn(async move {
+                    match probe.probe().await {
+                        Ok(()) => tracing::info!("YouTube PoToken provider reachable."),
+                        Err(e) => tracing::error!(
+                            "YouTube PoToken provider is configured but not working: {e}. \
+                             Playback will proceed without tokens and may fail with HTTP 403 \
+                             on clients that require one."
+                        ),
+                    }
+                });
+                provider
             } else {
-                tracing::warn!(
-                    "YouTube pot.enabled is true but pot.url is missing; PoTokens disabled"
+                tracing::error!(
+                    "YouTube pot.enabled is true but pot.url is missing; PoTokens disabled. \
+                     Set `sources.youtube.pot.url` to your bgutil provider (e.g. \
+                     http://127.0.0.1:4416)."
                 );
                 pot::disabled()
             }
