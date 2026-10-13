@@ -42,9 +42,25 @@ pub struct YouTubePotProvider {
 
 impl YouTubePotProvider {
     pub fn new(http: Arc<reqwest::Client>, base_url: String, bypass_cache: bool) -> Self {
+        let base_url = base_url.trim_end_matches('/').to_string();
+        // A co-located provider (loopback URL) must be reached directly: the
+        // shared client carries the YouTube egress proxy, which lives on another
+        // network and cannot see 127.0.0.1. A remote provider keeps the shared
+        // (proxy-aware) client.
+        let http = if host_is_loopback(&base_url) {
+            Arc::new(
+                reqwest::Client::builder()
+                    .no_proxy()
+                    .timeout(REQUEST_TIMEOUT)
+                    .build()
+                    .unwrap_or_else(|_| reqwest::Client::new()),
+            )
+        } else {
+            http
+        };
         Self {
             http,
-            base_url: Some(base_url.trim_end_matches('/').to_string()),
+            base_url: Some(base_url),
             bypass_cache,
             cache: Mutex::new(None),
         }
@@ -141,6 +157,27 @@ fn prefix(s: &str) -> String {
     s.chars().take(12).collect()
 }
 
+/// Whether a base URL targets this machine (loopback), so it must bypass the
+/// YouTube egress proxy.
+fn host_is_loopback(url: &str) -> bool {
+    let rest = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
+        .unwrap_or(url);
+    let host = if let Some(rest) = rest.strip_prefix('[') {
+        // bracketed IPv6 literal, e.g. [::1]:4416
+        rest.split(']').next().unwrap_or("")
+    } else {
+        rest.split(['/', ':', '?']).next().unwrap_or("")
+    };
+    host == "localhost"
+        || host == "::1"
+        || host
+            .parse::<std::net::IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false)
+}
+
 fn disabled_provider() -> YouTubePotProvider {
     YouTubePotProvider {
         http: Arc::new(reqwest::Client::new()),
@@ -204,5 +241,14 @@ mod tests {
         assert!(p.base_url.is_none());
         let rt = tokio::runtime::Runtime::new().unwrap();
         assert_eq!(rt.block_on(p.fetch("vd")), None);
+    }
+
+    #[test]
+    fn loopback_detection() {
+        assert!(host_is_loopback("http://127.0.0.1:4416"));
+        assert!(host_is_loopback("http://localhost:4416/get_pot"));
+        assert!(host_is_loopback("http://[::1]:4416"));
+        assert!(!host_is_loopback("http://pot.example.com:4416"));
+        assert!(!host_is_loopback("http://10.0.0.5:4416"));
     }
 }
