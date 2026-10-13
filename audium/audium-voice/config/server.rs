@@ -138,6 +138,15 @@ pub struct LogFileConfig {
     pub max_files: u32,
     #[serde(default)]
     pub rotate_daily: bool,
+    /// Mirror logs to this file *in addition to* the console. Defaults to `true`
+    /// so an existing `[logging.file]` section keeps writing its file; omit the
+    /// section (or set `enabled = false`) to log to the console only.
+    #[serde(default = "default_file_logging_enabled")]
+    pub enabled: bool,
+}
+
+fn default_file_logging_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]

@@ -93,7 +93,12 @@ duration_tolerance_ms = 3000
 level = "info"              # trace | debug | info | warn | error | off
 filters = "audium=debug" # e.g. "audium=debug,davey=off"
 
+# Console output is always on: INFO/DEBUG go to stdout and WARN/ERROR to stderr,
+# so container platforms (Pterodactyl, Docker, systemd) capture everything.
+# [logging.file] is OPTIONAL and only mirrors logs to a file *in addition* to the
+# console. Omit the section (or set enabled = false) to log to the console only.
 [logging.file]
+enabled = true
 path = "./logs/audium.log"
 max_lines = 10000
 rotate_daily = false  # when true, creates audium-YYYY-MM-DD.log each day
