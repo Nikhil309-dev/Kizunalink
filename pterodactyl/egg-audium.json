@@ -6,7 +6,7 @@
     },
     "exported_at": "2026-10-11T00:00:00+00:00",
     "name": "Audium",
-    "author": "openhands@all-hands.dev",
+    "author": "CodeX Development",
     "description": "Audium \u2014 a native Rust Lavalink v4 audio node (no JVM, integrated sources). Runs from source via cargo on first boot; see the README for the faster prebuilt-binary path.",
     "features": null,
     "docker_images": {

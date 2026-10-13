@@ -6,7 +6,7 @@
     },
     "exported_at": "2026-10-11T00:00:00+00:00",
     "name": "Audium (Lavalink v4 node, prebuilt download)",
-    "author": "openhands@all-hands.dev",
+    "author": "CodeX Development",
     "description": "Audium \u2014 a native Rust Lavalink v4 audio node. This egg downloads the correct prebuilt release binary (kizunalink-linux-x86_64-musl on x86_64, kizunalink-linux-arm64 on ARM64), verifies its SHA-256, and runs it. Nothing is compiled on the host. Startup Variables are injected into config.toml on every boot, and all runtime logs stream to the Console tab (console-only logging by default; file logging is opt-in).",
     "features": null,
     "docker_images": {
