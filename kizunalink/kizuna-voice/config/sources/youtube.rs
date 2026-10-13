@@ -24,6 +24,12 @@ pub struct YouTubeConfig {
     /// otherwise clean egress is the most reliable mitigation.
     #[serde(default)]
     pub proxy: Option<HttpProxyConfig>,
+    /// Proof-of-Origin (PoToken) provider. YouTube enforces a PoToken on the GVS
+    /// format URLs returned by the WEB/ANDROID/IOS clients, which is what surfaces as
+    /// `HTTP 403` under bursts. Point this at a `bgutil` POT provider HTTP server to
+    /// attach a token to player requests.
+    #[serde(default)]
+    pub pot: YouTubePotConfig,
 }
 
 impl Default for YouTubeConfig {
@@ -35,6 +41,31 @@ impl Default for YouTubeConfig {
             refresh_tokens: Vec::new(),
             get_oauth_token: false,
             proxy: None,
+            pot: YouTubePotConfig::default(),
+        }
+    }
+}
+
+/// Configuration for a `bgutil-ytdlp-pot-provider` HTTP server
+/// (https://github.com/Brainicism/bgutil-ytdlp-pot-provider).
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct YouTubePotConfig {
+    #[serde(default = "default_false")]
+    pub enabled: bool,
+    /// Base URL of the provider, e.g. `http://127.0.0.1:4416`. No trailing slash.
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Request a fresh token for every play instead of reusing the cached one.
+    #[serde(default = "default_false")]
+    pub bypass_cache: bool,
+}
+
+impl Default for YouTubePotConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: None,
+            bypass_cache: false,
         }
     }
 }

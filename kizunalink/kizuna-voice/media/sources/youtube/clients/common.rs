@@ -312,6 +312,14 @@ pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Va
         "racyCheckOk": true
     });
 
+    // Attach a Proof-of-Origin token when a provider is configured; YouTube
+    // requires it on GVS format URLs for the WEB/ANDROID/IOS clients. The token
+    // is bound to the video id.
+    let po_token: Option<String> = match opts.po_token {
+        Some(t) => Some(t.to_string()),
+        None => crate::media::sources::youtube::pot::fetch_global(opts.video_id).await,
+    };
+
     if opts.serialized_third_party_embed_config
         && let Some(obj) = body.as_object_mut()
     {
@@ -321,7 +329,7 @@ pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Va
         );
     }
 
-    if let Some(token) = opts.po_token
+    if let Some(token) = po_token
         && let Some(obj) = body.as_object_mut()
     {
         obj.insert(

@@ -21,6 +21,7 @@ pub mod clients;
 pub mod extractor;
 pub mod hls;
 pub mod oauth;
+pub mod pot;
 pub mod reader;
 pub mod ua;
 pub mod utils;
@@ -35,6 +36,7 @@ use clients::{
     web_parent_tools::WebParentToolsClient, web_remix::WebRemixClient,
 };
 use oauth::YouTubeOAuth;
+use pot::SharedPotProvider;
 
 pub struct YouTubeSource {
     search_prefixes: Vec<String>,
@@ -47,6 +49,7 @@ pub struct YouTubeSource {
     oauth: Arc<YouTubeOAuth>,
     cipher_manager: Arc<YouTubeCipherManager>,
     visitor_data: SharedRw<Option<String>>,
+    pot: SharedPotProvider,
     proxy: Option<crate::config::sources::HttpProxyConfig>,
     #[allow(dead_code)]
     http: Arc<reqwest::Client>,
@@ -57,6 +60,7 @@ pub struct YoutubeStreamContext {
     pub oauth: Arc<YouTubeOAuth>,
     pub cipher_manager: Arc<YouTubeCipherManager>,
     pub visitor_data: SharedRw<Option<String>>,
+    pub pot: SharedPotProvider,
     pub http: Arc<reqwest::Client>,
 }
 
@@ -92,6 +96,26 @@ impl YouTubeSource {
         });
 
         let visitor_data = Arc::new(RwLock::new(None));
+
+        let pot = if config.pot.enabled {
+            if let Some(url) = config.pot.url.clone() {
+                tracing::info!("YouTube PoToken provider enabled at {}", url);
+                Arc::new(pot::YouTubePotProvider::new(
+                    http.clone(),
+                    url,
+                    config.pot.bypass_cache,
+                ))
+            } else {
+                tracing::warn!(
+                    "YouTube pot.enabled is true but pot.url is missing; PoTokens disabled"
+                );
+                pot::disabled()
+            }
+        } else {
+            pot::disabled()
+        };
+
+        pot::set_global(pot.clone());
 
         let vd_clone = visitor_data.clone();
         let http_clone = http.clone();
@@ -201,6 +225,7 @@ impl YouTubeSource {
             oauth,
             cipher_manager,
             visitor_data,
+            pot,
             proxy: config.proxy.clone(),
             http,
         }
@@ -212,6 +237,7 @@ impl YouTubeSource {
             oauth: self.oauth.clone(),
             cipher_manager: self.cipher_manager.clone(),
             visitor_data: self.visitor_data.clone(),
+            pot: self.pot.clone(),
             http: self.http.clone(),
         })
     }

@@ -112,6 +112,16 @@ get_oauth_token = false
 # proxy is the most reliable fix. Uncomment and edit to enable:
 # proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
 
+# Proof-of-Origin (PoToken) provider. YouTube enforces a PoToken on the GVS
+# format URLs returned by the WEB/ANDROID/IOS clients, which surfaces as HTTP 403
+# on googlevideo.com under bursts. Run a bgutil provider and point KizunaLink at
+# it: https://github.com/Brainicism/bgutil-ytdlp-pot-provider
+#   docker run --name bgutil-pot -d -p 4416:4416 brainicism/bgutil-ytdlp-pot-provider
+# [sources.youtube.pot]
+# enabled = true
+# url = "http://127.0.0.1:4416"
+# bypass_cache = false
+
 [sources.youtube.clients]
 search = ["MUSIC_ANDROID", "MUSIC_WEB", "ANDROID", "WEB"]
 playback = ["TV_CAST", "TV_EMBEDDED", "ANDROID_VR", "WEB_EMBEDDED", "ANDROID", "MUSIC_ANDROID", "WEB"]
