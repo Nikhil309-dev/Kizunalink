@@ -438,6 +438,38 @@ mod tests {
     }
 
     #[test]
+    fn logging_file_section_defaults_enabled_true() {
+        // A pre-existing `[logging.file]` section (no `enabled` key) must keep
+        // writing its file — backward compatible.
+        let cfg = cfg_from_toml(
+            "server.address='127.0.0.1'\nserver.port=28453\n\
+             server.authorization='base-valid-secret'\n\
+             [logging.file]\npath='logs/audium.log'\nmax_lines=1000\n",
+        );
+        let file = cfg.logging.unwrap().file.unwrap();
+        assert!(file.enabled, "omitting `enabled` must default to true");
+    }
+
+    #[test]
+    fn logging_file_section_can_be_disabled() {
+        let cfg = cfg_from_toml(
+            "server.address='127.0.0.1'\nserver.port=28453\n\
+             server.authorization='base-valid-secret'\n\
+             [logging.file]\npath='logs/audium.log'\nmax_lines=1000\nenabled=false\n",
+        );
+        assert!(!cfg.logging.unwrap().file.unwrap().enabled);
+    }
+
+    #[test]
+    fn no_logging_file_section_means_console_only() {
+        let cfg = cfg_from_toml(BASE_TOML);
+        assert!(
+            cfg.logging.is_none_or(|l| l.file.is_none()),
+            "absent [logging.file] must not enable file logging"
+        );
+    }
+
+    #[test]
     fn load_applies_env_overrides_and_validation() {
         // Env-provided TLS should pass validation with cert+key …
         let cfg = cfg_with_envs(&[

@@ -60,7 +60,7 @@ impl Default for YouTubeConfig {
 
 /// Configuration for a `bgutil-ytdlp-pot-provider` HTTP server
 /// (https://github.com/Brainicism/bgutil-ytdlp-pot-provider).
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct YouTubePotConfig {
     #[serde(default = "default_false")]
     pub enabled: bool,
@@ -70,16 +70,6 @@ pub struct YouTubePotConfig {
     /// Request a fresh token for every play instead of reusing the cached one.
     #[serde(default = "default_false")]
     pub bypass_cache: bool,
-}
-
-impl Default for YouTubePotConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            url: None,
-            bypass_cache: false,
-        }
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]

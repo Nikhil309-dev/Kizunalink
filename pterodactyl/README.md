@@ -4,8 +4,11 @@
 > Import [`egg-audium-binary.json`](./egg-audium-binary.json) and start. The
 > installer runs automatically at install time: it picks the right asset for the
 > host architecture, downloads it from GitHub Releases, verifies its SHA-256, and
-> runs it. There is **nothing to build and nothing to upload by hand** — no
-> `cargo`, Rustup, CMake or `c++`. See [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for
+> writes a `start.sh` wrapper that injects the panel variables into `config.toml`
+> and runs the binary. There is **nothing to build and nothing to upload by
+> hand** — no `cargo`, Rustup, CMake or `c++`. All runtime logs stream to the
+> **Console** tab (`INFO`/`DEBUG` on stdout, `WARN`/`ERROR` on stderr); file
+> logging is opt-in. See [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for
 > the full walkthrough. The sections below cover the build-from-source variants.
 
 Pterodactyl runs each server in a container it controls: the panel mounts the
@@ -114,10 +117,11 @@ working directory can be the repo without the config silently falling back to
 - **Missing config falls back to `config.example.toml`** with a warning. That file
   has `address = "0.0.0.0"` and a placeholder secret; the env override makes the
   secret real, but keep an explicit `config.toml` to avoid surprises.
-- **`logs/` must be writable.** The egg sets an absolute log path
-  (`/home/container/logs/audium.log`) and the installer creates that directory.
-  If you keep the default relative path instead, the process writes relative to its
-  working directory (`repo/logs/`), which must exist and be writable.
+- **Console logging is the default.** `INFO`/`DEBUG` go to stdout and
+  `WARN`/`ERROR` to stderr, so the panel's **Console** tab shows startup, API,
+  player and error logs without any file. A `[logging.file]` section is optional
+  and only *mirrors* logs to a file; if you use it, `logs/` must be writable
+  (the installer creates `/home/container/logs`).
 - **First build is heavy** (native `libopus`/`symphonia` + the whole tree). Give
   the container real CPU and RAM; a 1-core/512 MB allocation may OOM the linker.
 - **libopus.** The stock binary links `libopus.so.0`. The installer sets

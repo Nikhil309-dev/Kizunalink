@@ -26,6 +26,17 @@ fn main() -> AnyResult<()> {
     // without a provider selected (see `audium::common::tls`).
     audium::common::tls::install_crypto_provider();
 
+    // Surface panics on stderr so Pterodactyl's console shows the crash and its
+    // location instead of the process vanishing silently.
+    std::panic::set_hook(Box::new(|info| {
+        let msg = format!("panic: {info}");
+        if tracing::dispatcher::has_been_set() {
+            tracing::error!("{msg}");
+        } else {
+            eprintln!("[audium] {msg}");
+        }
+    }));
+
     audium::engine::disable_denormals();
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -47,6 +58,13 @@ async fn run() -> AnyResult<()> {
     audium::common::banner::print_banner(&audium::common::banner::BannerInfo::default());
 
     info!("Audium Server starting...");
+    info!("Version: {}", env!("CARGO_PKG_VERSION"));
+    info!("Runtime: {}", std::env::consts::OS);
+    info!("Configuration loaded successfully");
+    info!(
+        "Bind address: {}:{}",
+        config.server.address, config.server.port
+    );
 
     let routeplanner = if config.route_planner.enabled && !config.route_planner.cidrs.is_empty() {
         Some(Arc::new(
@@ -64,8 +82,13 @@ async fn run() -> AnyResult<()> {
         None
     };
 
+    info!("[Sources] Initializing audio source registry");
     let source_manager = Arc::new(audium::media::sources::SourceManager::new(&config));
     source_manager.set_self_weak();
+    info!(
+        "[Sources] Source registry initialized: {} sources",
+        source_manager.sources.len()
+    );
     let lyrics_manager = Arc::new(audium::media::lyrics::LyricsManager::new(&config));
     let youtube_ctx = source_manager.youtube_stream_ctx.clone();
 
@@ -179,6 +202,16 @@ async fn run() -> AnyResult<()> {
         let tls_listener = audium_server::tls::TlsListener::new(listener, acceptor)
             .tap_io(|_tls: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>| {});
         info!("Audium Server listening on https://{} (TLS)", address);
+        info!("[WebSocket] endpoint ready at /v4/websocket");
+        info!(
+            "[Metrics] endpoint: {}",
+            if config.metrics.prometheus.enabled {
+                config.metrics.prometheus.endpoint.as_str()
+            } else {
+                "disabled"
+            }
+        );
+        info!("Audium startup completed successfully");
 
         axum::serve(
             tls_listener,
@@ -189,6 +222,16 @@ async fn run() -> AnyResult<()> {
     } else {
         let listener = tokio::net::TcpListener::bind(address).await?;
         info!("Audium Server listening on http://{}", address);
+        info!("[WebSocket] endpoint ready at /v4/websocket");
+        info!(
+            "[Metrics] endpoint: {}",
+            if config.metrics.prometheus.enabled {
+                config.metrics.prometheus.endpoint.as_str()
+            } else {
+                "disabled"
+            }
+        );
+        info!("Audium startup completed successfully");
 
         axum::serve(
             listener,

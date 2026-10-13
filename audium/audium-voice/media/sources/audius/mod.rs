@@ -304,54 +304,6 @@ impl AudiusSource {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_source() -> AudiusSource {
-        AudiusSource::new(None, Arc::new(reqwest::Client::new())).expect("valid source")
-    }
-
-    fn track_json(id: &str, streamable: Option<bool>) -> Value {
-        let mut v = json!({
-            "id": id,
-            "title": "Test Track",
-            "user": { "name": "Artist" },
-            "duration": 180.0
-        });
-        if let Some(s) = streamable {
-            v["is_streamable"] = json!(s);
-        }
-        v
-    }
-
-    #[test]
-    fn build_track_skips_unstreamable() {
-        let src = test_source();
-        assert!(src.build_track(&track_json("95wro", Some(false))).is_none());
-    }
-
-    #[test]
-    fn build_track_accepts_streamable_and_unknown() {
-        let src = test_source();
-        assert!(src.build_track(&track_json("YmJWK", Some(true))).is_some());
-        // A missing field must not be treated as false (default = allow).
-        assert!(src.build_track(&track_json("ng9rl", None)).is_some());
-    }
-
-    #[test]
-    fn parse_tracks_filters_unstreamable_and_keeps_rest() {
-        let src = test_source();
-        let data = json!([
-            track_json("95wro", Some(false)),
-            track_json("YmJWK", Some(true))
-        ]);
-        let tracks = src.parse_tracks(&data);
-        assert_eq!(tracks.len(), 1);
-        assert_eq!(tracks[0].info.identifier, "YmJWK");
-    }
-}
-
 #[async_trait]
 impl SourcePlugin for AudiusSource {
     fn name(&self) -> &str {
@@ -420,5 +372,53 @@ impl SourcePlugin for AudiusSource {
             app_name: self.app_name.clone(),
             local_addr: routeplanner.and_then(|rp| rp.get_address()),
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_source() -> AudiusSource {
+        AudiusSource::new(None, Arc::new(reqwest::Client::new())).expect("valid source")
+    }
+
+    fn track_json(id: &str, streamable: Option<bool>) -> Value {
+        let mut v = json!({
+            "id": id,
+            "title": "Test Track",
+            "user": { "name": "Artist" },
+            "duration": 180.0
+        });
+        if let Some(s) = streamable {
+            v["is_streamable"] = json!(s);
+        }
+        v
+    }
+
+    #[test]
+    fn build_track_skips_unstreamable() {
+        let src = test_source();
+        assert!(src.build_track(&track_json("95wro", Some(false))).is_none());
+    }
+
+    #[test]
+    fn build_track_accepts_streamable_and_unknown() {
+        let src = test_source();
+        assert!(src.build_track(&track_json("YmJWK", Some(true))).is_some());
+        // A missing field must not be treated as false (default = allow).
+        assert!(src.build_track(&track_json("ng9rl", None)).is_some());
+    }
+
+    #[test]
+    fn parse_tracks_filters_unstreamable_and_keeps_rest() {
+        let src = test_source();
+        let data = json!([
+            track_json("95wro", Some(false)),
+            track_json("YmJWK", Some(true))
+        ]);
+        let tracks = src.parse_tracks(&data);
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].info.identifier, "YmJWK");
     }
 }

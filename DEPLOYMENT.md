@@ -79,16 +79,25 @@ port = 2333                  # must equal the server's allocation port
 authorization = "CHANGE-ME"  # REQUIRED; no default, placeholders rejected
 
 [logging]
-level = "info"
+level = "info"               # trace | debug | info | warn | error | off
+```
 
+Logs always go to the **Console** tab: `INFO`/`DEBUG` on stdout and
+`WARN`/`ERROR` on stderr. You do **not** need a `[logging.file]` section — omit
+it and Audium logs to the console only. To *also* mirror logs to a rotating file,
+add (all fields optional except `path`):
+
+```toml
 [logging.file]
+enabled = true               # default true when the section exists
 path = "/home/container/logs/audium.log"
 max_lines = 10000
 max_files = 7
 ```
 
-Create the log directory: `mkdir -p /home/container/logs` (via SFTP, or have the
-process run from a directory whose `logs/` exists).
+If you keep the file section, create the directory once: `mkdir -p
+/home/container/logs` (via SFTP, or run from a directory whose `logs/` exists).
+File logging never replaces console output.
 
 **Do not put the real secret in a file that is committed or shared.** Prefer the
 panel variable below; environment variables always override the file.
@@ -97,6 +106,16 @@ panel variable below; environment variables always override the file.
 
 Set the server's **Startup Command** (Admin → Nests → the Audium egg → or
 the server's startup parameters) to:
+
+```bash
+cd /home/container && ./start.sh
+```
+
+`start.sh` is written by the installer. It injects the panel's Startup Variables
+(address, port, authorization, log level) into `config.toml` on every boot and
+then `exec`s the binary — so panel variables always win and the process replaces
+the shell (clean SIGTERM handling). If you manage `config.toml` by hand instead,
+you can start the binary directly:
 
 ```bash
 cd /home/container && ./kizunalink-linux-x86_64-musl
@@ -113,10 +132,11 @@ sits in `/home/container`.
 
 ### Panel "done" detection
 
-The egg watches console output for
-`Audium Server listening on`. The binary prints exactly that line on a
-successful bind, so the server shows as **running** automatically. If your egg's
-done-string differs, set it to `Audium Server listening on`.
+The egg watches console output for `Server listening on`. Audium prints
+`Audium Server listening on ...` (older prebuilt binaries print
+`KizunaLink Server listening on ...`), so the substring matches both and the
+server shows as **running** automatically. If your egg's done-string differs,
+set it to `Server listening on`.
 
 ## 5. Port and environment variables
 
