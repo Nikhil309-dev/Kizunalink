@@ -1,12 +1,12 @@
 # Running Audium on Pterodactyl
 
-> **Fastest path — prebuilt static binary (no build tools needed).**
-> Download `kizunalink-linux-x86_64-musl` from the GitHub Releases page, upload it
-> to `/home/container/`, and start. This avoids `cargo`, Rustup and the missing
-> `c++`/`cmake` tools entirely. See [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for the
-> full walkthrough and [`egg-audium-binary.json`](./egg-audium-binary.json)
-> for an importable egg that runs the uploaded binary. The sections below cover
-> the build-from-source variants.
+> **Fastest path — prebuilt static binary, downloaded automatically.**
+> Import [`egg-audium-binary.json`](./egg-audium-binary.json) and start. The
+> installer runs automatically at install time: it picks the right asset for the
+> host architecture, downloads it from GitHub Releases, verifies its SHA-256, and
+> runs it. There is **nothing to build and nothing to upload by hand** — no
+> `cargo`, Rustup, CMake or `c++`. See [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for
+> the full walkthrough. The sections below cover the build-from-source variants.
 
 Pterodactyl runs each server in a container it controls: the panel mounts the
 server volume at `/home/container`, drops to the `container` user, runs from
@@ -20,7 +20,7 @@ This directory ships:
 
 | File | Purpose |
 |---|---|
-| `egg-audium-binary.json` | Importable egg that runs a prebuilt static binary (**recommended**; no build tools). |
+| `egg-audium-binary.json` | Importable egg that **downloads the prebuilt binary at install time** and runs it (**recommended**; no build tools, no manual upload). |
 | `egg-audium.json` | Importable egg (builds from source on first install). |
 | `Dockerfile` | Pterodactyl-compatible image (Rust + native deps, for the source path). |
 

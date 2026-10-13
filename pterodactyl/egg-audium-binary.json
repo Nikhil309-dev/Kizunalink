@@ -1,29 +1,29 @@
 {
-    "_comment": "Audium (Lavalink v4 node) — Pterodactyl egg for a PREBUILT binary. Download kizunalink-linux-x86_64-musl from the GitHub Releases page, upload it to /home/container/, then start. No Rust toolchain is used. See ../DEPLOYMENT.md.",
+    "_comment": "Audium (Lavalink v4 node) \u2014 Pterodactyl egg that DOWNLOADS the prebuilt Linux binary from GitHub Releases at install time and runs it. No Rust/C++/CMake/Cargo on the host. See ../DEPLOYMENT.md.",
     "meta": {
         "version": "PTDL_v2",
         "update_url": null
     },
     "exported_at": "2026-10-11T00:00:00+00:00",
-    "name": "Audium (prebuilt binary)",
+    "name": "Audium (Lavalink v4 node, prebuilt download)",
     "author": "openhands@all-hands.dev",
-    "description": "Audium — a native Rust Lavalink v4 audio node run from a precompiled Linux binary. The asset kizunalink-linux-x86_64-musl is fully static, so the container needs no C++ compiler, CMake, Cargo or Rustup. Upload the binary to /home/container/ before first start.",
+    "description": "Audium \u2014 a native Rust Lavalink v4 audio node. This egg downloads the correct prebuilt release binary (kizunalink-linux-x86_64-musl on x86_64, kizunalink-linux-arm64 on ARM64), verifies its SHA-256, and runs it. Nothing is compiled on the host: no Rustup, Cargo, CMake, clang or libopus. Panel Startup Variables are injected into config.toml on every boot.",
     "features": null,
     "docker_images": {
         "ghcr.io/pterodactyl/yolks:debian": "ghcr.io/pterodactyl/yolks:debian",
-        "ghcr.io/ptero-eggs/yolks:rust_latest": "ghcr.io/ptero-eggs/yolks:rust_latest"
+        "ghcr.io/pterodactyl/yolks:java_21": "ghcr.io/pterodactyl/yolks:java_21"
     },
     "file_denylist": [],
-    "startup": "cd /home/container && ./kizunalink-linux-x86_64-musl",
+    "startup": "cd /home/container && ./start.sh",
     "config": {
         "files": "{}",
-        "startup": "{\r\n    \"done\": \"Audium Server listening on\"\r\n}",
+        "startup": "{\r\n    \"done\": \"Server listening on\"\r\n}",
         "logs": "{}",
         "stop": "^^C"
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\n# Audium prebuilt-binary installer.\n#\n# This egg does NOT compile Rust. It only prepares the server volume so the\n# uploaded static binary can run. If the static asset is not present yet the\n# install still succeeds; upload it via the File Manager and start.\nset -e\n\nmkdir -p /mnt/server/logs\n\n# Minimal config.toml if the user has not uploaded one. The panel's AUDIUM_*\n# variables override these values at runtime, so the secret is never required\n# in the file. Bound to 0.0.0.0 so the panel can route the allocation.\nif [ ! -f /mnt/server/config.toml ]; then\n    cat > /mnt/server/config.toml <<'EOF'\n[server]\naddress = \"0.0.0.0\"\nport = 2333\nauthorization = \"replace-with-your-strong-secret\"\n\n[logging]\nlevel = \"info\"\n\n[logging.file]\npath = \"/home/container/logs/audium.log\"\nmax_lines = 10000\nmax_files = 7\nEOF\nfi\n\necho \"Audium install complete (prebuilt-binary egg).\"\necho \"Upload kizunalink-linux-x86_64-musl to /home/container/ if you have not already.\"\n",
+            "script": "#!/bin/bash\n# Audium (prebuilt-binary) installer.\n#\n# Downloads the correct prebuilt Linux binary from GitHub Releases at install\n# time, verifies its SHA-256, and writes a start.sh wrapper. No Rust toolchain,\n# C++ compiler, CMake or Cargo is required on the panel host.\nset -e\n\nREPO=\"Nikhil309-dev/Kizunalink\"\nBASE=\"https://github.com/${REPO}/releases/latest/download\"\n\n# Pick the asset for this machine's architecture.\nARCH=\"$(uname -m)\"\ncase \"$ARCH\" in\n    x86_64|amd64)  ASSET=\"kizunalink-linux-x86_64-musl\" ;;   # fully static\n    aarch64|arm64) ASSET=\"kizunalink-linux-arm64\" ;;         # glibc >= 2.34\n    *) echo \"[audium] Unsupported architecture: $ARCH\"; exit 1 ;;\nesac\n\nmkdir -p /mnt/server/logs\ncd /mnt/server\n\necho \"[audium] Downloading ${ASSET} ...\"\nif ! curl -fSL --retry 3 -o \"${ASSET}\" \"${BASE}/${ASSET}\"; then\n    echo \"[audium] Download failed. Check the release and network access.\"\n    exit 1\nfi\n\nif curl -fSL --retry 3 -o \"${ASSET}.sha256\" \"${BASE}/${ASSET}.sha256\"; then\n    echo \"[audium] Verifying SHA-256 ...\"\n    if ! sha256sum -c \"${ASSET}.sha256\"; then\n        echo \"[audium] Checksum mismatch. Refusing to install a corrupt binary.\"\n        exit 1\n    fi\n    rm -f \"${ASSET}.sha256\"\nelse\n    echo \"[audium] warning: no checksum published for ${ASSET}; skipping verification\"\nfi\n\nchmod +x \"${ASSET}\"\n\n# start.sh injects the panel's Startup Variables into config.toml on every boot.\n# This is required because some published binaries predate AUDIUM_* environment\n# overrides and read config.toml only -- the panel variables must win regardless.\ncat > start.sh <<EOF\n#!/bin/bash\nset -e\ncd /home/container\n\n: \"\\${AUDIUM_AUTHORIZATION:?Set the Authorization Secret in the panel Startup tab}\"\nADDR=\"\\${AUDIUM_ADDRESS:-0.0.0.0}\"\nPORT=\"\\${AUDIUM_PORT:-2333}\"\n\nif [ ! -f config.toml ]; then\n    cat > config.toml <<'CFG'\n[server]\naddress = \"0.0.0.0\"\nport = 2333\nauthorization = \"unset-until-injected\"\nplayer_update_interval = 5\nstats_interval = 30\nwebsocket_ping_interval = 20\nmax_event_queue_size = 100\nrate_limit_per_minute = 2000\n\n[logging]\nlevel = \"info\"\n\n[logging.file]\npath = \"logs/audium.log\"\nmax_lines = 10000\nmax_files = 7\nCFG\nfi\n\n# Rewrite address / port / authorization inside the [server] section only, so any\n# other settings the user added to config.toml are preserved.\nawk -v a=\"\\$ADDR\" -v p=\"\\$PORT\" -v k=\"\\$AUDIUM_AUTHORIZATION\" '\n  /^[[:space:]]*\\[/ { sec=\\$0 }\n  sec==\"[server]\" && \\$0 ~ /^[[:space:]]*address[[:space:]]*=/       { print \"address = \\\\\"\" a \"\\\\\"\"; next }\n  sec==\"[server]\" && \\$0 ~ /^[[:space:]]*port[[:space:]]*=/          { print \"port = \" p; next }\n  sec==\"[server]\" && \\$0 ~ /^[[:space:]]*authorization[[:space:]]*=/ { print \"authorization = \\\\\"\" k \"\\\\\"\"; next }\n  { print }\n' config.toml > config.toml.tmp && mv config.toml.tmp config.toml\n\nexec ./${ASSET}\nEOF\nchmod +x start.sh\n\necho \"[audium] Install complete. Binary: ${ASSET}\"\n",
             "container": "ghcr.io/pterodactyl/installers:debian",
             "entrypoint": "bash"
         }
@@ -61,7 +61,7 @@
         },
         {
             "name": "Log Level",
-            "description": "trace | debug | info | warn | error | off",
+            "description": "Logging verbosity. Applied when config.toml has no [logging] level.",
             "env_variable": "AUDIUM_LOG_LEVEL",
             "default_value": "info",
             "user_viewable": true,
@@ -70,8 +70,8 @@
             "field_type": "text"
         },
         {
-            "name": "Rate Limit (per minute)",
-            "description": "Max REST + WS requests per client IP per minute. 0 disables.",
+            "name": "Rate Limit Per Minute",
+            "description": "Per-IP request cap over REST + WS upgrade. 0 disables.",
             "env_variable": "AUDIUM_RATE_LIMIT_PER_MINUTE",
             "default_value": "2000",
             "user_viewable": true,
@@ -81,7 +81,7 @@
         },
         {
             "name": "Prometheus Metrics",
-            "description": "Enable the authenticated Prometheus metrics endpoint.",
+            "description": "Enable the Prometheus metrics endpoint.",
             "env_variable": "AUDIUM_METRICS_ENABLED",
             "default_value": "false",
             "user_viewable": true,

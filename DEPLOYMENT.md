@@ -9,6 +9,14 @@ the host. It is the path to use when the panel image lacks native build tools.
 > `ghcr.io/ptero-eggs/yolks:rust_latest` image (no `c++`/`cmake`). The steps
 > below replace the startup command with one that runs the uploaded binary.
 
+> **Automatic (recommended):** instead of uploading anything by hand, import
+> [`pterodactyl/egg-audium-binary.json`](../pterodactyl/egg-audium-binary.json).
+> Its installer detects the host architecture, downloads the matching release
+> asset, verifies the SHA-256, and runs it — and the panel Startup Variables are
+> injected into `config.toml` on every boot. The rest of this guide is the
+> **manual upload** path, useful when you want to pin a specific binary or the
+> panel cannot reach GitHub at install time.
+
 ## 1. Which asset to download
 
 From the repository's **Releases** page, download a binary asset, **not** the
