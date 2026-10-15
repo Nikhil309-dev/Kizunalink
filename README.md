@@ -180,6 +180,8 @@ A successful health probe checks liveness, not Discord connectivity or media-sou
 
 Use [config.example.toml](./config.example.toml) as the complete reference. By default, the server reads `config.toml` from its working directory, falling back to the example configuration. `AUDIUM_CONFIG_PATH` selects an explicit configuration path.
 
+The server takes no command-line arguments; it exits with an error if given any (there is no `--config` flag — use `AUDIUM_CONFIG_PATH` instead).
+
 | Environment variable | Setting |
 |---|---|
 | `AUDIUM_CONFIG_PATH` | Configuration file path |

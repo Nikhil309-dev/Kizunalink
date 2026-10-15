@@ -22,6 +22,11 @@ use tracing::info;
 /// word into child threads — every tokio worker and every audio thread spawned from this
 /// main thread then inherits the denormal-free setting for free.
 fn main() -> AnyResult<()> {
+    // Reject unknown CLI arguments before doing anything else. Audium is
+    // configured entirely through files/env; silently ignoring an argument such
+    // as `--config <path>` would run the node on the wrong configuration.
+    audium::config::AppConfig::reject_unknown_args(std::env::args())?;
+
     // Installed before the runtime exists so no spawned task can start a TLS handshake
     // without a provider selected (see `audium::common::tls`).
     audium::common::tls::install_crypto_provider();

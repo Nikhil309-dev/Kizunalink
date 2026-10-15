@@ -41,6 +41,38 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Audium takes no command-line arguments: configuration comes from
+    /// `config.toml` (or `AUDIUM_CONFIG_PATH`) and the `AUDIUM_*` environment
+    /// variables.
+    ///
+    /// Any argument is rejected rather than ignored. Silently ignoring one — for
+    /// example a `--config /etc/audium.toml` from an operator used to another
+    /// daemon — would start the node on whatever config happens to sit in the
+    /// working directory, which may be the bundled *example* config (with its
+    /// placeholder secret). Failing fast turns that into an obvious startup error.
+    ///
+    /// The iterator is expected to yield `argv` including `argv[0]` (the program
+    /// path), which is skipped; it may be empty when spawned without one.
+    pub fn reject_unknown_args<I>(args: I) -> AnyResult<()>
+    where
+        I: IntoIterator<Item = String>,
+    {
+        let mut args = args.into_iter();
+        let _program = args.next();
+
+        if let Some(arg) = args.next() {
+            return Err(format!(
+                "unexpected argument {arg:?}: audium-server takes no command-line \
+                 arguments.\n\
+                 Configure it with config.toml (or the AUDIUM_CONFIG_PATH environment \
+                 variable) and the AUDIUM_* environment variables (for example \
+                 AUDIUM_AUTHORIZATION)."
+            )
+            .into());
+        }
+        Ok(())
+    }
+
     /// Resolve the configuration file path.
     ///
     /// Resolution order:
@@ -696,6 +728,35 @@ mod tests {
         let cfg = cfg_from_toml("[server]\nauthorization='   '\n");
         let err = cfg.validate().unwrap_err().to_string();
         assert!(!err.contains("   "));
+    }
+
+    #[test]
+    fn no_cli_args_is_accepted() {
+        // argv[0] only (the normal case), plus the empty-argv case for a spawn
+        // that provides no program path.
+        AppConfig::reject_unknown_args(["audium-server".to_string()]).unwrap();
+        AppConfig::reject_unknown_args(Vec::<String>::new()).unwrap();
+    }
+
+    #[test]
+    fn unknown_cli_arg_is_rejected() {
+        // A `--config` style flag must not be silently ignored: the error names
+        // the offending argument and points at the supported configuration path.
+        let err = AppConfig::reject_unknown_args([
+            "audium-server".to_string(),
+            "--config".to_string(),
+            "/etc/audium.toml".to_string(),
+        ])
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("--config"),
+            "error should name the argument: {err}"
+        );
+        assert!(
+            err.contains("AUDIUM_CONFIG_PATH"),
+            "error should point at the supported mechanism: {err}"
+        );
     }
 
     #[test]
