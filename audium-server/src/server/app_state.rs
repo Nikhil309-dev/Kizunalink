@@ -4,12 +4,12 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use perf_monitor::cpu::ProcessStat;
 use sysinfo::System;
 
 use crate::{
     common::types::SessionId,
     lavalink::routeplanner::RoutePlanner,
+    monitoring::sysstat::ProcessStat,
     server::session::Session,
     sources::{SourceManager, youtube::YoutubeStreamContext},
 };

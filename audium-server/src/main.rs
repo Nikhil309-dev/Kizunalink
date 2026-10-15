@@ -92,11 +92,7 @@ async fn run() -> AnyResult<()> {
     let lyrics_manager = Arc::new(audium::media::lyrics::LyricsManager::new(&config));
     let youtube_ctx = source_manager.youtube_stream_ctx.clone();
 
-    let process_stat = perf_monitor::cpu::ProcessStat::cur().map_err(|e| {
-        Box::new(std::io::Error::other(format!(
-            "failed to init ProcessStat: {e}"
-        ))) as audium::common::types::AnyError
-    })?;
+    let process_stat = audium_server::monitoring::sysstat::ProcessStat::cur();
 
     let shared_state = Arc::new(AppState {
         start_time: std::time::Instant::now(),

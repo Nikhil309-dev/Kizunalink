@@ -39,7 +39,6 @@ pub fn collect_stats(app_state: &AppState, session: Option<&Session>) -> protoco
         let mut stat = app_state.process_stat.lock();
         stat.cpu().unwrap_or(0.0).clamp(0.0, logical_cores as f64) / logical_cores as f64
     };
-
     let process_used_memory = system.process(pid).map(|p| p.memory()).unwrap_or(0);
 
     let system_load = if system.cpus().is_empty() {
