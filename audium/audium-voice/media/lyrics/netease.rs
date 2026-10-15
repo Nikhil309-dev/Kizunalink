@@ -7,10 +7,18 @@ use serde_json::Value;
 use super::{LyricsProvider, utils};
 use crate::lavalink::protocol::{models::LyricsData, tracks::TrackInfo};
 
-#[derive(Default)]
 pub struct NeteaseProvider {
     client: reqwest::Client,
     cookies: String,
+}
+
+impl Default for NeteaseProvider {
+    fn default() -> Self {
+        Self {
+            client: utils::build_http_client(),
+            cookies: String::new(),
+        }
+    }
 }
 
 impl NeteaseProvider {

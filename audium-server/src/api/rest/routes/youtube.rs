@@ -95,6 +95,16 @@ pub struct StreamQuery {
     pub with_client: Option<String>,
 }
 
+/// YouTube video ids are exactly 11 characters from `[A-Za-z0-9_-]`. Validating
+/// the path segment before it is interpolated into upstream YouTube/cipher URLs
+/// rejects malformed or injected ids up front.
+fn is_valid_video_id(video_id: &str) -> bool {
+    video_id.len() == 11
+        && video_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 pub async fn youtube_stream(
     ApiPath(video_id): ApiPath<String>,
     ApiQuery(params): ApiQuery<StreamQuery>,
@@ -108,6 +118,14 @@ pub async fn youtube_stream(
         params.with_client,
         headers.get(header::RANGE)
     );
+
+    if !is_valid_video_id(&video_id) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid YouTube video id"})),
+        )
+            .into_response();
+    }
 
     let Some(ctx) = &state.youtube else {
         return (
@@ -460,5 +478,29 @@ fn parse_range_header(
         (start, end)
     } else {
         (0, content_length.saturating_sub(1))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_valid_video_id;
+
+    #[test]
+    fn accepts_well_formed_video_ids() {
+        assert!(is_valid_video_id("dQw4w9WgXcQ"));
+        assert!(is_valid_video_id("_-aB3cD4eF5"));
+    }
+
+    #[test]
+    fn rejects_malformed_or_injected_video_ids() {
+        // Wrong length.
+        assert!(!is_valid_video_id("dQw4w9WgXc"));
+        assert!(!is_valid_video_id("dQw4w9WgXcQQ"));
+        // Path/query metacharacters used to escape the interpolated URL.
+        assert!(!is_valid_video_id("aaaaaaaaa/ "));
+        assert!(!is_valid_video_id("a?b=c&d=e#f"));
+        assert!(!is_valid_video_id("../../etc/x"));
+        assert!(!is_valid_video_id("dQw4w9WgXc\n"));
+        assert!(!is_valid_video_id(""));
     }
 }

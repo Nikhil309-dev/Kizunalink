@@ -18,9 +18,16 @@ const YTM_BASE_API: &str = "https://music.youtube.com/youtubei/v1/";
 const YTM_PARAMS: &str = "?alt=json";
 const YTM_PARAMS_KEY: &str = "&key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30";
 
-#[derive(Default)]
 pub struct YoutubeMusicLyricsProvider {
     client: reqwest::Client,
+}
+
+impl Default for YoutubeMusicLyricsProvider {
+    fn default() -> Self {
+        Self {
+            client: utils::build_http_client(),
+        }
+    }
 }
 
 impl YoutubeMusicLyricsProvider {

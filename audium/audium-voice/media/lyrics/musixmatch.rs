@@ -18,11 +18,20 @@ const TOKEN_TTL: u64 = 55_000;
 const DEFAULT_COOKIE: &str =
     "AWSELB=unknown; x-mxm-user-id=undefined; x-mxm-token-guid=undefined; mxm-encrypted-token=";
 
-#[derive(Default)]
 pub struct MusixmatchProvider {
     client: reqwest::Client,
     token_manager: TokenManager,
     guid: String,
+}
+
+impl Default for MusixmatchProvider {
+    fn default() -> Self {
+        Self {
+            client: utils::build_http_client(),
+            token_manager: TokenManager::default(),
+            guid: String::new(),
+        }
+    }
 }
 
 impl MusixmatchProvider {

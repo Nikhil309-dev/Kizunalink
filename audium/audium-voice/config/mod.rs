@@ -92,30 +92,7 @@ impl AppConfig {
 
         if let Some(cs_val) = raw_val.get("config_server") {
             let cs: ConfigServerConfig = cs_val.clone().try_into()?;
-
-            let client = reqwest::Client::builder()
-                .connect_timeout(std::time::Duration::from_secs(10))
-                .timeout(std::time::Duration::from_secs(30))
-                .build()?;
-            let mut request = client.get(&cs.url);
-
-            if let (Some(u), Some(p)) = (&cs.username, &cs.password) {
-                use base64::{Engine as _, engine::general_purpose};
-                let auth = format!("{}:{}", u, p);
-                let encoded = general_purpose::STANDARD.encode(auth);
-                request = request.header("Authorization", format!("Basic {}", encoded));
-            }
-
-            let response = request.send().await?;
-            if !response.status().is_success() {
-                return Err(format!(
-                    "Failed to fetch remote config: status {}",
-                    response.status()
-                )
-                .into());
-            }
-
-            let remote_toml = response.text().await?;
+            let remote_toml = fetch_remote_config(&cs).await?;
             let mut config: Self = toml::from_str(&remote_toml)?;
             // AUDIUM_* overrides must win regardless of where the TOML came from, so
             // secrets injected through the environment still take effect with a remote
@@ -276,6 +253,67 @@ impl AppConfig {
 
         Ok(())
     }
+}
+
+/// Upper bound on a remote config document read into memory. A config file is a
+/// few KiB; capping the read means a malicious or corrupted config server cannot
+/// exhaust memory at startup.
+const MAX_REMOTE_CONFIG_BYTES: usize = 1024 * 1024;
+
+/// Fetch the remote configuration document named by `[config_server]`.
+///
+/// The URL is operator-controlled (it comes from the trusted local `config.toml`),
+/// so it is deliberately *not* subject to the source-layer SSRF address policy —
+/// pointing at an internal config service is a valid deployment. The hardening
+/// here is limited to what is safe unconditionally: only `http(s)` schemes are
+/// accepted, and the body is read with a hard byte cap so a hostile or broken
+/// endpoint cannot exhaust memory before validation runs.
+async fn fetch_remote_config(cs: &ConfigServerConfig) -> AnyResult<String> {
+    if !(cs.url.starts_with("http://") || cs.url.starts_with("https://")) {
+        return Err(format!("config_server.url must be an http(s) URL, got {:?}", cs.url).into());
+    }
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
+    let mut request = client.get(&cs.url);
+
+    if let (Some(u), Some(p)) = (&cs.username, &cs.password) {
+        use base64::{Engine as _, engine::general_purpose};
+        let auth = format!("{}:{}", u, p);
+        let encoded = general_purpose::STANDARD.encode(auth);
+        request = request.header("Authorization", format!("Basic {}", encoded));
+    }
+
+    let mut response = request.send().await?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Failed to fetch remote config: status {}",
+            response.status()
+        )
+        .into());
+    }
+    if response
+        .content_length()
+        .is_some_and(|len| len > MAX_REMOTE_CONFIG_BYTES as u64)
+    {
+        return Err(
+            format!("Remote config exceeds the {MAX_REMOTE_CONFIG_BYTES}-byte limit").into(),
+        );
+    }
+
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if chunk.len() > MAX_REMOTE_CONFIG_BYTES.saturating_sub(body.len()) {
+            return Err(
+                format!("Remote config exceeds the {MAX_REMOTE_CONFIG_BYTES}-byte limit").into(),
+            );
+        }
+        body.extend_from_slice(&chunk);
+    }
+
+    Ok(String::from_utf8(body).map_err(|e| format!("Remote config is not valid UTF-8: {e}"))?)
 }
 
 /// Read an environment variable, distinguishing "unset" from "set but blank".

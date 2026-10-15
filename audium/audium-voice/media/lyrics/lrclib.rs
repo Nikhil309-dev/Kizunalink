@@ -9,9 +9,16 @@ use crate::lavalink::protocol::{
     tracks::TrackInfo,
 };
 
-#[derive(Default)]
 pub struct LrcLibProvider {
     client: reqwest::Client,
+}
+
+impl Default for LrcLibProvider {
+    fn default() -> Self {
+        Self {
+            client: utils::build_http_client(),
+        }
+    }
 }
 
 impl LrcLibProvider {

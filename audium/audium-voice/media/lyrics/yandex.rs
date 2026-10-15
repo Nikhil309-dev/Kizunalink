@@ -20,7 +20,9 @@ pub struct YandexProvider {
 
 impl YandexProvider {
     pub fn new(config: &YandexLyricsConfig, proxy_config: Option<&HttpProxyConfig>) -> Self {
-        let mut client_builder = reqwest::Client::builder();
+        let mut client_builder = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(15));
 
         if let Some(proxy_cfg) = proxy_config
             && let Some(url) = &proxy_cfg.url

@@ -258,6 +258,11 @@ jobs:
               }
             }
           '
+      # Bans (duplicate/blocked crates + wildcard deps), licenses, and crate
+      # sources are enforced in deny.toml but were previously only run locally.
+      # Gate them in CI so a regression cannot merge unreviewed.
+      - name: cargo deny check bans licenses sources
+        run: cargo deny check bans licenses sources
       - name: Surface deny summary
         if: failure()
         run: |

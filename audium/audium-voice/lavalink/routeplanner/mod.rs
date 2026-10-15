@@ -219,11 +219,25 @@ impl RoutePlanner for BalancingIpRoutePlanner {
             })
             .collect();
 
+        // Mirror `next_ip`/`get_address`: an empty block list is a valid
+        // configuration with no address to report, so expose an empty
+        // placeholder block instead of indexing into `parsed_blocks` (which
+        // would panic).
+        let Some(first_block) = self.parsed_blocks.first() else {
+            return RoutePlannerStatus::BalancingIpRoutePlanner(BalancingIpDetails {
+                ip_block: IpBlock {
+                    block_type: "Inet4Address".to_string(),
+                    size: String::new(),
+                },
+                failing_addresses: failing_vec,
+            });
+        };
+
         if self.ip_blocks.len() == 1 {
             let indices = self.ip_indices.lock().unwrap_or_else(|e| e.into_inner());
             let index = indices.first().copied().unwrap_or(0);
             drop(indices); // B06: release lock before computing IP
-            let current_ip = Self::calculate_ip(&self.parsed_blocks[0], index).to_string();
+            let current_ip = Self::calculate_ip(first_block, index).to_string();
 
             RoutePlannerStatus::RotatingIpRoutePlanner(RotatingIpDetails {
                 ip_block: self.ip_blocks[0].clone(),
@@ -270,7 +284,7 @@ impl RoutePlanner for BalancingIpRoutePlanner {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
-    use super::{BalancingIpRoutePlanner, RoutePlanner};
+    use super::{BalancingIpRoutePlanner, RoutePlanner, RoutePlannerStatus};
 
     #[test]
     fn invalid_cidr_is_returned_as_an_error() {
@@ -322,5 +336,18 @@ mod tests {
         let planner =
             BalancingIpRoutePlanner::new(Vec::new()).expect("empty list is a valid configuration");
         assert_eq!(planner.get_address(), Some(IpAddr::V4(Ipv4Addr::LOCALHOST)));
+    }
+
+    /// `get_status` must not panic for the same empty configuration that
+    /// `get_address` already tolerates.
+    #[test]
+    fn empty_block_list_status_does_not_panic() {
+        let planner =
+            BalancingIpRoutePlanner::new(Vec::new()).expect("empty list is a valid configuration");
+        let status = planner.get_status();
+        assert!(matches!(
+            status,
+            RoutePlannerStatus::BalancingIpRoutePlanner(_)
+        ));
     }
 }

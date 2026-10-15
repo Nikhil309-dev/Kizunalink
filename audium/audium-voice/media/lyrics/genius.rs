@@ -10,9 +10,16 @@ use crate::lavalink::protocol::{
     tracks::TrackInfo,
 };
 
-#[derive(Default)]
 pub struct GeniusProvider {
     client: reqwest::Client,
+}
+
+impl Default for GeniusProvider {
+    fn default() -> Self {
+        Self {
+            client: utils::build_http_client(),
+        }
+    }
 }
 
 impl GeniusProvider {
