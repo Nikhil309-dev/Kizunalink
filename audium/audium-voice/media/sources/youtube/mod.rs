@@ -32,8 +32,9 @@ use cipher::YouTubeCipherManager;
 use clients::{
     YouTubeClient, android::AndroidClient, android_vr::AndroidVrClient, ios::IosClient,
     music_android::MusicAndroidClient, tv::TvClient, tv_cast::TvCastClient,
-    tv_embedded::TvEmbeddedClient, web::WebClient, web_embedded::WebEmbeddedClient,
-    web_parent_tools::WebParentToolsClient, web_remix::WebRemixClient,
+    tv_downgraded::TvDowngradedClient, tv_embedded::TvEmbeddedClient, vision_os::VisionOsClient,
+    web::WebClient, web_embedded::WebEmbeddedClient, web_parent_tools::WebParentToolsClient,
+    web_remix::WebRemixClient,
 };
 use oauth::YouTubeOAuth;
 use pot::SharedPotProvider;
@@ -174,6 +175,10 @@ impl YouTubeSource {
                     Some(Arc::new(MusicAndroidClient::new(http.clone())))
                 }
                 "ANDROID_VR" | "ANDROIDVR" => Some(Arc::new(AndroidVrClient::new(http.clone()))),
+                "VISIONOS" | "VISION_OS" => Some(Arc::new(VisionOsClient::new(http.clone()))),
+                "TV_DOWN" | "TV_DOWNGRADED" => {
+                    Some(Arc::new(TvDowngradedClient::new(http.clone())))
+                }
                 "WEB_EMBEDDED" | "WEBEMBEDDED" => {
                     Some(Arc::new(WebEmbeddedClient::new(http.clone())))
                 }

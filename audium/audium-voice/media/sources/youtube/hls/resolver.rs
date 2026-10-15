@@ -32,7 +32,7 @@ struct ResolutionContext {
 /// Boxed future returned by [`resolve_playlist_inner`]; the recursion has to be
 /// boxed so the compiler can name its type.
 type PlaylistFuture<'a> = std::pin::Pin<
-    Box<dyn std::future::Future<Output = AnyResult<(Vec<Resource>, Option<Resource>)>> + 'a>,
+    Box<dyn std::future::Future<Output = AnyResult<(Vec<Resource>, Option<Resource>)>> + Send + 'a>,
 >;
 
 pub async fn resolve_playlist(

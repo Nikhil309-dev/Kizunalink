@@ -200,6 +200,17 @@ pub async fn youtube_stream(
         found_formats = true;
         last_was_exception = false;
 
+        // An explicit itag request must keep using the direct-URL path, so HLS
+        // is only considered when the caller did not ask for a specific format.
+        if params.itag.is_none()
+            && let Some(hls_url) = streaming_data
+                .get("hlsManifestUrl")
+                .and_then(|v| v.as_str())
+            && let Some(resp) = stream_via_hls(ctx, hls_url, client.name(), &video_id).await
+        {
+            return resp;
+        }
+
         let format = if let Some(target_itag) = params.itag {
             let found = find_format_by_itag(adaptive, formats, target_itag);
             match found {
@@ -386,6 +397,202 @@ type ClientFilterResult = Result<
     Vec<Arc<dyn audium::media::sources::youtube::clients::YouTubeClient>>,
     (StatusCode, Json<serde_json::Value>),
 >;
+
+/// Extracts the `n` parameter from a googlevideo URL, if present. The value
+/// must be translated by the cipher manager before the URL will be accepted.
+fn extract_n_param(url: &str) -> Option<&str> {
+    if let Some(pos) = url.find("/n/") {
+        return url[pos + 3..].split('/').next();
+    }
+    url.split("&n=")
+        .nth(1)
+        .or_else(|| url.split("?n=").nth(1))
+        .and_then(|s| s.split('&').next())
+}
+
+/// Resolves a single HLS resource URL, applying n-param translation when needed.
+async fn resolve_seg_url(
+    url: &str,
+    cipher: &Arc<audium::media::sources::youtube::cipher::YouTubeCipherManager>,
+    player_url: &str,
+) -> Result<String, String> {
+    let Some(n) = extract_n_param(url) else {
+        return Ok(url.to_string());
+    };
+    cipher
+        .resolve_url(url, player_url, Some(n), None)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Streams audio over YouTube's HLS manifest.
+///
+/// Direct `videoplayback` URLs are increasingly refused with HTTP 403 unless a
+/// PoToken is attached, while the HLS manifest for the same video keeps
+/// working. The manifest itself is still fetchable from a blocked IP; only the
+/// media segments are gated. This therefore returns `None` (so the caller can
+/// fall back to the direct-URL path) whenever the manifest cannot be resolved
+/// or the first segment cannot be read, and only commits to an HLS response
+/// once a real segment has been fetched.
+async fn stream_via_hls(
+    ctx: &audium::media::sources::youtube::YoutubeStreamContext,
+    hls_url: &str,
+    client_name: &str,
+    video_id: &str,
+) -> Option<axum::response::Response> {
+    use audium::media::sources::youtube::hls::{
+        fetcher::fetch_segment_into, resolver::resolve_playlist,
+    };
+
+    let (segments, map) = match resolve_playlist(&ctx.http, hls_url).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!(
+                "GET /youtube/stream/{}: HLS playlist resolution failed for client '{}': {}",
+                video_id,
+                client_name,
+                e
+            );
+            return None;
+        }
+    };
+
+    if segments.is_empty() {
+        tracing::debug!(
+            "GET /youtube/stream/{}: HLS playlist for client '{}' had no segments",
+            video_id,
+            client_name
+        );
+        return None;
+    }
+
+    let cipher = ctx.cipher_manager.clone();
+    let player_url = format!("https://www.youtube.com/watch?v={}", video_id);
+
+    // The init/map segment carries the codec configuration, so it must lead the
+    // body. Both it and the media segments may carry an n-param that has to be
+    // translated before the fetch will be accepted.
+    let mut body = Vec::new();
+    if let Some(map_res) = &map {
+        let mut resolved = map_res.clone();
+        resolved.url = match resolve_seg_url(&map_res.url, &cipher, &player_url).await {
+            Ok(u) => u,
+            Err(e) => {
+                tracing::debug!(
+                    "GET /youtube/stream/{}: HLS map URL resolution failed: {}",
+                    video_id,
+                    e
+                );
+                return None;
+            }
+        };
+        if let Err(e) = fetch_segment_into(&ctx.http, &resolved, &mut body).await {
+            tracing::debug!(
+                "GET /youtube/stream/{}: HLS init segment fetch failed for client '{}': {}",
+                video_id,
+                client_name,
+                e
+            );
+            return None;
+        }
+    }
+
+    // Fetch the first media segment. Success here is the proof that HLS is
+    // actually usable, so it gates the decision to serve an HLS response.
+    let first = &segments[0];
+    let mut resolved_first = first.clone();
+    resolved_first.url = match resolve_seg_url(&first.url, &cipher, &player_url).await {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::debug!(
+                "GET /youtube/stream/{}: HLS segment URL resolution failed: {}",
+                video_id,
+                e
+            );
+            return None;
+        }
+    };
+    let mut first_data = Vec::new();
+    if let Err(e) = fetch_segment_into(&ctx.http, &resolved_first, &mut first_data).await {
+        tracing::debug!(
+            "GET /youtube/stream/{}: HLS segment fetch failed for client '{}': {}",
+            video_id,
+            client_name,
+            e
+        );
+        return None;
+    }
+    body.extend_from_slice(&first_data);
+
+    // A client that only ever receives the first segment will stop reading; the
+    // channel bounds how far ahead the fetcher may run so a slow consumer cannot
+    // grow memory without limit.
+    const PREFETCH_AHEAD: usize = 3;
+    let (tx, rx) = flume::bounded::<Result<bytes::Bytes, String>>(PREFETCH_AHEAD);
+    let rest = segments[1..].to_vec();
+    let http = ctx.http.clone();
+    let cipher_bg = cipher.clone();
+    let player_url_bg = player_url.clone();
+    let total = segments.len();
+
+    tokio::spawn(async move {
+        {
+            for seg in rest {
+                if tx.is_disconnected() {
+                    return;
+                }
+                let url = match resolve_seg_url(&seg.url, &cipher_bg, &player_url_bg).await {
+                    Ok(u) => u,
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("HLS URL resolution: {e}")));
+                        return;
+                    }
+                };
+                let mut resolved = seg.clone();
+                resolved.url = url;
+                let mut buf = Vec::new();
+                match fetch_segment_into(&http, &resolved, &mut buf).await {
+                    Ok(()) => {
+                        if tx.send(Ok(bytes::Bytes::from(buf))).is_err() {
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("HLS segment fetch: {e}")));
+                        return;
+                    }
+                }
+            }
+        }
+    });
+
+    let mut resp_headers = HeaderMap::new();
+    resp_headers.insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("video/mp2t"),
+    );
+
+    let first_chunk = bytes::Bytes::from(body);
+    let stream = futures::stream::unfold((Some(first_chunk), rx), |(pending, rx)| async move {
+        if let Some(chunk) = pending {
+            return Some((Ok(chunk), (None, rx)));
+        }
+        match rx.recv_async().await {
+            Ok(Ok(chunk)) => Some((Ok(chunk), (None, rx))),
+            Ok(Err(e)) => Some((Err(std::io::Error::other(e)), (None, rx))),
+            Err(_) => None,
+        }
+    });
+
+    tracing::info!(
+        "GET /youtube/stream/{}: streaming via HLS with client '{}' ({} segment(s))",
+        video_id,
+        client_name,
+        total
+    );
+
+    Some((StatusCode::OK, resp_headers, Body::from_stream(stream)).into_response())
+}
 
 fn get_target_clients(
     ctx: &audium::media::sources::youtube::YoutubeStreamContext,

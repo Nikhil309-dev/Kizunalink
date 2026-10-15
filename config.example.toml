@@ -151,7 +151,7 @@ enabled = true
 
 [sources.youtube.clients]
 search = ["MUSIC_ANDROID", "MUSIC_WEB", "ANDROID", "WEB"]
-playback = ["TV_CAST", "TV_EMBEDDED", "ANDROID_VR", "WEB_EMBEDDED", "ANDROID", "MUSIC_ANDROID", "WEB"]
+playback = ["VISIONOS", "TV_DOWN", "ANDROID_VR", "TV_CAST", "TV_EMBEDDED", "WEB_EMBEDDED", "TV", "ANDROID_MUSIC", "WEB"]
 resolve = ["WEB", "MUSIC_WEB", "ANDROID", "TVHTML5_SIMPLY"]
 
 [sources.youtube.cipher]
