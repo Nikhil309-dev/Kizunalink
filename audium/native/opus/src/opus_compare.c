@@ -155,8 +155,8 @@ static void band_energy(float *_out,float *_ps,const int *_bands,int _nbands,
 
 /*Bands on which we compute the pseudo-NMR (Bark-derived
   CELT bands).*/
-static const int BANDS[NBANDS+1]={
-  0,2,4,6,8,10,12,14,16,20,24,28,32,40,48,56,68,80,96,120,156,200
+static const int BANDS[NBANDS+1]={`
+ 0,2,4,6,8,10,12,14,16,20,24,28,32,40,48,56,68,80,96,120,156,200
 };
 
 #define TEST_WIN_SIZE (480)
@@ -345,8 +345,20 @@ int main(int _argc,const char **_argv){
         for(ci=0;ci<nchannels;ci++){
           float re;
           float im;
-          re=Y[(xi*yfreqs+xj)*nchannels+ci]/X[(xi*NFREQS+xj)*nchannels+ci];
-          im=re-log(re)-1;
+          /* Protect against zero or negative denominators to avoid
+             divide-by-zero and domain errors in logf(). If the denominator
+             is non-positive we treat the ratio as 1.0 (neutral contribution). */
+          float numer = Y[(xi*yfreqs+xj)*nchannels+ci];
+          float denom = X[(xi*NFREQS+xj)*nchannels+ci];
+          if (!(denom > 0.0f)) {
+            re = 1.0f;
+          } else {
+            re = numer / denom;
+            if (!(re > 0.0f)) {
+              re = 1.0f;
+            }
+          }
+          im = re - logf(re) - 1.0f;
           /*Make comparison less sensitive around the SILK/CELT cross-over to
             allow for mode freedom in the filters.*/
           if(xj>=79&&xj<=81)im*=0.1F;
