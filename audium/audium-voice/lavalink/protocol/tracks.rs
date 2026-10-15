@@ -144,6 +144,23 @@ pub struct SearchResult {
     pub plugin: serde_json::Value,
 }
 
+impl SearchResult {
+    /// Builds a track-only result, leaving every other collection empty.
+    ///
+    /// Used when a source can answer a search through the standard `load`
+    /// path but does not implement the richer `load_search` extension.
+    pub fn from_tracks(tracks: Vec<Track>) -> Self {
+        Self {
+            tracks,
+            albums: Vec::new(),
+            artists: Vec::new(),
+            playlists: Vec::new(),
+            texts: Vec::new(),
+            plugin: serde_json::Value::Object(serde_json::Map::new()),
+        }
+    }
+}
+
 /// Playlist metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -188,6 +205,38 @@ impl Serialize for LoadError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_result_from_tracks_fills_only_tracks() {
+        // The `load_search` fallback lifts a `load` result into a SearchResult;
+        // every non-track collection must be an empty array (not null) so the
+        // JSON shape matches a native search response.
+        let track = Track {
+            encoded: String::new(),
+            info: TrackInfo {
+                identifier: "abc".into(),
+                is_seekable: true,
+                author: "a".into(),
+                length: 1,
+                is_stream: false,
+                position: 0,
+                title: "t".into(),
+                uri: None,
+                artwork_url: None,
+                isrc: None,
+                source_name: "youtube".into(),
+            },
+            plugin_info: serde_json::Value::Null,
+            user_data: serde_json::Value::Null,
+        };
+        let result = SearchResult::from_tracks(vec![track]);
+        let v = serde_json::to_value(&result).unwrap();
+        assert_eq!(v["tracks"].as_array().unwrap().len(), 1);
+        for key in ["albums", "artists", "playlists", "texts"] {
+            assert_eq!(v[key].as_array().unwrap().len(), 0, "{key} must be []");
+        }
+        assert!(v["plugin"].is_object());
+    }
 
     #[test]
     fn empty_load_result_serializes_null_data() {

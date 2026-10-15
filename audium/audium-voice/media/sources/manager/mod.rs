@@ -97,6 +97,13 @@ impl SourceManager {
     }
 
     /// Perform a search across available sources.
+    ///
+    /// `load_search` is an Audium extension; sources that only implement the
+    /// standard `load` path (e.g. YouTube, SoundCloud) would otherwise answer
+    /// `204 No Content` even though `loadtracks?identifier=ytsearch:...` works.
+    /// When the matched source does not implement `load_search`, fall back to
+    /// `load` and lift a `search`/`track` result into a `SearchResult` so the
+    /// endpoint never silently returns nothing for a prefix the source claims.
     pub async fn load_search(
         &self,
         query: &str,
@@ -106,7 +113,18 @@ impl SourceManager {
         for source in &self.sources {
             if source.can_handle(query) {
                 tracing::trace!("Loading search '{}' with source: {}", query, source.name());
-                return source.load_search(query, types, routeplanner.clone()).await;
+                if let Some(result) = source.load_search(query, types, routeplanner.clone()).await {
+                    return Some(result);
+                }
+
+                use crate::lavalink::protocol::tracks::{LoadResult, SearchResult};
+                let tracks = match source.load(query, routeplanner.clone()).await {
+                    LoadResult::Search(tracks) => tracks,
+                    LoadResult::Track(track) => vec![track],
+                    LoadResult::Playlist(playlist) => playlist.tracks,
+                    _ => return None,
+                };
+                return Some(SearchResult::from_tracks(tracks));
             }
         }
 

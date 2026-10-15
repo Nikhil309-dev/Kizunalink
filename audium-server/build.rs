@@ -32,6 +32,21 @@ fn set(key: &str, value: Option<String>) {
     }
 }
 
+/// Normalises an epoch timestamp to milliseconds.
+///
+/// `/v4/info` reports `buildTime` and `git.commitTime` as *millisecond* unix
+/// timestamps, matching Lavalink (`InfoSerializerTest`) and NodeLink. CI exports
+/// epoch *seconds* (`date -u +%s`, `git log --format=%ct`) and the local
+/// fallbacks below produce seconds too, so a value that is too small to be
+/// milliseconds is scaled up. Already-millisecond input is passed through.
+fn to_millis(epoch: &str) -> String {
+    match epoch.trim().parse::<i64>() {
+        // Anything below ~1973-03 in milliseconds is really a second count.
+        Ok(secs) if secs > 0 && secs < 100_000_000_000 => (secs * 1000).to_string(),
+        _ => epoch.trim().to_string(),
+    }
+}
+
 fn main() {
     // Re-run when the checked-out revision changes.
     println!("cargo:rerun-if-changed=../.git/HEAD");
@@ -48,7 +63,7 @@ fn main() {
             .ok()
             .map(|d| d.as_secs().to_string())
     });
-    set("BUILD_TIME", build_time);
+    set("BUILD_TIME", build_time.as_deref().map(to_millis));
 
     set(
         "GIT_COMMIT",
@@ -72,6 +87,8 @@ fn main() {
         "GIT_COMMIT_TIME",
         std::env::var("GIT_COMMIT_TIME")
             .ok()
-            .or_else(|| git(&["log", "-1", "--format=%ct"])),
+            .or_else(|| git(&["log", "-1", "--format=%ct"]))
+            .as_deref()
+            .map(to_millis),
     );
 }
