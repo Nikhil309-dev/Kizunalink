@@ -117,15 +117,15 @@ impl VimeoSource {
         }
         let html = response.text().await.ok()?;
 
-        let progressive = Regex::new(r#""progressive":\s*\[\s*\{[^}]*"url":"([^"]+)""#)
-            .ok()?;
+        let progressive = Regex::new(r#""progressive":\s*\[\s*\{[^}]*"url":"([^"]+)""#).ok()?;
         if let Some(caps) = progressive.captures(&html) {
             return Some(decode_slashes(&caps[1]));
         }
-        let hls = Regex::new(r#""hls":\s*\{\s*"default_cdn":"[^"]*",\s*"cdns":\s*\{[^}]*"url":"([^"]+)""#)
-            .ok()?;
-        hls.captures(&html)
-            .map(|caps| decode_slashes(&caps[1]))
+        let hls = Regex::new(
+            r#""hls":\s*\{\s*"default_cdn":"[^"]*",\s*"cdns":\s*\{[^}]*"url":"([^"]+)""#,
+        )
+        .ok()?;
+        hls.captures(&html).map(|caps| decode_slashes(&caps[1]))
     }
 
     async fn resolve(&self, identifier: &str) -> LoadResult {
@@ -210,7 +210,9 @@ mod tests {
 
     #[test]
     fn extracts_privacy_hash() {
-        let caps = hash_pattern().captures("https://vimeo.com/123?h=1a2b3c").unwrap();
+        let caps = hash_pattern()
+            .captures("https://vimeo.com/123?h=1a2b3c")
+            .unwrap();
         assert_eq!(&caps[1], "1a2b3c");
     }
 

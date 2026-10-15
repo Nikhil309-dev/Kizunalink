@@ -12,42 +12,42 @@ use crate::{
         audiomack::AudiomackSource,
         audius::AudiusSource,
         bandcamp::BandcampSource,
+        bilibili::BilibiliSource,
         bluesky::BlueskySource,
         deezer::DeezerSource,
         flowery::FlowerySource,
         gaana::GaanaSource,
         google_tts::GoogleTtsSource,
+        googledrive::GoogleDriveSource,
         http::HttpSource,
         iheartradio::IheartradioSource,
+        instagram::InstagramSource,
         jiosaavn::JioSaavnSource,
+        kwai::KwaiSource,
         lastfm::LastFMSource,
+        lazypytts::LazypyttsSource,
         local::LocalSource,
         mixcloud::MixcloudSource,
         netease::NeteaseSource,
+        newgrounds::NewgroundsSource,
+        nicovideo::NicovideoSource,
         pandora::PandoraSource,
+        pinterest::PinterestSource,
         plugin::BoxedSource,
         qobuz::QobuzSource,
         reddit::RedditSource,
         rss::RssSource,
         shazam::ShazamSource,
+        songlink::SonglinkSource,
         soundcloud::SoundCloudSource,
         spotify::SpotifySource,
-        tidal::TidalSource,
-        kwai::KwaiSource,
-        newgrounds::NewgroundsSource,
         telegram::TelegramSource,
-        bilibili::BilibiliSource,
-        instagram::InstagramSource,
-        googledrive::GoogleDriveSource,
-        nicovideo::NicovideoSource,
-        lazypytts::LazypyttsSource,
-        pinterest::PinterestSource,
-        songlink::SonglinkSource,
-        twitter::TwitterSource,
+        tidal::TidalSource,
         tiktok::TiktokSource,
-        vimeo::VimeoSource,
         tumblr::TumblrSource,
         twitch::TwitchSource,
+        twitter::TwitterSource,
+        vimeo::VimeoSource,
         vkmusic::VkMusicSource,
         yandexmusic::YandexMusicSource,
         youtube::{YouTubeSource, YoutubeStreamContext, cipher::YouTubeCipherManager},
@@ -410,22 +410,14 @@ fn register_core_sources(
     }
 
     // Simple page-scraping sources (each claims only its own URL shape).
-    register_simple!(
-        config.sources.tumblr,
-        "Tumblr",
-        TumblrSource::new
-    );
+    register_simple!(config.sources.tumblr, "Tumblr", TumblrSource::new);
     register_simple!(
         config.sources.newgrounds,
         "Newgrounds",
         NewgroundsSource::new
     );
     register_simple!(config.sources.kwai, "Kwai", KwaiSource::new);
-    register_simple!(
-        config.sources.telegram,
-        "Telegram",
-        TelegramSource::new
-    );
+    register_simple!(config.sources.telegram, "Telegram", TelegramSource::new);
 
     register_simple!(config.sources.bilibili, "Bilibili", BilibiliSource::new);
     register_simple!(config.sources.nicovideo, "NicoVideo", NicovideoSource::new);

@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::debug;
 
 use crate::{
@@ -129,10 +129,7 @@ impl TwitterSource {
 
     /// Chooses the highest-bitrate MP4, else the HLS playlist.
     fn select_variant(media: &Value) -> Option<(String, bool)> {
-        let variants = media
-            .get("video_info")?
-            .get("variants")?
-            .as_array()?;
+        let variants = media.get("video_info")?.get("variants")?.as_array()?;
 
         let mut best_mp4: Option<(u64, String)> = None;
         let mut hls: Option<String> = None;
@@ -142,10 +139,7 @@ impl TwitterSource {
             };
             match variant.get("content_type").and_then(|c| c.as_str()) {
                 Some("video/mp4") => {
-                    let bitrate = variant
-                        .get("bitrate")
-                        .and_then(|b| b.as_u64())
-                        .unwrap_or(0);
+                    let bitrate = variant.get("bitrate").and_then(|b| b.as_u64()).unwrap_or(0);
                     if best_mp4.as_ref().is_none_or(|(b, _)| bitrate > *b) {
                         best_mp4 = Some((bitrate, url.to_string()));
                     }
@@ -173,7 +167,6 @@ impl TwitterSource {
     }
 
     async fn resolve(&self, identifier: &str) -> LoadResult {
-
         let Some(caps) = status_pattern().captures(identifier) else {
             return LoadResult::Empty {};
         };
@@ -240,7 +233,6 @@ impl SourcePlugin for TwitterSource {
         debug!("Twitter resolving: {}", identifier);
         self.resolve(identifier).await
     }
-
 }
 
 #[cfg(test)]

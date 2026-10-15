@@ -24,9 +24,7 @@ use tracing::debug;
 
 use crate::{
     config::sources::BilibiliConfig,
-    lavalink::protocol::tracks::{
-        LoadResult, SearchResult, Track, TrackInfo,
-    },
+    lavalink::protocol::tracks::{LoadResult, SearchResult, Track, TrackInfo},
     media::sources::{
         http::HttpTrack,
         plugin::{BoxedTrack, SourcePlugin},
@@ -35,9 +33,9 @@ use crate::{
 
 /// WBI mixin-key permutation table.
 const MIXIN_KEY_ENC_TAB: [usize; 64] = [
-    46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49, 33, 9, 42, 19,
-    29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
-    22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
+    46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49, 33, 9, 42, 19, 29,
+    28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4, 22, 25,
+    54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
 ];
 
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
@@ -54,7 +52,9 @@ fn video_pattern() -> &'static Regex {
 
 fn audio_pattern() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)^https?://(?:www\.)?bilibili\.com/audio/au(\d+)").expect("valid regex"))
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)^https?://(?:www\.)?bilibili\.com/audio/au(\d+)").expect("valid regex")
+    })
 }
 
 fn short_pattern() -> &'static Regex {
@@ -98,7 +98,8 @@ impl BilibiliSource {
             reqwest::header::HeaderValue::from_static("https://www.bilibili.com/"),
         );
         if let Some(sessdata) = &self.sessdata
-            && let Ok(value) = reqwest::header::HeaderValue::from_str(&format!("SESSDATA={sessdata}"))
+            && let Ok(value) =
+                reqwest::header::HeaderValue::from_str(&format!("SESSDATA={sessdata}"))
         {
             headers.insert(reqwest::header::COOKIE, value);
         }
@@ -194,7 +195,13 @@ impl BilibiliSource {
 
     /// Resolves a `b23.tv` short link to its final URL.
     async fn expand_short(&self, identifier: &str) -> Option<String> {
-        let response = self.http.get(identifier).headers(self.headers()).send().await.ok()?;
+        let response = self
+            .http
+            .get(identifier)
+            .headers(self.headers())
+            .send()
+            .await
+            .ok()?;
         Some(response.url().to_string())
     }
 
@@ -208,7 +215,9 @@ impl BilibiliSource {
             format!("aid={}", id.trim_start_matches("av"))
         };
         let body = self
-            .api_get(&format!("https://api.bilibili.com/x/web-interface/view?{query}"))
+            .api_get(&format!(
+                "https://api.bilibili.com/x/web-interface/view?{query}"
+            ))
             .await?;
         if body.get("code").and_then(|c| c.as_i64()) != Some(0) {
             return None;
@@ -239,7 +248,9 @@ impl BilibiliSource {
         let query = Self::sign_params(&params, &mixin, timestamp);
 
         let body = self
-            .api_get(&format!("https://api.bilibili.com/x/player/wbi/playurl?{query}"))
+            .api_get(&format!(
+                "https://api.bilibili.com/x/player/wbi/playurl?{query}"
+            ))
             .await?;
         if body.get("code").and_then(|c| c.as_i64()) != Some(0) {
             return None;
@@ -382,9 +393,8 @@ impl BilibiliSource {
                         .get("duration")
                         .and_then(|d| d.as_str())
                         .map(|d| {
-                            d.split(':').fold(0u64, |acc, p| {
-                                acc * 60 + p.parse::<u64>().unwrap_or(0)
-                            })
+                            d.split(':')
+                                .fold(0u64, |acc, p| acc * 60 + p.parse::<u64>().unwrap_or(0))
                         })
                         .unwrap_or(0)
                         .saturating_mul(1000),
@@ -500,7 +510,10 @@ mod tests {
     #[test]
     fn derives_mixin_key_from_key_stems() {
         // The table takes the first 32 permuted characters of img_key+sub_key.
-        let key = BilibiliSource::mixin_key("abcdefghijklmnopqrstuvwxyz012345", "ABCDEFGHIJKLMNOPQRSTUVWXYZ678901");
+        let key = BilibiliSource::mixin_key(
+            "abcdefghijklmnopqrstuvwxyz012345",
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ678901",
+        );
         assert_eq!(key.len(), 32);
         assert_eq!(key, "OPscVixApSk56dND1LfRBjKt32oHmGJn");
     }
@@ -521,7 +534,9 @@ mod tests {
     #[test]
     fn extracts_key_stem_from_url() {
         assert_eq!(
-            BilibiliSource::key_stem("https://i0.hdslb.com/bfs/wbi/7cd084941338484aae1ad9425b84077c.png"),
+            BilibiliSource::key_stem(
+                "https://i0.hdslb.com/bfs/wbi/7cd084941338484aae1ad9425b84077c.png"
+            ),
             "7cd084941338484aae1ad9425b84077c"
         );
     }

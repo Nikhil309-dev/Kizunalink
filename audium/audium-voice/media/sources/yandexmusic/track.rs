@@ -41,7 +41,7 @@ impl PlayableTrack for YandexMusicTrack {
                         url: stream_url,
                         local_addr,
                         proxy,
-                headers: None,
+                        headers: None,
                     };
                     let (inner_rx, inner_cmd_tx, inner_err_rx) =
                         http_track.start_decoding(config.clone());

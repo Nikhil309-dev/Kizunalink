@@ -115,12 +115,7 @@ impl GoogleDriveSource {
         entry_re
             .captures_iter(html)
             .take(limit)
-            .map(|caps| {
-                (
-                    caps[1].to_string(),
-                    decode_entities(caps[2].trim()),
-                )
-            })
+            .map(|caps| (caps[1].to_string(), decode_entities(caps[2].trim())))
             .collect()
     }
 
@@ -244,8 +239,11 @@ mod tests {
     use super::*;
 
     fn source() -> GoogleDriveSource {
-        GoogleDriveSource::new(GoogleDriveConfig::default(), Arc::new(reqwest::Client::new()))
-            .expect("valid source")
+        GoogleDriveSource::new(
+            GoogleDriveConfig::default(),
+            Arc::new(reqwest::Client::new()),
+        )
+        .expect("valid source")
     }
 
     const ID: &str = "1A2b3C4d5E6f7G8h9I0jK1l2M3n4O5p6Q";
@@ -254,7 +252,9 @@ mod tests {
     fn recognises_file_and_folder_urls() {
         let s = source();
         assert!(s.can_handle(&format!("https://drive.google.com/file/d/{ID}/view")));
-        assert!(s.can_handle(&format!("https://drive.google.com/uc?id={ID}&export=download")));
+        assert!(s.can_handle(&format!(
+            "https://drive.google.com/uc?id={ID}&export=download"
+        )));
         assert!(s.can_handle(&format!("https://docs.google.com/drive/folders/{ID}")));
         assert!(!s.can_handle("https://drive.google.com/drive/my-drive"));
         assert!(!s.can_handle("https://example.com/file/d/short"));

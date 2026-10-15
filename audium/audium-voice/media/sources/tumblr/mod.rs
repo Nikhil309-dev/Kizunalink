@@ -60,15 +60,18 @@ impl TumblrSource {
     /// and in `<video src=…>` / `tumblr_video` markup. We try the meta tags
     /// first because they are stable across theme changes.
     fn extract_media(&self, html: &str) -> Option<String> {
-        for key in ["og:video:secure_url", "og:video", "og:audio:secure_url", "og:audio"] {
+        for key in [
+            "og:video:secure_url",
+            "og:video",
+            "og:audio:secure_url",
+            "og:audio",
+        ] {
             if let Some(url) = meta_property(html, key) {
                 return Some(html_unescape(&url));
             }
         }
         let video_re = Regex::new(r#"<video[^>]+src=["']([^"']+)["']"#).ok()?;
-        video_re
-            .captures(html)
-            .map(|c| html_unescape(&c[1]))
+        video_re.captures(html).map(|c| html_unescape(&c[1]))
     }
 
     /// Finds a YouTube/Vimeo embed to delegate to the native source.
@@ -152,7 +155,9 @@ fn meta_property(html: &str, property: &str) -> Option<String> {
     );
     let re = Regex::new(&pattern).ok()?;
     let caps = re.captures(html)?;
-    caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str().to_string())
+    caps.get(1)
+        .or_else(|| caps.get(2))
+        .map(|m| m.as_str().to_string())
 }
 
 /// Minimal HTML entity decode for the handful of entities that appear in URLs
@@ -221,7 +226,12 @@ mod tests {
             <meta property="og:video:secure_url" content="https://media.tumblr.com/clip.mp4" />
             </head><body></body></html>"#;
         let track = s
-            .build_track(html, "alice", "123456789012", "https://alice.tumblr.com/post/123456789012")
+            .build_track(
+                html,
+                "alice",
+                "123456789012",
+                "https://alice.tumblr.com/post/123456789012",
+            )
             .expect("track");
         assert_eq!(track.info.title, "My & Video");
         assert_eq!(track.info.author, "alice");

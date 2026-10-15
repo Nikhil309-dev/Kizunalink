@@ -43,7 +43,7 @@ impl PlayableTrack for QobuzTrack {
                     url,
                     local_addr: None,
                     proxy: None,
-                headers: None,
+                    headers: None,
                 };
                 let (inner_rx, inner_cmd_tx, inner_err_rx) =
                     http_track.start_decoding(config.clone());

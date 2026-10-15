@@ -175,7 +175,8 @@ impl TiktokSource {
 
 /// Returns the first non-empty string from a JSON `url_list` array.
 fn first_url(list: Option<&Value>) -> Option<String> {
-    list?.as_array()?
+    list?
+        .as_array()?
         .iter()
         .find_map(|v| v.as_str().filter(|s| !s.is_empty()).map(str::to_string))
 }

@@ -36,7 +36,7 @@ impl PlayableTrack for RedditTrack {
                     url,
                     local_addr,
                     proxy: None,
-                headers: None,
+                    headers: None,
                 };
 
                 let (inner_rx, inner_cmd_tx, inner_err_rx) =

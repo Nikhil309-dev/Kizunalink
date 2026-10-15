@@ -25,7 +25,8 @@ const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 fn audio_pattern() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)^https?://(?:www\.)?newgrounds\.com/audio/listen/(\d+)").expect("valid regex")
+        Regex::new(r"(?i)^https?://(?:www\.)?newgrounds\.com/audio/listen/(\d+)")
+            .expect("valid regex")
     })
 }
 
@@ -65,8 +66,8 @@ impl NewgroundsSource {
 
     /// Parses the `NgAudioPlayer.fromListenPage({…})` literal.
     fn parse_page(html: &str) -> Option<AudioPage> {
-        let re = Regex::new(r"NgAudioPlayer\.fromListenPage\(\s*\{([\s\S]*?)\}\s*,\s*\d+\s*\)")
-            .ok()?;
+        let re =
+            Regex::new(r"NgAudioPlayer\.fromListenPage\(\s*\{([\s\S]*?)\}\s*,\s*\d+\s*\)").ok()?;
         let block = re.captures(html)?.get(1)?.as_str();
 
         let identifier = json_number(block, "generic_id")?.to_string();
@@ -175,8 +176,11 @@ mod tests {
     use super::*;
 
     fn source() -> NewgroundsSource {
-        NewgroundsSource::new(NewgroundsConfig::default(), Arc::new(reqwest::Client::new()))
-            .expect("valid source")
+        NewgroundsSource::new(
+            NewgroundsConfig::default(),
+            Arc::new(reqwest::Client::new()),
+        )
+        .expect("valid source")
     }
 
     #[test]

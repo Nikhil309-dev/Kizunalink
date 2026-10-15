@@ -19,14 +19,12 @@ use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::debug;
 
 use crate::{
     config::sources::NicovideoConfig,
-    lavalink::protocol::tracks::{
-        LoadResult, SearchResult, Track, TrackInfo,
-    },
+    lavalink::protocol::tracks::{LoadResult, SearchResult, Track, TrackInfo},
     media::sources::{
         http::HttpTrack,
         plugin::{BoxedTrack, SourcePlugin},
@@ -34,7 +32,8 @@ use crate::{
 };
 
 const WATCH_BASE: &str = "https://www.nicovideo.jp/watch";
-const SNAPSHOT_SEARCH: &str = "https://api.search.nicovideo.jp/api/v2/snapshot/video/contents/search";
+const SNAPSHOT_SEARCH: &str =
+    "https://api.search.nicovideo.jp/api/v2/snapshot/video/contents/search";
 const HLS_ACCESS: &str = "https://nvapi.nicovideo.jp/v1/watch";
 /// Quality labels NicoVideo exposes, best first.
 const VIDEO_QUALITIES: &[&str] = &["1080p", "720p", "480p", "360p", "144p"];
@@ -54,7 +53,9 @@ fn prefix_pattern() -> &'static Regex {
 
 fn iso_duration_pattern() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?").expect("valid regex"))
+    RE.get_or_init(|| {
+        Regex::new(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?").expect("valid regex")
+    })
 }
 
 pub struct NicovideoSource {
@@ -101,7 +102,10 @@ impl NicovideoSource {
             reqwest::header::REFERER,
             reqwest::header::HeaderValue::from_static("https://www.nicovideo.jp/"),
         );
-        headers.insert("X-Frontend-Id", reqwest::header::HeaderValue::from_static("6"));
+        headers.insert(
+            "X-Frontend-Id",
+            reqwest::header::HeaderValue::from_static("6"),
+        );
         headers.insert(
             "X-Frontend-Version",
             reqwest::header::HeaderValue::from_static("0"),
@@ -164,7 +168,12 @@ impl NicovideoSource {
                                 .and_then(|l| l.as_str())
                                 .is_some_and(|l| VIDEO_QUALITIES.contains(&l))
                     })
-                    .map(|v| json!([v.get("id").and_then(|i| i.as_str()).unwrap_or(""), best_audio]))
+                    .map(|v| {
+                        json!([
+                            v.get("id").and_then(|i| i.as_str()).unwrap_or(""),
+                            best_audio
+                        ])
+                    })
                     .collect()
             })
             .unwrap_or_default()
@@ -196,7 +205,11 @@ impl NicovideoSource {
             Some(uri) if uri.starts_with("http") => uri,
             Some(uri) => format!(
                 "{}/{}",
-                master_url.trim_end_matches('/').rsplit_once('/').map(|(b, _)| b).unwrap_or(master_url),
+                master_url
+                    .trim_end_matches('/')
+                    .rsplit_once('/')
+                    .map(|(b, _)| b)
+                    .unwrap_or(master_url),
                 uri.trim_start_matches('/')
             ),
             None => master_url.to_string(),
@@ -232,25 +245,21 @@ impl NicovideoSource {
 
         // The endpoint answers 201 Created with the session cookie in headers.
         if response.status().as_u16() != 201 {
-            debug!("NicoVideo access-rights returned HTTP {}", response.status());
+            debug!(
+                "NicoVideo access-rights returned HTTP {}",
+                response.status()
+            );
             return None;
         }
         let cookie = Self::extract_cookie(&response);
         let body: Value = response.json().await.ok()?;
-        let content_url = body
-            .get("data")?
-            .get("contentUrl")?
-            .as_str()?
-            .to_string();
+        let content_url = body.get("data")?.get("contentUrl")?.as_str()?.to_string();
 
         // The master playlist lists the audio-only rendition.
         let master = self
             .http
             .get(&content_url)
-            .header(
-                reqwest::header::COOKIE,
-                cookie.clone().unwrap_or_default(),
-            )
+            .header(reqwest::header::COOKIE, cookie.clone().unwrap_or_default())
             .send()
             .await
             .ok()?;

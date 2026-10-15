@@ -115,7 +115,10 @@ impl LazypyttsSource {
     }
 
     async fn request_audio(&self, service: &str, voice: &str, text: &str) -> Option<String> {
-        let service_id = self.resolve_service_id(service).await.unwrap_or_else(|| service.to_string());
+        let service_id = self
+            .resolve_service_id(service)
+            .await
+            .unwrap_or_else(|| service.to_string());
         let form = format!(
             "service={}&voice={}&text={}",
             urlencoding::encode(&service_id),
@@ -126,7 +129,10 @@ impl LazypyttsSource {
             .http
             .post(REQUEST_URL)
             .header(reqwest::header::ACCEPT, "*/*")
-            .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+            )
             .header(reqwest::header::ORIGIN, "https://lazypy.ro")
             .header(reqwest::header::REFERER, "https://lazypy.ro/tts/")
             .header(reqwest::header::USER_AGENT, USER_AGENT)
@@ -143,7 +149,9 @@ impl LazypyttsSource {
             debug!("LazyPy TTS reported failure: {}", body);
             return None;
         }
-        body.get("audio_url").and_then(|u| u.as_str()).map(str::to_string)
+        body.get("audio_url")
+            .and_then(|u| u.as_str())
+            .map(str::to_string)
     }
 
     async fn resolve(&self, identifier: &str) -> LoadResult {

@@ -16,9 +16,7 @@ use tracing::debug;
 
 use crate::{
     config::sources::TelegramConfig,
-    lavalink::protocol::tracks::{
-        LoadResult, PlaylistData, PlaylistInfo, Track, TrackInfo,
-    },
+    lavalink::protocol::tracks::{LoadResult, PlaylistData, PlaylistInfo, Track, TrackInfo},
     media::sources::plugin::{BoxedTrack, SourcePlugin},
 };
 
@@ -72,12 +70,14 @@ impl TelegramSource {
     }
 
     fn extract_author(html: &str) -> String {
-        Regex::new(r#"class="tgme_widget_message_author[^>]*>[\s\S]*?<span dir="auto">([^<]+)</span>"#)
-            .ok()
-            .and_then(|re| re.captures(html))
-            .map(|c| c[1].trim().to_string())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "Telegram Channel".to_string())
+        Regex::new(
+            r#"class="tgme_widget_message_author[^>]*>[\s\S]*?<span dir="auto">([^<]+)</span>"#,
+        )
+        .ok()
+        .and_then(|re| re.captures(html))
+        .map(|c| c[1].trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Telegram Channel".to_string())
     }
 
     fn extract_description(html: &str) -> String {
@@ -89,7 +89,13 @@ impl TelegramSource {
                     .replace("<br/>", "\n")
                     .replace("<br />", "\n")
             })
-            .map(|t| Regex::new(r"<[^>]*>").expect("valid").replace_all(&t, "").trim().to_string())
+            .map(|t| {
+                Regex::new(r"<[^>]*>")
+                    .expect("valid")
+                    .replace_all(&t, "")
+                    .trim()
+                    .to_string()
+            })
             .unwrap_or_default()
     }
 
@@ -241,7 +247,8 @@ mod tests {
 
     #[test]
     fn dedupes_repeated_media() {
-        let html = r#"<video src="https://cdn/a.mp4"></video><video src="https://cdn/a.mp4"></video>"#;
+        let html =
+            r#"<video src="https://cdn/a.mp4"></video><video src="https://cdn/a.mp4"></video>"#;
         assert_eq!(TelegramSource::extract_media(html).len(), 1);
     }
 

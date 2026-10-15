@@ -27,10 +27,8 @@ const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 fn post_pattern() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
-            r"(?i)^https?://(?:www\.)?instagram\.com/(?:p|reels?|reel)/([\w-]+)",
-        )
-        .expect("valid regex")
+        Regex::new(r"(?i)^https?://(?:www\.)?instagram\.com/(?:p|reels?|reel)/([\w-]+)")
+            .expect("valid regex")
     })
 }
 
@@ -155,7 +153,11 @@ impl InstagramSource {
             .and_then(|c| c.get("text").and_then(|t| t.as_str()).map(str::to_string))
             .unwrap_or_else(|| "Instagram Video".to_string());
         let author = Self::extract_json_after(&html, "\"owner\"")
-            .and_then(|o| o.get("username").and_then(|u| u.as_str()).map(str::to_string))
+            .and_then(|o| {
+                o.get("username")
+                    .and_then(|u| u.as_str())
+                    .map(str::to_string)
+            })
             .unwrap_or_else(|| "User Unknown".to_string());
         let length = Self::extract_json_after(&html, "\"video_duration\"")
             .and_then(|d| d.as_f64())

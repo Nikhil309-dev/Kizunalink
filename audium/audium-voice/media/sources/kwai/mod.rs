@@ -27,8 +27,10 @@ const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 fn video_pattern() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)^https?://(?:www\.|m\.)?kwai\.com/(?:@[\w.\-]+/)?(?:video|photo|fw)/?(\d+)")
-            .expect("valid regex")
+        Regex::new(
+            r"(?i)^https?://(?:www\.|m\.)?kwai\.com/(?:@[\w.\-]+/)?(?:video|photo|fw)/?(\d+)",
+        )
+        .expect("valid regex")
     })
 }
 

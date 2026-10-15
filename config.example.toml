@@ -366,6 +366,63 @@ search_limit = 10
 enabled = false
 # proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
 
+[sources.vimeo]
+# Resolves public Vimeo videos (vimeo.com/<id>) to the best progressive MP4.
+# No API key required.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.pinterest]
+# Resolves public Pinterest video pins (pinterest.<tld>/pin/<id>, /ideas/...).
+# Tries the internal PinResource API before falling back to page scraping.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.googledrive]
+# Resolves public Google Drive files (drive.google.com/file/d/<id>) to a direct
+# download stream. Files must be shared as "anyone with the link".
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.lazypytts]
+# Text-to-speech via a LazyPy TTS endpoint. Query form: "lazypytts:<text>".
+enabled = false
+# api_url = "http://localhost:8080"
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.songlink]
+# Resolver, not a media source: expands a streaming-service share link
+# (song.link / album.link / a supported provider URL) into its cross-service
+# mirrors and re-dispatches to whichever configured source can play one.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.bilibili]
+# Resolves bilibili.com video/BV/av links, b23.tv short links, bangumi and
+# audio pages. Playback is the anonymous DASH audio stream.
+# Optional: a SESSDATA cookie unlocks higher quality / member-only content.
+enabled = false
+# sessdata = ""
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.nicovideo]
+# Resolves nicovideo.jp/watch/<id> and nico.ms/<id>, plus "ncsearch:<query>".
+# Playback uses an anonymous DMC session; no account required.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.instagram]
+# Resolves public Instagram posts (/p/<code>) and reels (/reel/<code>), plus
+# reel-audio pages (/reels/audio/<id>). Public content only; no login.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.twitter]
+# Resolves twitter.com / x.com status links to the best MP4 (or HLS) variant.
+# Uses the public guest-token GraphQL endpoint; no account or API key required.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
 [lyrics]
 youtubemusic = true
 lrclib = true

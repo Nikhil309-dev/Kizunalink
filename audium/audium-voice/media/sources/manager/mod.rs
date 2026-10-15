@@ -94,9 +94,8 @@ impl SourceManager {
         depth: usize,
     ) -> std::pin::Pin<
         Box<
-            dyn std::future::Future<
-                    Output = crate::lavalink::protocol::tracks::LoadResult,
-                > + Send
+            dyn std::future::Future<Output = crate::lavalink::protocol::tracks::LoadResult>
+                + Send
                 + 'a,
         >,
     > {
@@ -105,7 +104,10 @@ impl SourceManager {
 
             const MAX_TRANSLATIONS: usize = 4;
             let Some(source) = self.sources.iter().find(|s| s.can_handle(identifier)) else {
-                tracing::debug!("SourceManager: No source matched identifier: '{}'", identifier);
+                tracing::debug!(
+                    "SourceManager: No source matched identifier: '{}'",
+                    identifier
+                );
                 return LoadResult::Empty {};
             };
 

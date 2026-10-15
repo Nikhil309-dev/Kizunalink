@@ -11,7 +11,7 @@ use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::debug;
 
 use crate::{
@@ -72,10 +72,10 @@ impl PinterestSource {
 
     /// Finds the video variant list on a standard pin or a story pin.
     fn video_list(data: &Value) -> Option<&Value> {
-        if let Some(list) = data.get("videos").and_then(|v| v.get("video_list")) {
-            if list.is_object() {
-                return Some(list);
-            }
+        if let Some(list) = data.get("videos").and_then(|v| v.get("video_list"))
+            && list.is_object()
+        {
+            return Some(list);
         }
         data.get("story_pin_data")
             .and_then(|s| s.get("pages"))

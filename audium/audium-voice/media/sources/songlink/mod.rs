@@ -63,10 +63,7 @@ impl SonglinkSource {
     }
 
     async fn fetch_links(&self, url: &str) -> Option<Value> {
-        let request_url = format!(
-            "{API_BASE}?url={}&userCountry=US",
-            urlencoding::encode(url)
-        );
+        let request_url = format!("{API_BASE}?url={}&userCountry=US", urlencoding::encode(url));
         let response = self
             .http
             .get(&request_url)
