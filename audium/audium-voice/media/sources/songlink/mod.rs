@@ -75,7 +75,9 @@ impl SonglinkSource {
             debug!("Odesli returned HTTP {}", response.status());
             return None;
         }
-        response.json().await.ok()
+        crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()
     }
 
     /// Builds the ordered list of equivalent platform URLs.

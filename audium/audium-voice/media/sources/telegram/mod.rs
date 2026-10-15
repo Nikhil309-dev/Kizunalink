@@ -53,7 +53,7 @@ impl TelegramSource {
             debug!("Telegram embed returned HTTP {}", response.status());
             return None;
         }
-        response.text().await.ok()
+        crate::common::http::read_text_capped(response).await.ok()
     }
 
     /// Collects `<video src>` / `<audio src>` attachments in message order.

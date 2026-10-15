@@ -128,7 +128,9 @@ impl NicovideoSource {
             debug!("NicoVideo watch page returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         body.get("data").cloned()
     }
 
@@ -252,7 +254,9 @@ impl NicovideoSource {
             return None;
         }
         let cookie = Self::extract_cookie(&response);
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         let content_url = body.get("data")?.get("contentUrl")?.as_str()?.to_string();
 
         // The master playlist lists the audio-only rendition.
@@ -263,7 +267,7 @@ impl NicovideoSource {
             .send()
             .await
             .ok()?;
-        let master_text = master.text().await.ok()?;
+        let master_text = crate::common::http::read_text_capped(master).await.ok()?;
         Some((Self::pick_audio_variant(&master_text, &content_url), cookie))
     }
 
@@ -331,7 +335,9 @@ impl NicovideoSource {
             debug!("NicoVideo search returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         let items = body.get("data")?.as_array()?;
         let tracks: Vec<Track> = items
             .iter()

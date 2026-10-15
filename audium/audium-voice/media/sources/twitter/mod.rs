@@ -71,7 +71,9 @@ impl TwitterSource {
             .send()
             .await
             .ok()?;
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         let value = body.get("guest_token")?.as_str()?.to_string();
 
         if let Ok(mut guard) = self.token.lock() {
@@ -120,7 +122,9 @@ impl TwitterSource {
             debug!("Twitter GraphQL returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         let result = body.get("data")?.get("tweetResult")?.get("result")?;
         // A tombstone/limited tweet wraps the real one under `tweet`.
         let result = result.get("tweet").unwrap_or(result);

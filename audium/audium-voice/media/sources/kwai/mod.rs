@@ -65,7 +65,7 @@ impl KwaiSource {
             debug!("Kwai returned HTTP {}", response.status());
             return None;
         }
-        response.text().await.ok()
+        crate::common::http::read_text_capped(response).await.ok()
     }
 
     fn parse(body: &str, video_id: &str) -> Option<KwaiVideo> {

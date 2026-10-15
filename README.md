@@ -74,12 +74,21 @@ The source implementations below are part of the project. **An implemented sourc
 
 | Source | Source | Source |
 |---|---|---|
-| YouTube | Spotify | Deezer |
-| Apple Music | SoundCloud | Tidal |
+| YouTube | Spotify | Apple Music |
+| Deezer | SoundCloud | Tidal |
 | JioSaavn | Gaana | Mixcloud |
 | NetEase | VK Music | Yandex Music |
-| Audiomack | Audius | Twitch |
-| Reddit | HTTP URLs | Local files |
+| Qobuz | Amazon Music | Anghami |
+| Audiomack | Audius | Bandcamp |
+| Last.fm | Pandora | Shazam |
+| Twitch | Reddit | Bluesky |
+| TikTok | Tumblr | Newgrounds |
+| Kwai | Telegram | Vimeo |
+| Pinterest | Google Drive | Songlink |
+| Bilibili | NicoVideo | Instagram |
+| Twitter/X | RSS/Atom feeds | iHeartRadio |
+| Google TTS | Flowery TTS | LazyPy TTS |
+| HTTP URLs | Local files | |
 
 Metadata-only results may require a playable mirror. See [config.example.toml](./config.example.toml) for source settings and resolver priorities.
 

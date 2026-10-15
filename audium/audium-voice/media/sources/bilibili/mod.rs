@@ -163,7 +163,9 @@ impl BilibiliSource {
             .send()
             .await
             .ok()?;
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         let img = body.get("data")?.get("wbi_img")?;
         let img_key = Self::key_stem(img.get("img_url")?.as_str()?);
         let sub_key = Self::key_stem(img.get("sub_url")?.as_str()?);
@@ -190,7 +192,9 @@ impl BilibiliSource {
             debug!("Bilibili API returned HTTP {}", response.status());
             return None;
         }
-        response.json().await.ok()
+        crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()
     }
 
     /// Resolves a `b23.tv` short link to its final URL.

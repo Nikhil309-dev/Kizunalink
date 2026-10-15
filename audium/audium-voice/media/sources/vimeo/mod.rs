@@ -80,7 +80,9 @@ impl VimeoSource {
             debug!("Vimeo oEmbed returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         let title = body.get("title")?.as_str()?.to_string();
         Some(Metadata {
             title,
@@ -115,7 +117,7 @@ impl VimeoSource {
             debug!("Vimeo page returned HTTP {}", response.status());
             return None;
         }
-        let html = response.text().await.ok()?;
+        let html = crate::common::http::read_text_capped(response).await.ok()?;
 
         let progressive = Regex::new(r#""progressive":\s*\[\s*\{[^}]*"url":"([^"]+)""#).ok()?;
         if let Some(caps) = progressive.captures(&html) {

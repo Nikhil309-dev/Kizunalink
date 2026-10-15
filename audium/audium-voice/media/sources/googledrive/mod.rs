@@ -135,7 +135,7 @@ impl GoogleDriveSource {
             }
             Err(_) => return LoadResult::Empty {},
         };
-        let html = match response.text().await {
+        let html = match crate::common::http::read_text_capped(response).await {
             Ok(h) => h,
             Err(_) => return LoadResult::Empty {},
         };

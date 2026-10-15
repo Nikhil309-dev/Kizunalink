@@ -63,7 +63,7 @@ impl InstagramSource {
             debug!("Instagram returned HTTP {}", response.status());
             return None;
         }
-        response.text().await.ok()
+        crate::common::http::read_text_capped(response).await.ok()
     }
 
     /// Extracts a top-level JSON object assigned to `key` in a page body.

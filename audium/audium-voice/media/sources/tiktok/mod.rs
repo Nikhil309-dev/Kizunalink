@@ -65,7 +65,7 @@ impl TiktokSource {
             return Some(caps[1].to_string());
         }
         // The id can also live in a redirect body or a `share/video` path.
-        let body = response.text().await.ok()?;
+        let body = crate::common::http::read_text_capped(response).await.ok()?;
         let re = Regex::new(r"/video/(\d{15,})").ok()?;
         re.captures(&body).map(|c| c[1].to_string())
     }
@@ -90,7 +90,9 @@ impl TiktokSource {
             debug!("TikTok API returned HTTP {}", response.status());
             return None;
         }
-        let value: Value = response.json().await.ok()?;
+        let value: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         value.get("items")?.as_array()?.first().cloned()
     }
 

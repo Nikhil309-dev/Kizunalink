@@ -61,7 +61,7 @@ impl NewgroundsSource {
             debug!("Newgrounds returned HTTP {}", response.status());
             return None;
         }
-        response.text().await.ok()
+        crate::common::http::read_text_capped(response).await.ok()
     }
 
     /// Parses the `NgAudioPlayer.fromListenPage({…})` literal.

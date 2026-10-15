@@ -51,7 +51,7 @@ impl TumblrSource {
             debug!("Tumblr returned HTTP {}", response.status());
             return None;
         }
-        response.text().await.ok()
+        crate::common::http::read_text_capped(response).await.ok()
     }
 
     /// Extracts a direct media URL from the post page.

@@ -105,7 +105,9 @@ impl LazypyttsSource {
         if !response.status().is_success() {
             return None;
         }
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         let services = body.get("services")?.as_object()?;
         services.iter().find_map(|(key, svc)| {
             let name = svc.get("name").and_then(|n| n.as_str()).unwrap_or(key);
@@ -144,7 +146,9 @@ impl LazypyttsSource {
             debug!("LazyPy TTS returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         if body.get("success").and_then(|s| s.as_bool()) != Some(true) {
             debug!("LazyPy TTS reported failure: {}", body);
             return None;

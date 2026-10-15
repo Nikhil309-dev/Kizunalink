@@ -66,7 +66,9 @@ impl PinterestSource {
             debug!("Pinterest returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = response.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+            .await
+            .ok()?;
         body.get("resource_response")?.get("data").cloned()
     }
 
