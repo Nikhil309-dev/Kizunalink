@@ -70,6 +70,11 @@ pub async fn set_categories(
 
     let mut player = player_arc.write().await;
     player.config.sponsorblock.categories = cleaned.clone();
+    // `DELETE .../categories` clears this flag to disable skipping. Re-enable it
+    // here: the plugin REST contract is that a PUT installs a non-empty category
+    // set, and without this a client that ever cleared the list could never turn
+    // skipping back on (the operator's `enabled` default only seeds new players).
+    player.config.sponsorblock.enabled = !cleaned.is_empty();
     (StatusCode::OK, Json(cleaned)).into_response()
 }
 
@@ -88,36 +93,6 @@ fn clean_categories(body: Vec<String>) -> Vec<String> {
         })
         .filter(|c| seen.insert(c.clone()))
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::clean_categories;
-
-    #[test]
-    fn keeps_only_known_categories() {
-        let out = clean_categories(vec!["sponsor".into(), "not-a-category".into()]);
-        assert_eq!(out, vec!["sponsor".to_string()]);
-    }
-
-    #[test]
-    fn collapses_duplicates_so_the_stored_set_stays_bounded() {
-        // A caller can repeat a known category as many times as the 8 MiB body
-        // allows; the stored list must not grow with it.
-        let out = clean_categories(vec!["sponsor".into(); 100_000]);
-        assert_eq!(out, vec!["sponsor".to_string()]);
-    }
-
-    #[test]
-    fn preserves_order_of_first_occurrence() {
-        let out = clean_categories(vec![
-            "intro".into(),
-            "sponsor".into(),
-            "intro".into(),
-            "outro".into(),
-        ]);
-        assert_eq!(out, vec!["intro", "sponsor", "outro"]);
-    }
 }
 
 /// DELETE /v4/sessions/{sessionId}/players/{guildId}/sponsorblock/categories
@@ -179,4 +154,77 @@ pub async fn get_segments(
     let player = player_arc.read().await;
     let segments = player.sponsorblock.segments.read().await.clone();
     (StatusCode::OK, Json(segments)).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clean_categories;
+
+    /// Mirrors what `set_categories` writes to the player for a cleaned body, so
+    /// the round-trip with `delete_categories` can be asserted without an HTTP
+    /// harness.
+    fn put(cfg: &mut audium::config::player::SponsorBlockConfig, body: Vec<String>) {
+        let cleaned = clean_categories(body);
+        cfg.categories = cleaned.clone();
+        cfg.enabled = !cleaned.is_empty();
+    }
+
+    fn delete(cfg: &mut audium::config::player::SponsorBlockConfig) {
+        cfg.categories.clear();
+        cfg.enabled = false;
+    }
+
+    #[test]
+    fn keeps_only_known_categories() {
+        let out = clean_categories(vec!["sponsor".into(), "not-a-category".into()]);
+        assert_eq!(out, vec!["sponsor".to_string()]);
+    }
+
+    #[test]
+    fn collapses_duplicates_so_the_stored_set_stays_bounded() {
+        // A caller can repeat a known category as many times as the 8 MiB body
+        // allows; the stored list must not grow with it.
+        let out = clean_categories(vec!["sponsor".into(); 100_000]);
+        assert_eq!(out, vec!["sponsor".to_string()]);
+    }
+
+    #[test]
+    fn preserves_order_of_first_occurrence() {
+        let out = clean_categories(vec![
+            "intro".into(),
+            "sponsor".into(),
+            "intro".into(),
+            "outro".into(),
+        ]);
+        assert_eq!(out, vec!["intro", "sponsor", "outro"]);
+    }
+
+    #[test]
+    fn delete_then_put_turns_skipping_back_on() {
+        let mut cfg = audium::config::player::SponsorBlockConfig {
+            enabled: true,
+            ..Default::default()
+        };
+
+        delete(&mut cfg);
+        assert!(!cfg.enabled, "DELETE must disable skipping");
+
+        put(&mut cfg, vec!["sponsor".into()]);
+        assert_eq!(cfg.categories, vec!["sponsor".to_string()]);
+        assert!(
+            cfg.enabled,
+            "PUT of a non-empty category set must re-enable skipping"
+        );
+    }
+
+    #[test]
+    fn put_of_only_unknown_categories_leaves_skipping_disabled() {
+        let mut cfg = audium::config::player::SponsorBlockConfig::default();
+        put(&mut cfg, vec!["bogus".into()]);
+        assert!(cfg.categories.is_empty());
+        assert!(
+            !cfg.enabled,
+            "an empty cleaned set must not enable skipping"
+        );
+    }
 }
