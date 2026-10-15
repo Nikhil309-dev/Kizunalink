@@ -287,7 +287,8 @@ pub async fn youtube_stream(
             }
         };
 
-        let (start, end) = parse_range_header(headers.get(header::RANGE), content_length);
+        let (start, end) = parse_range_header(headers.get(header::RANGE), content_length)
+            .unwrap_or((0, content_length.saturating_sub(1)));
         final_url
             .query_pairs_mut()
             .append_pair("range", &format!("{}-{}", start, end));
@@ -457,33 +458,115 @@ fn find_format_by_itag<'a>(
         })
 }
 
+/// Parses a single-range `bytes=` header into a clamped inclusive `[start, end]`.
+///
+/// Returns `None` for absent, unparseable, or unsatisfiable ranges so callers
+/// fall back to the full `[0, content_length - 1]` range rather than forwarding
+/// a malformed range upstream. Open-ended (`bytes=1000-`) and suffix
+/// (`bytes=-500`) forms are supported.
 fn parse_range_header(
     range_header: Option<&axum::http::HeaderValue>,
     content_length: u64,
-) -> (u64, u64) {
-    let Some(range_val) = range_header.and_then(|v| v.to_str().ok()) else {
-        return (0, content_length.saturating_sub(1));
-    };
+) -> Option<(u64, u64)> {
+    let last = content_length.checked_sub(1)?;
+    let range_val = range_header?.to_str().ok()?;
 
-    let regex = regex::Regex::new(r"bytes=(\d+)-(\d+)?").expect("invalid regex");
-    if let Some(caps) = regex.captures(range_val) {
-        let start = caps
-            .get(1)
-            .and_then(|m| m.as_str().parse::<u64>().ok())
-            .unwrap_or(0);
-        let end = caps
-            .get(2)
-            .and_then(|m| m.as_str().parse::<u64>().ok())
-            .unwrap_or(content_length.saturating_sub(1));
-        (start, end)
-    } else {
-        (0, content_length.saturating_sub(1))
+    let regex = regex::Regex::new(r"^bytes=(\d*)-(\d*)$").expect("invalid regex");
+    let caps = regex.captures(range_val.trim())?;
+    let start_str = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+    let end_str = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+
+    // A suffix range (`bytes=-N`) requests the final N bytes.
+    if start_str.is_empty() {
+        if end_str.is_empty() {
+            return None;
+        }
+        let suffix = end_str.parse::<u64>().ok()?;
+        if suffix == 0 {
+            return None;
+        }
+        return Some((content_length.saturating_sub(suffix).min(last), last));
     }
+
+    let start = start_str.parse::<u64>().ok()?;
+    if start > last {
+        return None;
+    }
+    // Clamp the end to the last byte; RFC 9110 treats an over-long end as the
+    // end of the representation, and an absent end as "to the end".
+    let end = match end_str.parse::<u64>() {
+        Ok(end) => end.min(last),
+        Err(_) => last,
+    };
+    if end < start {
+        return None;
+    }
+    Some((start, end))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::is_valid_video_id;
+    use super::{is_valid_video_id, parse_range_header};
+    use axum::http::HeaderValue;
+
+    fn range(value: &str) -> Option<HeaderValue> {
+        HeaderValue::from_str(value).ok()
+    }
+
+    #[test]
+    fn absent_range_falls_back_to_the_caller_default() {
+        // The caller substitutes the full `[0, len - 1]` range on `None`.
+        assert_eq!(parse_range_header(None, 1000), None);
+    }
+
+    #[test]
+    fn parses_bounded_open_and_suffix_ranges() {
+        assert_eq!(
+            parse_range_header(range("bytes=0-499").as_ref(), 1000),
+            Some((0, 499))
+        );
+        assert_eq!(
+            parse_range_header(range("bytes=500-").as_ref(), 1000),
+            Some((500, 999))
+        );
+        assert_eq!(
+            parse_range_header(range("bytes=-200").as_ref(), 1000),
+            Some((800, 999))
+        );
+    }
+
+    #[test]
+    fn clamps_an_over_long_end_to_the_last_byte() {
+        // RFC 9110: an end past the representation means "to the end".
+        assert_eq!(
+            parse_range_header(range("bytes=900-99999").as_ref(), 1000),
+            Some((900, 999))
+        );
+    }
+
+    #[test]
+    fn rejects_unsatisfiable_or_malformed_ranges() {
+        // Start past the end.
+        assert_eq!(
+            parse_range_header(range("bytes=5000-6000").as_ref(), 1000),
+            None
+        );
+        // Inverted.
+        assert_eq!(
+            parse_range_header(range("bytes=800-100").as_ref(), 1000),
+            None
+        );
+        // Zero-length suffix and garbage.
+        assert_eq!(parse_range_header(range("bytes=-0").as_ref(), 1000), None);
+        assert_eq!(parse_range_header(range("bytes=abc").as_ref(), 1000), None);
+        // Multiple ranges are not supported; fall back to the full range.
+        assert_eq!(
+            parse_range_header(range("bytes=0-1,5-6").as_ref(), 1000),
+            None
+        );
+        // Empty representation has no satisfiable range.
+        assert_eq!(parse_range_header(None, 0), None);
+    }
 
     #[test]
     fn accepts_well_formed_video_ids() {
