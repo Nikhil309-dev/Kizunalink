@@ -127,7 +127,7 @@ impl YouTubeClient for TvEmbeddedClient {
             return Err(format!("TvEmbedded search failed: {}", res.status()).into());
         }
 
-        let response: Value = res.json().await?;
+        let response: Value = crate::common::http::read_json_capped::<Value>(res).await?;
         let mut tracks = Vec::new();
 
         if let Some(sections) = response

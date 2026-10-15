@@ -151,7 +151,7 @@ impl YouTubeClient for WebClient {
             return Err(format!("Web search failed: {}", res.status()).into());
         }
 
-        let response: Value = res.json().await?;
+        let response: Value = crate::common::http::read_json_capped::<Value>(res).await?;
         let mut tracks = Vec::new();
 
         if let Some(section_list) = find_section_list(&response)
@@ -238,7 +238,7 @@ impl YouTubeClient for WebClient {
             return Ok(None);
         }
 
-        let response: Value = res.json().await?;
+        let response: Value = crate::common::http::read_json_capped::<Value>(res).await?;
         Ok(crate::media::sources::youtube::extractor::extract_from_next(&response, "youtube"))
     }
 

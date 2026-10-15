@@ -630,7 +630,7 @@ pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Va
         )));
     }
 
-    Ok(res.json().await?)
+    Ok(crate::common::http::read_json_capped::<Value>(res).await?)
 }
 
 pub async fn make_next_request(
@@ -683,7 +683,7 @@ pub async fn make_next_request(
         return Err(format!("Next request failed (status={}): {}", status, text).into());
     }
 
-    Ok(res.json().await?)
+    Ok(crate::common::http::read_json_capped::<Value>(res).await?)
 }
 
 #[cfg(test)]

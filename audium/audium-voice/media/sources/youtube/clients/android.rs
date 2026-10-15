@@ -248,7 +248,7 @@ impl YouTubeClient for AndroidClient {
             return Ok(None);
         }
 
-        let response: Value = res.json().await?;
+        let response: Value = crate::common::http::read_json_capped::<Value>(res).await?;
         Ok(crate::media::sources::youtube::extractor::extract_from_next(&response, "youtube"))
     }
 

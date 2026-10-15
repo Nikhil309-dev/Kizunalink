@@ -65,7 +65,7 @@ impl AmazonMusicClient {
             return None;
         }
 
-        let config: Value = match resp.json().await {
+        let config: Value = match crate::common::http::read_json_capped::<Value>(resp).await {
             Ok(v) => v,
             Err(e) => {
                 debug!("Amazon Music: config JSON parse error: {e}");

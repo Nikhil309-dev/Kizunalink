@@ -341,7 +341,7 @@ impl MixcloudSource {
             Err(_) => return LoadResult::Empty {},
         };
 
-        let body: Value = match resp.json().await {
+        let body: Value = match crate::common::http::read_json_capped::<Value>(resp).await {
             Ok(v) => v,
             Err(_) => return LoadResult::Empty {},
         };

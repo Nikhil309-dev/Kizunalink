@@ -152,7 +152,7 @@ impl YouTubeOAuth {
             .send()
             .await?;
 
-        Ok(res.json().await?)
+        Ok(crate::common::http::read_json_capped::<Value>(res).await?)
     }
 
     /// Device-flow poll cadence. Google returns `interval` in seconds; a zero
@@ -243,7 +243,7 @@ impl YouTubeOAuth {
             .send()
             .await?;
 
-        Ok(res.json().await?)
+        Ok(crate::common::http::read_json_capped::<Value>(res).await?)
     }
 
     pub async fn get_access_token(&self, idx: usize) -> Option<String> {

@@ -61,7 +61,9 @@ impl SpotifyHelpers {
             return None;
         }
 
-        resp.json().await.ok()
+        crate::common::http::read_json_capped::<Value>(resp)
+            .await
+            .ok()
     }
 
     #[allow(clippy::too_many_arguments)]

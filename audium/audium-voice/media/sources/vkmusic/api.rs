@@ -88,7 +88,9 @@ impl VkApiClient {
             return None;
         }
 
-        resp.json().await.ok()
+        crate::common::http::read_json_capped::<Value>(resp)
+            .await
+            .ok()
     }
 
     async fn acquire_token(&self) -> Option<String> {
@@ -117,7 +119,9 @@ impl VkApiClient {
             .await
             .ok()?;
 
-        let body: Value = resp.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<Value>(resp)
+            .await
+            .ok()?;
 
         if body.get("type").and_then(|t| t.as_str()) != Some("okay") {
             error!(

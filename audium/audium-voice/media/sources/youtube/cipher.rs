@@ -116,7 +116,7 @@ impl YouTubeCipherManager {
                 .await?;
 
             if res.status() == 200 {
-                let body: Value = res.json().await?;
+                let body: Value = crate::common::http::read_json_capped::<Value>(res).await?;
                 if let Some(sts) = body.get("sts").and_then(|v| v.as_str()) {
                     return Ok(sts.to_string());
                 } else {
@@ -195,7 +195,7 @@ impl YouTubeCipherManager {
 
         let status = res.status();
         if status == 200 {
-            let body: Value = res.json().await?;
+            let body: Value = crate::common::http::read_json_capped::<Value>(res).await?;
             if let Some(resolved) = body.get("resolved_url").and_then(|v| v.as_str()) {
                 return Ok(resolved.to_string());
             }
