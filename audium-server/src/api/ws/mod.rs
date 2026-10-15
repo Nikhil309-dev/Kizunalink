@@ -26,19 +26,16 @@ pub async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, (StatusCode, &'static str)> {
-    // 1. Authorization Check
-    let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok());
-    let Some(auth) = auth_header else {
-        warn!("Authorization failed: Missing Authorization header");
-        return Err((StatusCode::UNAUTHORIZED, "Unauthorized"));
-    };
-
-    use subtle::ConstantTimeEq;
-    if !bool::from(
-        auth.as_bytes()
-            .ct_eq(state.config.server.authorization.as_bytes()),
-    ) {
-        warn!("Authorization failed: Invalid password provided");
+    // 1. Authorization Check. The comparison is the shared constant-time helper
+    // also used by the REST middleware and `/health`; a missing header and a
+    // wrong secret are both 401 here (Lavalink's WS handshake does not split the
+    // two, unlike REST).
+    if !crate::health::is_authorized(&state, &headers) {
+        if headers.contains_key("authorization") {
+            warn!("Authorization failed: Invalid password provided");
+        } else {
+            warn!("Authorization failed: Missing Authorization header");
+        }
         return Err((StatusCode::UNAUTHORIZED, "Unauthorized"));
     }
 

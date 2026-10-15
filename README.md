@@ -358,7 +358,7 @@ flowchart TD
 
 ## REST and WebSocket API
 
-`/v4/*` and enabled metrics require the `Authorization` header. `/health` is unauthenticated. The metrics path is configurable.
+`/v4/*` and enabled metrics require the `Authorization` header. `/health` answers unauthenticated with `{"status":"ok"}`; send the header to also receive `uptimeMs` and the current `players` count. The metrics path is configurable.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -366,7 +366,7 @@ flowchart TD
 | `GET` | `/v4/info` | Version, sources, and filters |
 | `GET` | `/v4/stats` | Node statistics |
 | `GET` | `/v4/loadtracks?identifier=` | Search or resolve a track |
-| `GET` | `/v4/loadsearch?identifier=` | Search extension |
+| `GET` | `/v4/loadsearch?query=&types=` | Multi-type search extension (Audium-only) |
 | `GET` | `/v4/decodetrack?encodedTrack=` | Decode one track |
 | `POST` | `/v4/decodetracks` | Decode multiple tracks |
 | `GET` | `/v4/sessions/{session}/players` | List players |

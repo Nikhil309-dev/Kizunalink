@@ -239,6 +239,31 @@ mod tests {
     }
 
     #[test]
+    fn search_result_wire_shape_is_pinned() {
+        // `/v4/loadsearch` is an Audium-only extension (upstream Lavalink has no
+        // such route and NodeLink does not implement one), so its contract is
+        // ours to define and must not drift silently. Pin the six top-level keys
+        // and their camelCase names; `from_tracks_fills_only_tracks` covers the
+        // empty-array requirement for the collections.
+        let empty = SearchResult::from_tracks(Vec::new());
+        let v = serde_json::to_value(&empty).unwrap();
+        let obj = v.as_object().expect("SearchResult serializes as an object");
+        let mut keys: Vec<&str> = obj.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "albums",
+                "artists",
+                "playlists",
+                "plugin",
+                "texts",
+                "tracks"
+            ]
+        );
+    }
+
+    #[test]
     fn empty_load_result_serializes_null_data() {
         let json = serde_json::to_string(&LoadResult::Empty {}).unwrap();
         assert_eq!(json, r#"{"loadType":"empty","data":null}"#);
