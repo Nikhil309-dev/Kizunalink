@@ -94,7 +94,7 @@ Metadata-only results may require a playable mirror. See [config.example.toml](.
 
 ## Quick start
 
-The commands below use the **hardening branch** so the configuration and build match this README. For a tagged release, use the matching tag and configuration instead.
+The commands below clone `main`, so the configuration and build match this README. For a tagged release, use the matching tag and configuration instead.
 
 ### 1. Get the project
 
