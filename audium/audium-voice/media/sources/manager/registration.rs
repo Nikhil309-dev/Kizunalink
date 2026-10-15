@@ -37,11 +37,13 @@ use crate::{
         newgrounds::NewgroundsSource,
         telegram::TelegramSource,
         bilibili::BilibiliSource,
+        instagram::InstagramSource,
         googledrive::GoogleDriveSource,
         nicovideo::NicovideoSource,
         lazypytts::LazypyttsSource,
         pinterest::PinterestSource,
         songlink::SonglinkSource,
+        twitter::TwitterSource,
         tiktok::TiktokSource,
         vimeo::VimeoSource,
         tumblr::TumblrSource,
@@ -427,6 +429,8 @@ fn register_core_sources(
 
     register_simple!(config.sources.bilibili, "Bilibili", BilibiliSource::new);
     register_simple!(config.sources.nicovideo, "NicoVideo", NicovideoSource::new);
+    register_simple!(config.sources.instagram, "Instagram", InstagramSource::new);
+    register_simple!(config.sources.twitter, "Twitter", TwitterSource::new);
     register_simple!(config.sources.pinterest, "Pinterest", PinterestSource::new);
     register_simple!(
         config.sources.googledrive,

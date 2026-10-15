@@ -40,6 +40,8 @@ pub mod kwai;
 pub mod newgrounds;
 pub mod telegram;
 pub mod tumblr;
+pub mod instagram;
+pub mod twitter;
 pub mod bilibili;
 pub mod nicovideo;
 pub mod googledrive;

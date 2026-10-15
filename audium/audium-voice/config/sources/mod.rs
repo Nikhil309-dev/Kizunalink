@@ -33,6 +33,8 @@ pub mod kwai;
 pub mod newgrounds;
 pub mod telegram;
 pub mod tumblr;
+pub mod instagram;
+pub mod twitter;
 pub mod bilibili;
 pub mod nicovideo;
 pub mod googledrive;
@@ -76,6 +78,8 @@ pub use kwai::*;
 pub use newgrounds::*;
 pub use telegram::*;
 pub use tumblr::*;
+pub use instagram::*;
+pub use twitter::*;
 pub use bilibili::*;
 pub use nicovideo::*;
 pub use googledrive::*;
@@ -141,6 +145,8 @@ pub struct SourcesConfig {
     pub vimeo: Option<VimeoConfig>,
     pub bilibili: Option<BilibiliConfig>,
     pub nicovideo: Option<NicovideoConfig>,
+    pub instagram: Option<InstagramConfig>,
+    pub twitter: Option<TwitterConfig>,
 }
 
 pub fn default_true() -> bool {
