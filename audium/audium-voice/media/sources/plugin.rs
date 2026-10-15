@@ -93,4 +93,23 @@ pub trait SourcePlugin: Send + Sync {
     fn is_mirror(&self) -> bool {
         false
     }
+
+    /// Rewrites an identifier this source recognizes into one or more
+    /// identifiers that other sources can load (the equivalent of Lavalink's
+    /// `translate`).
+    ///
+    /// Used by resolver sources such as `songlink` and `genius`, which identify
+    /// content that lives on a *different* platform and therefore cannot answer
+    /// with a playable track themselves. The returned candidates are tried in
+    /// order; the manager re-dispatches each from the top of the source list
+    /// and stops at the first non-empty result.
+    ///
+    /// Returning an empty vector (the default) means "load this myself".
+    async fn translate(
+        &self,
+        _identifier: &str,
+        _routeplanner: Option<Arc<dyn RoutePlanner>>,
+    ) -> Vec<String> {
+        Vec::new()
+    }
 }

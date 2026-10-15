@@ -33,6 +33,11 @@ pub mod kwai;
 pub mod newgrounds;
 pub mod telegram;
 pub mod tumblr;
+pub mod googledrive;
+pub mod lazypytts;
+pub mod pinterest;
+pub mod songlink;
+pub mod vimeo;
 pub mod tiktok;
 pub mod twitch;
 pub mod vkmusic;
@@ -69,6 +74,11 @@ pub use kwai::*;
 pub use newgrounds::*;
 pub use telegram::*;
 pub use tumblr::*;
+pub use googledrive::*;
+pub use lazypytts::*;
+pub use pinterest::*;
+pub use songlink::*;
+pub use vimeo::*;
 pub use tiktok::*;
 pub use twitch::*;
 pub use vkmusic::*;
@@ -120,6 +130,11 @@ pub struct SourcesConfig {
     pub newgrounds: Option<NewgroundsConfig>,
     pub kwai: Option<KwaiConfig>,
     pub telegram: Option<TelegramConfig>,
+    pub googledrive: Option<GoogleDriveConfig>,
+    pub lazypytts: Option<LazypyttsConfig>,
+    pub pinterest: Option<PinterestConfig>,
+    pub songlink: Option<SonglinkConfig>,
+    pub vimeo: Option<VimeoConfig>,
 }
 
 pub fn default_true() -> bool {

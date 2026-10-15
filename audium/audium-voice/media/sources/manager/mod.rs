@@ -73,27 +73,81 @@ impl SourceManager {
 
 impl SourceManager {
     /// Load tracks using the first matching source that can handle the identifier.
+    ///
+    /// Resolver sources (`songlink`, `genius`, …) do not serve media directly;
+    /// they return candidate identifiers from [`SourcePlugin::translate`], each
+    /// of which is dispatched from the top of the list until one produces a
+    /// result. Recursion is bounded so mutually-translating sources cannot loop.
     pub async fn load(
         &self,
         identifier: &str,
         routeplanner: Option<Arc<dyn crate::lavalink::routeplanner::RoutePlanner>>,
     ) -> crate::lavalink::protocol::tracks::LoadResult {
-        for source in &self.sources {
-            if source.can_handle(identifier) {
-                tracing::debug!(
-                    "SourceManager: Loading '{}' with source: {}",
-                    identifier,
-                    source.name()
-                );
+        self.load_with_depth(identifier, routeplanner, 0).await
+    }
+
+    /// Shared body of [`Self::load`]; `depth` counts translate hops.
+    fn load_with_depth<'a>(
+        &'a self,
+        identifier: &'a str,
+        routeplanner: Option<Arc<dyn crate::lavalink::routeplanner::RoutePlanner>>,
+        depth: usize,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = crate::lavalink::protocol::tracks::LoadResult,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            use crate::lavalink::protocol::tracks::LoadResult;
+
+            const MAX_TRANSLATIONS: usize = 4;
+            let Some(source) = self.sources.iter().find(|s| s.can_handle(identifier)) else {
+                tracing::debug!("SourceManager: No source matched identifier: '{}'", identifier);
+                return LoadResult::Empty {};
+            };
+
+            tracing::debug!(
+                "SourceManager: Loading '{}' with source: {}",
+                identifier,
+                source.name()
+            );
+
+            let candidates = source.translate(identifier, routeplanner.clone()).await;
+            if candidates.is_empty() {
                 return source.load(identifier, routeplanner.clone()).await;
             }
-        }
 
-        tracing::debug!(
-            "SourceManager: No source matched identifier: '{}'",
-            identifier
-        );
-        crate::lavalink::protocol::tracks::LoadResult::Empty {}
+            if depth >= MAX_TRANSLATIONS {
+                tracing::warn!(
+                    "SourceManager: translation limit reached for '{}'; returning empty",
+                    identifier
+                );
+                return LoadResult::Empty {};
+            }
+
+            for candidate in candidates {
+                if candidate == identifier {
+                    continue;
+                }
+                tracing::debug!(
+                    "SourceManager: {} translated '{}' -> '{}'",
+                    source.name(),
+                    identifier,
+                    candidate
+                );
+                let result = self
+                    .load_with_depth(&candidate, routeplanner.clone(), depth + 1)
+                    .await;
+                if !matches!(result, LoadResult::Empty {}) {
+                    return result;
+                }
+            }
+
+            LoadResult::Empty {}
+        })
     }
 
     /// Perform a search across available sources.

@@ -36,7 +36,12 @@ use crate::{
         kwai::KwaiSource,
         newgrounds::NewgroundsSource,
         telegram::TelegramSource,
+        googledrive::GoogleDriveSource,
+        lazypytts::LazypyttsSource,
+        pinterest::PinterestSource,
+        songlink::SonglinkSource,
         tiktok::TiktokSource,
+        vimeo::VimeoSource,
         tumblr::TumblrSource,
         twitch::TwitchSource,
         vkmusic::VkMusicSource,
@@ -417,6 +422,17 @@ fn register_core_sources(
         "Telegram",
         TelegramSource::new
     );
+
+    register_simple!(config.sources.pinterest, "Pinterest", PinterestSource::new);
+    register_simple!(
+        config.sources.googledrive,
+        "Google Drive",
+        GoogleDriveSource::new
+    );
+    register_simple!(config.sources.lazypytts, "LazyPy TTS", LazypyttsSource::new);
+    // Songlink is a cross-platform resolver: it never serves media itself.
+    register_simple!(config.sources.songlink, "Songlink", SonglinkSource::new);
+    register_simple!(config.sources.vimeo, "Vimeo", VimeoSource::new);
 
     // TikTok handles tiktok.com / vm.tiktok.com video URLs only.
     if let Some(c) = config.sources.tiktok.as_ref()
