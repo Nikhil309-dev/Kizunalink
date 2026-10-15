@@ -149,7 +149,7 @@ Install a stable Rust toolchain and native build dependencies. On Debian/Ubuntu:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake pkg-config clang libclang-dev perl libopus-dev
+sudo apt-get install -y build-essential cmake pkg-config perl libopus-dev
 
 export LIBOPUS_STATIC=1 OPUS_STATIC=1
 cargo build --release --workspace --locked

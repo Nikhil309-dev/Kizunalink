@@ -21,16 +21,10 @@ ignore = [
     "RUSTSEC-2026-0207",
     # RUSTSEC-2026-0208: libcrux-sha3 0.0.8 - Transitive dependency from openmls_rust_crypto -> hpke-rs-libcrux v0.6.1 which pins exact libcrux version.
     "RUSTSEC-2026-0208",
-    # RUSTSEC-2020-0168: mach 0.3.2 - Unmaintained transitive dependency from perf_monitor 0.2.1 (macOS metrics).
-    "RUSTSEC-2020-0168",
     # RUSTSEC-2026-0173: proc-macro-error2 2.0.1 - Unmaintained transitive dependency from hax-lib-macros (libcrux build macro).
     "RUSTSEC-2026-0173",
     # RUSTSEC-2024-0384: instant 0.1.13 - Unmaintained transitive dependency from fluvio-wasm-timer (openmls).
     "RUSTSEC-2024-0384",
-    # RUSTSEC-2021-0139: ansi_term 0.12.1 - Unmaintained transitive dependency via bindgen 0.59 (perf_monitor build-dependency).
-    "RUSTSEC-2021-0139",
-    # RUSTSEC-2024-0375: atty 0.2.14 - Unmaintained transitive dependency via bindgen 0.59 (perf_monitor build-dependency).
-    "RUSTSEC-2024-0375",
 ]
 
 [licenses]
