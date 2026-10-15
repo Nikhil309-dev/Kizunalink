@@ -824,4 +824,52 @@ mod tests {
             "an unedited config.example.toml must fail validation instead of starting"
         );
     }
+
+    /// Every `[sources.<name>]` block must correspond to a real `SourcesConfig`
+    /// field, and — the failure this pins — every `SourcesConfig` field must
+    /// have a block in the example. A source can be fully implemented and
+    /// registered while being absent from the example, leaving operators unable
+    /// to enable it (that happened to tiktok, tumblr, newgrounds, kwai and
+    /// telegram). `serde` silently ignores unknown keys, so nothing else catches
+    /// this drift.
+    #[test]
+    fn every_source_config_field_has_an_example_block() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../config.example.toml");
+        let raw = std::fs::read_to_string(path).expect("config.example.toml is readable");
+
+        let example = cfg_from_toml(&raw);
+
+        // Field names declared in `SourcesConfig`, via serde's own view of it.
+        let sources = serde_json::to_value(&example.sources)
+            .expect("SourcesConfig serializes")
+            .as_object()
+            .expect("SourcesConfig serializes to an object")
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let documented = raw
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("[sources."))
+            .filter_map(|l| l.strip_suffix(']'))
+            // `[sources.youtube.cipher]` is a nested sub-table of `youtube`,
+            // not a source of its own, so only the first segment names a source.
+            .filter_map(|l| l.split('.').next())
+            .map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let undocumented: Vec<_> = sources.difference(&documented).collect();
+        assert!(
+            undocumented.is_empty(),
+            "these SourcesConfig fields have no [sources.*] block in \
+             config.example.toml: {undocumented:?}"
+        );
+
+        let unknown: Vec<_> = documented.difference(&sources).collect();
+        assert!(
+            unknown.is_empty(),
+            "these [sources.*] blocks in config.example.toml match no \
+             SourcesConfig field: {unknown:?}"
+        );
+    }
 }

@@ -423,6 +423,33 @@ enabled = false
 enabled = false
 # proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
 
+[sources.tiktok]
+# Resolves TikTok video links (tiktok.com/@user/video/<id>) and short links
+# (vm.tiktok.com/<code>) to a playable MP4. Also serves `ttsearch:` queries.
+enabled = false
+# search_limit = 10
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.tumblr]
+# Resolves public Tumblr video/audio posts (blog.tumblr.com/post/<id>).
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.newgrounds]
+# Resolves Newgrounds audio pages (newgrounds.com/audio/listen/<id>).
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.kwai]
+# Resolves Kwai video links (kwai.com/video/<id>), including the m. mobile host.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.telegram]
+# Resolves public Telegram post links (t.me/<channel>/<id>) to their media.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
 [lyrics]
 youtubemusic = true
 lrclib = true
