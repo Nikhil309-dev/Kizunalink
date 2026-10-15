@@ -718,4 +718,49 @@ mod tests {
             None => unsafe { std::env::remove_var("AUDIUM_CONFIG_PATH") },
         }
     }
+
+    /// The shipped `config.example.toml` is the first thing a new operator
+    /// copies, and `resolve_config_path` falls back to it when no `config.toml`
+    /// exists. Pin two properties so it cannot rot silently: it must still
+    /// parse into [`AppConfig`], and its `authorization` must remain a
+    /// placeholder that `validate` rejects, so an unchanged copy cannot start.
+    ///
+    /// Note: a *renamed or typo'd* key inside the example is still dropped by
+    /// serde without an error (no `deny_unknown_fields`). Catching that needs
+    /// `serde_ignored`; see the audit report rather than adding a dependency
+    /// for one assertion.
+    #[test]
+    fn shipped_example_config_parses_and_is_not_a_usable_secret() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../config.example.toml");
+        let raw = std::fs::read_to_string(path).expect("config.example.toml is readable");
+
+        let example: AppConfig = toml::from_str(&raw).expect("config.example.toml must parse");
+        assert!(
+            is_insecure_placeholder(&example.server.authorization),
+            "the example must keep a rejected placeholder so an unchanged copy cannot start"
+        );
+
+        // Validate the file as a *fresh copy* would be validated at startup:
+        // with no ambient `AUDIUM_*` overrides in play, so a documented live-node
+        // shell cannot make the assertion pass by accident.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let ambient: Vec<(String, String)> = std::env::vars()
+            .filter(|(k, _)| k.starts_with("AUDIUM_"))
+            .collect();
+        for (k, _) in &ambient {
+            unsafe { std::env::remove_var(k) };
+        }
+
+        let mut copy = example;
+        let result = copy.apply_env_overrides().and_then(|()| copy.validate());
+
+        for (k, v) in ambient {
+            unsafe { std::env::set_var(k, v) };
+        }
+
+        assert!(
+            result.is_err(),
+            "an unedited config.example.toml must fail validation instead of starting"
+        );
+    }
 }
