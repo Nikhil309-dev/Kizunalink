@@ -7,7 +7,10 @@ use dashmap::DashMap;
 use reqwest::{Client, Proxy};
 use tracing::warn;
 
-use crate::{common::utils::default_user_agent, config::sources::HttpProxyConfig};
+use crate::{
+    common::utils::{default_user_agent, redact_url},
+    config::sources::HttpProxyConfig,
+};
 
 /// A pool of `reqwest::Client` instances shared across sources.
 pub struct HttpClientPool {
@@ -57,7 +60,8 @@ impl HttpClientPool {
                     // this fatal because some deployments may intentionally not need proxy.
                     warn!(
                         "HttpClientPool: failed to parse proxy URL '{}': {} — proxy will be ignored",
-                        url, e
+                        redact_url(url),
+                        e
                     );
                 }
             }

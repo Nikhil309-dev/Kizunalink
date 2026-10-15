@@ -132,7 +132,10 @@ impl HlsReader {
         if let Some(ref proxy_cfg) = proxy
             && let Some(ref proxy_url) = proxy_cfg.url
         {
-            tracing::debug!("HLS: configuring proxy: {}", proxy_url);
+            tracing::debug!(
+                "HLS: configuring proxy: {}",
+                crate::common::utils::redact_url(proxy_url)
+            );
             let mut proxy_obj = reqwest::Proxy::all(proxy_url)?;
             if let (Some(user), Some(pass)) = (&proxy_cfg.username, &proxy_cfg.password) {
                 proxy_obj = proxy_obj.basic_auth(user, pass);

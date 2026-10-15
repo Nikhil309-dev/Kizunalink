@@ -109,7 +109,7 @@ impl QobuzTokenTracker {
                 Ok((id, secret)) => {
                     app_id = id;
                     app_secret = secret;
-                    info!("Successfully extracted Qobuz credentials: appId={app_id}");
+                    info!("Successfully extracted Qobuz credentials from bundle.js");
                 }
                 Err(e) => {
                     error!("Failed to extract Qobuz credentials: {e}");

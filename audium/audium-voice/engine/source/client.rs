@@ -10,6 +10,7 @@ use std::{
 use reqwest::{Client, Proxy, header::HeaderMap};
 use tracing::warn;
 
+use crate::common::utils::redact_url;
 use crate::{common::types::AnyResult, config::sources::HttpProxyConfig};
 
 /// Check whether an IP address is in a blocked range (SEC-001).
@@ -218,7 +219,7 @@ pub fn create_client_with_pinning(
                 }
                 builder = builder.proxy(p);
             }
-            Err(e) => warn!("Failed to parse proxy URL '{}': {}", p_url, e),
+            Err(e) => warn!("Failed to parse proxy URL '{}': {}", redact_url(&p_url), e),
         }
     }
 

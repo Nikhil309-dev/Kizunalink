@@ -68,7 +68,10 @@ impl LiveHlsReader {
                         builder = builder.proxy(p);
                     }
                     Err(e) => {
-                        tracing::error!("Twitch live HLS: proxy setup failed for {url}: {e}");
+                        tracing::error!(
+                            "Twitch live HLS: proxy setup failed for {}: {e}",
+                            crate::common::utils::redact_url(url)
+                        );
                         let _ = err_tx.send(format!("Proxy setup failed: {e}"));
                         return;
                     }

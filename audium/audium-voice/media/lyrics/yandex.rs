@@ -36,7 +36,10 @@ impl YandexProvider {
                 client_builder = client_builder.proxy(proxy_obj);
                 tracing::info!("Yandex Lyrics Provider: HTTP Proxy configured");
             } else {
-                tracing::warn!("Yandex Lyrics Provider: Invalid proxy URL: {}", url);
+                tracing::warn!(
+                    "Yandex Lyrics Provider: Invalid proxy URL: {}",
+                    crate::common::utils::redact_url(url)
+                );
             }
         }
 

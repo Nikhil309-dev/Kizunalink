@@ -150,9 +150,110 @@ pub fn default_user_agent() -> String {
     DEFAULT_USER_AGENT.to_string()
 }
 
+/// Strips credentials and token-bearing query parameters from a URL so it can
+/// be logged safely.
+///
+/// Proxy URLs commonly carry `user:pass@host`, and API URLs carry secrets as
+/// query parameters (`api_key`, `token`, `access_token`, …). Both leak into
+/// logs verbatim otherwise. The output keeps the scheme, host, port and path so
+/// the line is still useful for debugging.
+pub fn redact_url(raw: &str) -> String {
+    let Some((scheme, rest)) = raw.split_once("://") else {
+        return "<redacted-url>".to_string();
+    };
+    // Split authority from path/query/fragment.
+    let (authority, tail) = match rest.find(['/', '?', '#']) {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, ""),
+    };
+    // Drop `user:pass@` from the authority if present.
+    let host = match authority.rsplit_once('@') {
+        Some((_, host)) => host,
+        None => authority,
+    };
+    let host = if authority.contains('@') {
+        format!("<redacted>@{host}")
+    } else {
+        host.to_string()
+    };
+
+    let tail = redact_query(tail);
+    format!("{scheme}://{host}{tail}")
+}
+
+/// Redacts the value of any known-sensitive query parameter in a
+/// `?a=b&c=d`-style tail, leaving the rest of the URL intact.
+fn redact_query(tail: &str) -> String {
+    const SENSITIVE: [&str; 12] = [
+        "api_key",
+        "apikey",
+        "access_token",
+        "refresh_token",
+        "token",
+        "secret",
+        "client_secret",
+        "app_secret",
+        "password",
+        "passwd",
+        "key",
+        "sig",
+    ];
+
+    let Some(qpos) = tail.find('?') else {
+        return tail.to_string();
+    };
+    let (path, query) = tail.split_at(qpos);
+    let query = &query[1..];
+
+    let redacted: Vec<String> = query
+        .split('&')
+        .map(|pair| match pair.split_once('=') {
+            Some((k, _)) if SENSITIVE.contains(&k.to_ascii_lowercase().as_str()) => {
+                format!("{k}=REDACTED")
+            }
+            _ => pair.to_string(),
+        })
+        .collect();
+    format!("{path}?{}", redacted.join("&"))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::truncate_chars;
+    use super::{redact_url, truncate_chars};
+
+    #[test]
+    fn redact_url_drops_userinfo_but_keeps_host_and_path() {
+        assert_eq!(
+            redact_url("http://user:s3cret@proxy.example:8080/path"),
+            "http://<redacted>@proxy.example:8080/path"
+        );
+        assert_eq!(
+            redact_url("https://alice:hunter2@proxy.internal"),
+            "https://<redacted>@proxy.internal"
+        );
+    }
+
+    #[test]
+    fn redact_url_masks_sensitive_query_parameters() {
+        assert_eq!(
+            redact_url("https://api.example/ws?api_key=abc123&user=bob"),
+            "https://api.example/ws?api_key=REDACTED&user=bob"
+        );
+        assert_eq!(
+            redact_url("https://x.example/p?access_token=t&client_secret=s&q=ok"),
+            "https://x.example/p?access_token=REDACTED&client_secret=REDACTED&q=ok"
+        );
+    }
+
+    #[test]
+    fn redact_url_leaves_clean_urls_intact() {
+        assert_eq!(
+            redact_url("https://api.example/v1/track/42"),
+            "https://api.example/v1/track/42"
+        );
+        // A non-URL has no scheme, so nothing but a placeholder is safe.
+        assert_eq!(redact_url("not a url"), "<redacted-url>");
+    }
 
     #[test]
     fn truncate_chars_never_splits_a_multibyte_character() {
