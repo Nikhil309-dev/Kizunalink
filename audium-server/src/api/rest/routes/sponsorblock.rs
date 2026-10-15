@@ -66,18 +66,58 @@ pub async fn set_categories(
             .into_response();
     };
 
-    let cleaned: Vec<String> = body
-        .into_iter()
+    let cleaned = clean_categories(body);
+
+    let mut player = player_arc.write().await;
+    player.config.sponsorblock.categories = cleaned.clone();
+    (StatusCode::OK, Json(cleaned)).into_response()
+}
+
+/// Keep only known SponsorBlock categories, de-duplicated.
+///
+/// The request body is bounded only by `server.max_body_bytes` (8 MiB), so a
+/// client can send a long run of duplicate names. Filtering to the known set and
+/// de-duplicating bounds the stored category list to `KNOWN_CATEGORIES.len()`.
+fn clean_categories(body: Vec<String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    body.into_iter()
         .filter(|c| {
             audium::lavalink::sponsorblock::KNOWN_CATEGORIES
                 .iter()
                 .any(|k| k == c)
         })
-        .collect();
+        .filter(|c| seen.insert(c.clone()))
+        .collect()
+}
 
-    let mut player = player_arc.write().await;
-    player.config.sponsorblock.categories = cleaned.clone();
-    (StatusCode::OK, Json(cleaned)).into_response()
+#[cfg(test)]
+mod tests {
+    use super::clean_categories;
+
+    #[test]
+    fn keeps_only_known_categories() {
+        let out = clean_categories(vec!["sponsor".into(), "not-a-category".into()]);
+        assert_eq!(out, vec!["sponsor".to_string()]);
+    }
+
+    #[test]
+    fn collapses_duplicates_so_the_stored_set_stays_bounded() {
+        // A caller can repeat a known category as many times as the 8 MiB body
+        // allows; the stored list must not grow with it.
+        let out = clean_categories(vec!["sponsor".into(); 100_000]);
+        assert_eq!(out, vec!["sponsor".to_string()]);
+    }
+
+    #[test]
+    fn preserves_order_of_first_occurrence() {
+        let out = clean_categories(vec![
+            "intro".into(),
+            "sponsor".into(),
+            "intro".into(),
+            "outro".into(),
+        ]);
+        assert_eq!(out, vec!["intro", "sponsor", "outro"]);
+    }
 }
 
 /// DELETE /v4/sessions/{sessionId}/players/{guildId}/sponsorblock/categories
