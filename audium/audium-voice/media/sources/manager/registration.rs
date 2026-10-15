@@ -36,7 +36,9 @@ use crate::{
         kwai::KwaiSource,
         newgrounds::NewgroundsSource,
         telegram::TelegramSource,
+        bilibili::BilibiliSource,
         googledrive::GoogleDriveSource,
+        nicovideo::NicovideoSource,
         lazypytts::LazypyttsSource,
         pinterest::PinterestSource,
         songlink::SonglinkSource,
@@ -423,6 +425,8 @@ fn register_core_sources(
         TelegramSource::new
     );
 
+    register_simple!(config.sources.bilibili, "Bilibili", BilibiliSource::new);
+    register_simple!(config.sources.nicovideo, "NicoVideo", NicovideoSource::new);
     register_simple!(config.sources.pinterest, "Pinterest", PinterestSource::new);
     register_simple!(
         config.sources.googledrive,
