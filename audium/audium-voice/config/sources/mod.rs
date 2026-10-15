@@ -29,6 +29,11 @@ pub mod shazam;
 pub mod soundcloud;
 pub mod spotify;
 pub mod tidal;
+pub mod kwai;
+pub mod newgrounds;
+pub mod telegram;
+pub mod tumblr;
+pub mod tiktok;
 pub mod twitch;
 pub mod vkmusic;
 pub mod yandexmusic;
@@ -60,6 +65,11 @@ pub use shazam::*;
 pub use soundcloud::*;
 pub use spotify::*;
 pub use tidal::*;
+pub use kwai::*;
+pub use newgrounds::*;
+pub use telegram::*;
+pub use tumblr::*;
+pub use tiktok::*;
 pub use twitch::*;
 pub use vkmusic::*;
 pub use yandexmusic::*;
@@ -105,6 +115,11 @@ pub struct SourcesConfig {
     pub rss: Option<RssConfig>,
     pub iheartradio: Option<IheartradioConfig>,
     pub bluesky: Option<BlueskyConfig>,
+    pub tiktok: Option<TiktokConfig>,
+    pub tumblr: Option<TumblrConfig>,
+    pub newgrounds: Option<NewgroundsConfig>,
+    pub kwai: Option<KwaiConfig>,
+    pub telegram: Option<TelegramConfig>,
 }
 
 pub fn default_true() -> bool {

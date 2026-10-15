@@ -33,6 +33,11 @@ use crate::{
         soundcloud::SoundCloudSource,
         spotify::SpotifySource,
         tidal::TidalSource,
+        kwai::KwaiSource,
+        newgrounds::NewgroundsSource,
+        telegram::TelegramSource,
+        tiktok::TiktokSource,
+        tumblr::TumblrSource,
         twitch::TwitchSource,
         vkmusic::VkMusicSource,
         yandexmusic::YandexMusicSource,
@@ -67,6 +72,25 @@ fn register_core_sources(
     Option<Arc<YoutubeStreamContext>>,
 ) {
     let mut yt_ctx = (None, None);
+
+    /// Registers a source that takes only `(config, http_client)` and is
+    /// skipped when its config is absent or disabled.
+    macro_rules! register_simple {
+        ($cfg:expr, $name:literal, $ctor:path) => {
+            if let Some(c) = $cfg.as_ref()
+                && c.enabled
+            {
+                let proxy = c.proxy.clone();
+                match $ctor(c.clone(), http_pool.get(proxy)) {
+                    Ok(src) => {
+                        tracing::info!("Loaded source: {}", $name);
+                        sources.push(Box::new(src));
+                    }
+                    Err(e) => tracing::error!("{} source failed to initialize: {}", $name, e),
+                }
+            }
+        };
+    }
 
     macro_rules! register {
         ($enabled:expr, $name:literal, $proxy:expr, $ctor:expr) => {
@@ -373,6 +397,38 @@ fn register_core_sources(
                 sources.push(Box::new(src));
             }
             Err(e) => tracing::error!("iHeartRadio source failed to initialize: {e}"),
+        }
+    }
+
+    // Simple page-scraping sources (each claims only its own URL shape).
+    register_simple!(
+        config.sources.tumblr,
+        "Tumblr",
+        TumblrSource::new
+    );
+    register_simple!(
+        config.sources.newgrounds,
+        "Newgrounds",
+        NewgroundsSource::new
+    );
+    register_simple!(config.sources.kwai, "Kwai", KwaiSource::new);
+    register_simple!(
+        config.sources.telegram,
+        "Telegram",
+        TelegramSource::new
+    );
+
+    // TikTok handles tiktok.com / vm.tiktok.com video URLs only.
+    if let Some(c) = config.sources.tiktok.as_ref()
+        && c.enabled
+    {
+        let proxy = c.proxy.clone();
+        match TiktokSource::new(c.clone(), http_pool.get(proxy.clone())) {
+            Ok(src) => {
+                tracing::info!("Loaded source: TikTok");
+                sources.push(Box::new(src));
+            }
+            Err(e) => tracing::error!("TikTok source failed to initialize: {e}"),
         }
     }
 
