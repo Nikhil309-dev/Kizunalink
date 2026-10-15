@@ -65,7 +65,9 @@ impl DeezerProvider {
                     .await
                     .ok()?;
 
-                let data: Value = resp.json().await.ok()?;
+                let data: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+                    .await
+                    .ok()?;
                 data.get("jwt")
                     .and_then(|t| t.as_str())
                     .map(|s| s.to_string())
@@ -83,7 +85,9 @@ impl DeezerProvider {
             .await
             .ok()?;
 
-        let data: Value = resp.json().await.ok()?;
+        let data: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         data.get("data")
             .and_then(|d| d.as_array())
             .and_then(|a| a.first())
@@ -173,7 +177,9 @@ impl LyricsProvider for DeezerProvider {
             .await
             .ok()?;
 
-        let data: Value = resp.json().await.ok()?;
+        let data: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let lyrics = data
             .get("data")
             .and_then(|d| d.get("track"))

@@ -89,13 +89,14 @@ impl DeezerTokenTracker {
             }
         }
 
-        let body: Value = match resp.json().await {
-            Ok(v) => v,
-            Err(e) => {
-                error!("DeezerTokenTracker: Failed to parse session response: {e}");
-                return None;
-            }
-        };
+        let body: Value =
+            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("DeezerTokenTracker: Failed to parse session response: {e}");
+                    return None;
+                }
+            };
 
         let api_token = body
             .get("results")

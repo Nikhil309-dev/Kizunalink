@@ -86,7 +86,7 @@ impl SpotifyTokenTracker {
             return None;
         }
 
-        let html = match resp.text().await {
+        let html = match crate::common::http::read_text_capped(resp).await {
             Ok(t) => t,
             Err(e) => {
                 error!("Failed to read Spotify embed HTML: {e}");

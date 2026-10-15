@@ -85,7 +85,9 @@ impl PlayableTrack for YandexMusicTrack {
 pub(super) async fn fetch_download_url(client: &Arc<reqwest::Client>, id: &str) -> Option<String> {
     let url = format!("https://api.music.yandex.net/tracks/{}/download-info", id);
     let resp = client.get(url).send().await.ok()?;
-    let data: serde_json::Value = resp.json().await.ok()?;
+    let data: serde_json::Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+        .await
+        .ok()?;
 
     let results = data["result"].as_array()?;
 
@@ -99,7 +101,7 @@ pub(super) async fn fetch_download_url(client: &Arc<reqwest::Client>, id: &str) 
     let download_info_url = best_mp3["downloadInfoUrl"].as_str()?;
 
     let xml_resp = client.get(download_info_url).send().await.ok()?;
-    let xml_text = xml_resp.text().await.ok()?;
+    let xml_text = crate::common::http::read_text_capped(xml_resp).await.ok()?;
 
     let get_tag = |text: &str, tag: &str| -> Option<String> {
         let pattern = format!("<{tag}>(?P<val>[^<]+)</{tag}>");

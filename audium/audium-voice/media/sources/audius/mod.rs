@@ -63,7 +63,9 @@ impl AudiusSource {
             return None;
         }
 
-        let body: Value = resp.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         Some(body["data"].clone())
     }
 

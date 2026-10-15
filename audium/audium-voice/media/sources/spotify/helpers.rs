@@ -61,7 +61,7 @@ impl SpotifyHelpers {
             return None;
         }
 
-        crate::common::http::read_json_capped::<Value>(resp)
+        crate::common::http::read_json_capped::<serde_json::Value>(resp)
             .await
             .ok()
     }

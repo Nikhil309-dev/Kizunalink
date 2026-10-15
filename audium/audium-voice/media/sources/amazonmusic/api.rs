@@ -65,13 +65,14 @@ impl AmazonMusicClient {
             return None;
         }
 
-        let config: Value = match crate::common::http::read_json_capped::<Value>(resp).await {
-            Ok(v) => v,
-            Err(e) => {
-                debug!("Amazon Music: config JSON parse error: {e}");
-                return None;
-            }
-        };
+        let config: Value =
+            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                Ok(v) => v,
+                Err(e) => {
+                    debug!("Amazon Music: config JSON parse error: {e}");
+                    return None;
+                }
+            };
 
         *self.cached_config.write().await = Some(config.clone());
         Some(config)

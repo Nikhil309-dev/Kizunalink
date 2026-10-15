@@ -63,7 +63,7 @@ impl WebEmbeddedClient {
             return None;
         }
 
-        let body = res.text().await.ok()?;
+        let body = crate::common::http::read_text_capped(res).await.ok()?;
         let re = regex::Regex::new(r#""encryptedHostFlags":"([^"]+)""#).ok()?;
         re.captures(&body)
             .and_then(|caps| caps.get(1))
@@ -154,7 +154,8 @@ impl YouTubeClient for WebEmbeddedClient {
             return Err(format!("WebEmbedded search failed: {}", res.status()).into());
         }
 
-        let response: Value = crate::common::http::read_json_capped::<Value>(res).await?;
+        let response: Value =
+            crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
         let mut tracks = Vec::new();
 
         if let Some(sections) = response

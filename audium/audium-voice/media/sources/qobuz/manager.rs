@@ -88,11 +88,13 @@ impl QobuzSource {
         let resp = request.send().await?;
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = crate::common::http::read_text_capped(resp)
+                .await
+                .unwrap_or_default();
             return Err(format!("Qobuz API error ({status}): {body}").into());
         }
 
-        let json: Value = resp.json().await?;
+        let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp).await?;
         Ok(json)
     }
 
@@ -287,7 +289,9 @@ impl QobuzSource {
             return LoadResult::Empty {};
         }
 
-        let json: Value = resp.json().await.unwrap_or(json!({}));
+        let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .unwrap_or(json!({}));
         let items = json["tracks"]["items"].as_array();
         if items.as_ref().map(|a| a.is_empty()).unwrap_or(true) {
             return LoadResult::Empty {};

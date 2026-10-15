@@ -56,7 +56,9 @@ impl BlueskySource {
             debug!("Bluesky API returned HTTP {}", response.status());
             return None;
         }
-        response.json().await.ok()
+        crate::common::http::read_json_capped::<serde_json::Value>(response)
+            .await
+            .ok()
     }
 
     async fn resolve_handle(&self, handle: &str) -> Option<String> {

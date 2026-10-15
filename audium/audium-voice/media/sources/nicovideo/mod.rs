@@ -128,7 +128,7 @@ impl NicovideoSource {
             debug!("NicoVideo watch page returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         body.get("data").cloned()
@@ -254,7 +254,7 @@ impl NicovideoSource {
             return None;
         }
         let cookie = Self::extract_cookie(&response);
-        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         let content_url = body.get("data")?.get("contentUrl")?.as_str()?.to_string();
@@ -335,7 +335,7 @@ impl NicovideoSource {
             debug!("NicoVideo search returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         let items = body.get("data")?.as_array()?;

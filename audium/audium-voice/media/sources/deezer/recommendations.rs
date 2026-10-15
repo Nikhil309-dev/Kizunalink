@@ -49,7 +49,9 @@ impl DeezerSource {
             Err(_) => return LoadResult::Empty {},
         };
 
-        let json: Value = res.json().await.unwrap_or(Value::Null);
+        let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(res)
+            .await
+            .unwrap_or(Value::Null);
         let data = json.get("results").and_then(|r| r.get("data"));
 
         let tracks: Vec<Track> = if let Some(arr) = data.and_then(|d| d.as_array()) {

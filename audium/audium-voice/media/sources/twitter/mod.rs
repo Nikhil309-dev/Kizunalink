@@ -71,7 +71,7 @@ impl TwitterSource {
             .send()
             .await
             .ok()?;
-        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         let value = body.get("guest_token")?.as_str()?.to_string();
@@ -122,7 +122,7 @@ impl TwitterSource {
             debug!("Twitter GraphQL returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         let result = body.get("data")?.get("tweetResult")?.get("result")?;

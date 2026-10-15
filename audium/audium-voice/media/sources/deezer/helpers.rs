@@ -11,7 +11,9 @@ impl DeezerSource {
         match self.client.get(&url).send().await {
             Ok(res) => {
                 if res.status().is_success() {
-                    res.json().await.ok()
+                    crate::common::http::read_json_capped::<serde_json::Value>(res)
+                        .await
+                        .ok()
                 } else {
                     tracing::warn!(
                         "Deezer public API request failed: {url} (Status: {})",

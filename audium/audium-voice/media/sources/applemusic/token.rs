@@ -74,7 +74,9 @@ impl AppleMusicTokenTracker {
             return None;
         }
 
-        let html = resp.text().await.unwrap_or_default();
+        let html = crate::common::http::read_text_capped(resp)
+            .await
+            .unwrap_or_default();
 
         static SCRIPT_REGEX: OnceLock<Regex> = OnceLock::new();
         static INDEX_REGEX: OnceLock<Regex> = OnceLock::new();
@@ -115,7 +117,9 @@ impl AppleMusicTokenTracker {
             }
         };
 
-        let js_content = js_resp.text().await.unwrap_or_default();
+        let js_content = crate::common::http::read_text_capped(js_resp)
+            .await
+            .unwrap_or_default();
 
         static TOKEN_REGEX: OnceLock<Regex> = OnceLock::new();
         let token_re = TOKEN_REGEX

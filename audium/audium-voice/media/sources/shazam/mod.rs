@@ -71,13 +71,14 @@ impl ShazamSource {
             return LoadResult::Empty {};
         }
 
-        let data: Value = match crate::common::http::read_json_capped::<Value>(resp).await {
-            Ok(v) => v,
-            Err(e) => {
-                error!("Failed to parse Shazam search JSON: {e}");
-                return LoadResult::Empty {};
-            }
-        };
+        let data: Value =
+            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("Failed to parse Shazam search JSON: {e}");
+                    return LoadResult::Empty {};
+                }
+            };
 
         let songs = data
             .pointer("/results/songs/data")

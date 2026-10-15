@@ -132,7 +132,8 @@ impl YouTubeClient for IosClient {
             return Err(format!("IOS search failed: {}", res.status()).into());
         }
 
-        let response: Value = crate::common::http::read_json_capped::<Value>(res).await?;
+        let response: Value =
+            crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
         let mut tracks = Vec::new();
 
         if let Some(sections) = response

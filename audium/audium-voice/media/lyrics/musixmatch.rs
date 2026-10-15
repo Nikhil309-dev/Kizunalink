@@ -54,7 +54,9 @@ impl MusixmatchProvider {
                     .await
                     .ok()?;
 
-                let body: Value = resp.json().await.ok()?;
+                let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+                    .await
+                    .ok()?;
                 body.get("message")?
                     .get("body")?
                     .get("user_token")?
@@ -124,7 +126,9 @@ impl LyricsProvider for MusixmatchProvider {
             .await
             .ok()?;
 
-        let body: Value = resp.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let message = body.get("message")?;
 
         if message.get("header")?.get("status_code")?.as_i64() != Some(200) {
@@ -144,7 +148,9 @@ impl LyricsProvider for MusixmatchProvider {
                 .await
                 .ok()?;
 
-            let body: Value = resp.json().await.ok()?;
+            let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+                .await
+                .ok()?;
             let track_list = body
                 .get("message")?
                 .get("body")?
@@ -171,7 +177,10 @@ impl LyricsProvider for MusixmatchProvider {
                 .await
                 .ok()?;
 
-            let sub_body: Value = sub_resp.json().await.ok()?;
+            let sub_body: Value =
+                crate::common::http::read_json_capped::<serde_json::Value>(sub_resp)
+                    .await
+                    .ok()?;
             let sub_msg = sub_body.get("message")?;
             if sub_msg.get("header")?.get("status_code")?.as_i64() != Some(200) {
                 // Try plain lyrics
@@ -187,7 +196,10 @@ impl LyricsProvider for MusixmatchProvider {
                     .send()
                     .await
                     .ok()?;
-                let lyr_body: Value = lyr_resp.json().await.ok()?;
+                let lyr_body: Value =
+                    crate::common::http::read_json_capped::<serde_json::Value>(lyr_resp)
+                        .await
+                        .ok()?;
                 let lyr_text = lyr_body
                     .get("message")?
                     .get("body")?

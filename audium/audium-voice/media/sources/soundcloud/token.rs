@@ -147,7 +147,7 @@ impl SoundCloudTokenTracker {
             }
         };
         let status = response.status();
-        let html = match response.text().await {
+        let html = match crate::common::http::read_text_capped(response).await {
             Ok(t) => t,
             Err(e) => {
                 error!("SoundCloud: Failed to read main page: {}", e);
@@ -217,7 +217,7 @@ impl SoundCloudTokenTracker {
                 .send()
                 .await
             {
-                Ok(r) => match r.text().await {
+                Ok(r) => match crate::common::http::read_text_capped(r).await {
                     Ok(t) => t,
                     Err(_) => continue,
                 },

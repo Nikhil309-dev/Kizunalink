@@ -270,7 +270,7 @@ impl YouTubeSource {
             .await
         {
             Ok(res) if res.status().is_success() => {
-                if let Ok(text) = res.text().await {
+                if let Ok(text) = crate::common::http::read_text_capped(res).await {
                     let re = regex::Regex::new(r#""VISITOR_DATA":"([^"]+)""#).ok();
                     if let Some(vd) = re.as_ref().and_then(|r| r.captures(&text)).and_then(|c| c.get(1)) {
                         let raw = vd.as_str();

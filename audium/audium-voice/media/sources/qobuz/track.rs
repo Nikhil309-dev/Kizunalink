@@ -140,7 +140,8 @@ async fn switch_media_url(
         return Ok(None);
     }
 
-    let json: serde_json::Value = resp.json().await?;
+    let json: serde_json::Value =
+        crate::common::http::read_json_capped::<serde_json::Value>(resp).await?;
     if let Some(url) = json.get("url").and_then(|v| v.as_str()) {
         let is_sample = json.get("sample").and_then(|v| v.as_bool()).or_else(|| {
             json.get("sample")

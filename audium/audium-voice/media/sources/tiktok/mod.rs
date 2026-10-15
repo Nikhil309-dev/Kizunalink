@@ -90,7 +90,7 @@ impl TiktokSource {
             debug!("TikTok API returned HTTP {}", response.status());
             return None;
         }
-        let value: Value = crate::common::http::read_json_capped::<Value>(response)
+        let value: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         value.get("items")?.as_array()?.first().cloned()

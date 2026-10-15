@@ -60,7 +60,7 @@ impl YouTubeCipherManager {
             .header(reqwest::header::USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
             .send()
             .await?;
-        let text = res.text().await?;
+        let text = crate::common::http::read_text_capped(res).await?;
 
         let re = regex::Regex::new(r#""jsUrl":"([^"]+)""#)?;
         let mut script_url = if let Some(caps) = re.captures(&text) {
@@ -73,7 +73,7 @@ impl YouTubeCipherManager {
                 .header(reqwest::header::USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36")
                 .send()
                 .await?;
-            let text = res.text().await?;
+            let text = crate::common::http::read_text_capped(res).await?;
             if let Some(caps) = re.captures(&text) {
                 caps[1].to_string()
             } else {
@@ -116,7 +116,8 @@ impl YouTubeCipherManager {
                 .await?;
 
             if res.status() == 200 {
-                let body: Value = crate::common::http::read_json_capped::<Value>(res).await?;
+                let body: Value =
+                    crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
                 if let Some(sts) = body.get("sts").and_then(|v| v.as_str()) {
                     return Ok(sts.to_string());
                 } else {
@@ -129,7 +130,7 @@ impl YouTubeCipherManager {
 
         // Local extraction (fallback or default)
         let res = self.client.get(source_url).send().await?;
-        let text = res.text().await?;
+        let text = crate::common::http::read_text_capped(res).await?;
 
         // Regex to find sts or signatureTimestamp
         let re = regex::Regex::new(r#"(?:signatureTimestamp|sts):(\d+)"#)?;
@@ -195,14 +196,15 @@ impl YouTubeCipherManager {
 
         let status = res.status();
         if status == 200 {
-            let body: Value = crate::common::http::read_json_capped::<Value>(res).await?;
+            let body: Value =
+                crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
             if let Some(resolved) = body.get("resolved_url").and_then(|v| v.as_str()) {
                 return Ok(resolved.to_string());
             }
             return Err("Resolved URL missing in response".into());
         }
 
-        let err_body = res.text().await?;
+        let err_body = crate::common::http::read_text_capped(res).await?;
         Err(format!("Failed to resolve URL with status {}: {}", status, err_body).into())
     }
 }

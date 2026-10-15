@@ -104,7 +104,7 @@ pub async fn fetch_stream_url(client: &Arc<reqwest::Client>, uri: &str) -> Optio
         return None;
     }
 
-    let body = resp.text().await.ok()?;
+    let body = crate::common::http::read_text_capped(resp).await.ok()?;
     extract_stream_url(&body)
 }
 

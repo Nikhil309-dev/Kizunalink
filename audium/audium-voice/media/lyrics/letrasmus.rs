@@ -50,7 +50,9 @@ impl LyricsProvider for LetrasMusProvider {
             urlencoding::encode(&query)
         );
         let resp = self.client.get(search_url).send().await.ok()?;
-        let search_data: Value = resp.json().await.ok()?;
+        let search_data: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
 
         let docs = search_data["response"]["docs"].as_array()?;
         let best = docs

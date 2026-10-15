@@ -135,7 +135,7 @@ impl SoundCloudSource {
             );
             return None;
         }
-        let json: Value = crate::common::http::read_json_capped::<Value>(resp)
+        let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
             .await
             .ok()?;
         trace!("SoundCloud: API resolve response: {:?}", json);
@@ -341,7 +341,7 @@ impl SoundCloudSource {
         if !resp.status().is_success() {
             return None;
         }
-        let json: Value = crate::common::http::read_json_capped::<Value>(resp)
+        let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
             .await
             .ok()?;
         let stream_url = json
@@ -431,14 +431,15 @@ impl SoundCloudSource {
             )));
         }
 
-        let json: Value = match crate::common::http::read_json_capped::<Value>(resp).await {
-            Ok(v) => v,
-            Err(e) => {
-                return LoadResult::Error(load_error(format!(
-                    "SoundCloud returned invalid JSON: {e}"
-                )));
-            }
-        };
+        let json: Value =
+            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                Ok(v) => v,
+                Err(e) => {
+                    return LoadResult::Error(load_error(format!(
+                        "SoundCloud returned invalid JSON: {e}"
+                    )));
+                }
+            };
 
         let tracks: Vec<Track> = json
             .get("collection")
@@ -603,10 +604,11 @@ impl SoundCloudSource {
             Err(_) => return LoadResult::Empty {},
         };
 
-        let json: Value = match crate::common::http::read_json_capped::<Value>(resp).await {
-            Ok(v) => v,
-            Err(_) => return LoadResult::Empty {},
-        };
+        let json: Value =
+            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                Ok(v) => v,
+                Err(_) => return LoadResult::Empty {},
+            };
 
         let tracks: Vec<Track> = json
             .get("collection")

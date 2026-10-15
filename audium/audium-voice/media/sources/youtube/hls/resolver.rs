@@ -141,7 +141,7 @@ pub async fn fetch_text(client: &reqwest::Client, url: &str) -> AnyResult<String
         return Err(format!("HLS playlist fetch failed {}: {}", res.status(), url).into());
     }
 
-    let text = res.text().await?;
+    let text = crate::common::http::read_text_capped(res).await?;
     Ok(text)
 }
 

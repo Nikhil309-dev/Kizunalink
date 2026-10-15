@@ -125,7 +125,7 @@ impl YouTubeClient for AndroidClient {
 
         let res = req.send().await?;
         let status = res.status();
-        let body_text = res.text().await?;
+        let body_text = crate::common::http::read_text_capped(res).await?;
 
         if !status.is_success() {
             return Err(format!("Android search failed: {} - {}", status, body_text).into());
@@ -248,7 +248,8 @@ impl YouTubeClient for AndroidClient {
             return Ok(None);
         }
 
-        let response: Value = crate::common::http::read_json_capped::<Value>(res).await?;
+        let response: Value =
+            crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
         Ok(crate::media::sources::youtube::extractor::extract_from_next(&response, "youtube"))
     }
 

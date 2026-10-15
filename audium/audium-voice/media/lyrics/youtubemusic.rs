@@ -78,7 +78,9 @@ impl YoutubeMusicLyricsProvider {
             .json(&final_body)
             .send().await.ok()?;
 
-        let json_resp: Value = resp.json().await.ok()?;
+        let json_resp: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         Some(json_resp)
     }
 }

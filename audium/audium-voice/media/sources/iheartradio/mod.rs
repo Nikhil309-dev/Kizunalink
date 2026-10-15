@@ -75,7 +75,9 @@ impl IheartradioSource {
             debug!("iHeart API returned HTTP {}", response.status());
             return None;
         }
-        response.json().await.ok()
+        crate::common::http::read_json_capped::<serde_json::Value>(response)
+            .await
+            .ok()
     }
 
     /// Extract the live-station object from a v2 `liveStations/{id}` response.

@@ -128,11 +128,13 @@ impl YouTubeClient for MusicAndroidClient {
         let res = req.send().await?;
         if !res.status().is_success() {
             let status = res.status();
-            let err_body = res.text().await.unwrap_or_default();
+            let err_body = crate::common::http::read_text_capped(res)
+                .await
+                .unwrap_or_default();
             return Err(format!("Music Android search failed: {} - {}", status, err_body).into());
         }
 
-        let response: Value = crate::common::http::read_json_capped::<Value>(res)
+        let response: Value = crate::common::http::read_json_capped::<serde_json::Value>(res)
             .await
             .unwrap_or_default();
         let mut tracks = Vec::new();
@@ -493,7 +495,7 @@ impl YouTubeClient for MusicAndroidClient {
             return Ok(None);
         }
 
-        let body: Value = crate::common::http::read_json_capped::<Value>(res).await?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
         let result = crate::media::sources::youtube::extractor::extract_from_next(&body, "youtube");
 
         if result.is_none() {

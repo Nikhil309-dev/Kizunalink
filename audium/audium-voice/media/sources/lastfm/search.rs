@@ -82,14 +82,16 @@ impl LastFMSource {
         );
 
         let body = match self.http.get(&url).send().await {
-            Ok(r) => r.text().await.unwrap_or_else(|e| {
-                tracing::debug!(
-                    "Last.fm: failed to get response text for search scraping '{}': {}",
-                    query,
-                    e
-                );
-                Default::default()
-            }),
+            Ok(r) => crate::common::http::read_text_capped(r)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::debug!(
+                        "Last.fm: failed to get response text for search scraping '{}': {}",
+                        query,
+                        e
+                    );
+                    Default::default()
+                }),
             Err(e) => {
                 tracing::debug!(
                     "Last.fm: search scraping request failed for '{}': {}",

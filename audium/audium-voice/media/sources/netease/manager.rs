@@ -294,7 +294,10 @@ pub async fn fetch_track_url_legacy(
         return None;
     }
 
-    let res: NeteaseResponse<TrackUrlData> = resp.json().await.ok()?;
+    let res: NeteaseResponse<TrackUrlData> =
+        crate::common::http::read_json_capped::<NeteaseResponse<TrackUrlData>>(resp)
+            .await
+            .ok()?;
     let data = res.data.data.first()?;
 
     if let Some(url) = &data.url

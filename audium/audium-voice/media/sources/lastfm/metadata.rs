@@ -76,7 +76,7 @@ impl LastFMSource {
 
         if (artwork_url.is_none() || length == 0)
             && let Ok(res) = self.http.get(url).send().await
-            && let Ok(body) = res.text().await
+            && let Ok(body) = crate::common::http::read_text_capped(res).await
         {
             if artwork_url.is_none()
                 && let Some(caps) = Regex::new(
@@ -172,14 +172,16 @@ impl LastFMSource {
         }
 
         let body = match self.http.get(url).send().await {
-            Ok(r) => r.text().await.unwrap_or_else(|e| {
-                tracing::debug!(
-                    "Last.fm: failed to get response text for album {}: {}",
-                    url,
-                    e
-                );
-                Default::default()
-            }),
+            Ok(r) => crate::common::http::read_text_capped(r)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::debug!(
+                        "Last.fm: failed to get response text for album {}: {}",
+                        url,
+                        e
+                    );
+                    Default::default()
+                }),
             Err(e) => {
                 tracing::debug!("Last.fm: album scraping request failed for {}: {}", url, e);
                 return LoadResult::Empty {};
@@ -278,14 +280,16 @@ impl LastFMSource {
         }
 
         let body = match self.http.get(url).send().await {
-            Ok(r) => r.text().await.unwrap_or_else(|e| {
-                tracing::debug!(
-                    "Last.fm: failed to get response text for artist tracks {}: {}",
-                    url,
-                    e
-                );
-                Default::default()
-            }),
+            Ok(r) => crate::common::http::read_text_capped(r)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::debug!(
+                        "Last.fm: failed to get response text for artist tracks {}: {}",
+                        url,
+                        e
+                    );
+                    Default::default()
+                }),
             Err(e) => {
                 tracing::debug!(
                     "Last.fm: artist tracks scraping request failed for {}: {}",
@@ -385,14 +389,16 @@ impl LastFMSource {
         }
 
         let body = match self.http.get(url).send().await {
-            Ok(r) => r.text().await.unwrap_or_else(|e| {
-                tracing::debug!(
-                    "Last.fm: failed to get response text for user profile {}: {}",
-                    url,
-                    e
-                );
-                Default::default()
-            }),
+            Ok(r) => crate::common::http::read_text_capped(r)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::debug!(
+                        "Last.fm: failed to get response text for user profile {}: {}",
+                        url,
+                        e
+                    );
+                    Default::default()
+                }),
             Err(e) => {
                 tracing::debug!(
                     "Last.fm: user profile scraping request failed for {}: {}",

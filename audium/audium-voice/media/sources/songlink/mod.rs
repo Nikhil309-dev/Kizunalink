@@ -75,7 +75,7 @@ impl SonglinkSource {
             debug!("Odesli returned HTTP {}", response.status());
             return None;
         }
-        crate::common::http::read_json_capped::<Value>(response)
+        crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()
     }

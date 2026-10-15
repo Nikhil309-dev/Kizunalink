@@ -163,7 +163,7 @@ impl BilibiliSource {
             .send()
             .await
             .ok()?;
-        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         let img = body.get("data")?.get("wbi_img")?;
@@ -192,7 +192,7 @@ impl BilibiliSource {
             debug!("Bilibili API returned HTTP {}", response.status());
             return None;
         }
-        crate::common::http::read_json_capped::<Value>(response)
+        crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()
     }

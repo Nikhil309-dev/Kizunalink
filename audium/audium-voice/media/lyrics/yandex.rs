@@ -92,7 +92,10 @@ impl LyricsProvider for YandexProvider {
                 .await
                 .ok()?;
 
-            let search_body: Value = search_resp.json().await.ok()?;
+            let search_body: Value =
+                crate::common::http::read_json_capped::<serde_json::Value>(search_resp)
+                    .await
+                    .ok()?;
             search_body["result"]["tracks"]["results"]
                 .as_array()?
                 .first()?
@@ -116,7 +119,9 @@ impl LyricsProvider for YandexProvider {
             .await
             .ok()?;
 
-        let body: Value = resp.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let download_url = body["result"]["downloadUrl"].as_str()?;
 
         let lrc_resp = self
@@ -127,7 +132,7 @@ impl LyricsProvider for YandexProvider {
             .await
             .ok()?;
 
-        let lrc_text = lrc_resp.text().await.ok()?;
+        let lrc_text = crate::common::http::read_text_capped(lrc_resp).await.ok()?;
         let lines = utils::parse_lrc(&lrc_text);
 
         if lines.is_empty() {

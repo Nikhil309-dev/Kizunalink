@@ -105,7 +105,7 @@ impl LazypyttsSource {
         if !response.status().is_success() {
             return None;
         }
-        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         let services = body.get("services")?.as_object()?;
@@ -146,7 +146,7 @@ impl LazypyttsSource {
             debug!("LazyPy TTS returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         if body.get("success").and_then(|s| s.as_bool()) != Some(true) {

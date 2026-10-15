@@ -195,7 +195,7 @@ pub async fn get_eapi_json<T: DeserializeOwned>(
 
         match resp {
             Ok(r) if r.status().is_success() => {
-                let text = r.text().await.ok()?;
+                let text = crate::common::http::read_text_capped(r).await.ok()?;
                 match serde_json::from_str::<NeteaseResponse<T>>(&text) {
                     Ok(res) => {
                         if res.code == 200 || res.code == 0 {

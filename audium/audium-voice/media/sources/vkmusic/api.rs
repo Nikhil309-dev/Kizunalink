@@ -88,7 +88,7 @@ impl VkApiClient {
             return None;
         }
 
-        crate::common::http::read_json_capped::<Value>(resp)
+        crate::common::http::read_json_capped::<serde_json::Value>(resp)
             .await
             .ok()
     }
@@ -119,7 +119,7 @@ impl VkApiClient {
             .await
             .ok()?;
 
-        let body: Value = crate::common::http::read_json_capped::<Value>(resp)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
             .await
             .ok()?;
 

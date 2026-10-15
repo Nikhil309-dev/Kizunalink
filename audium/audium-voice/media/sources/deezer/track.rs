@@ -87,7 +87,7 @@ impl PlayableTrack for DeezerTrack {
                         }
                     };
 
-                    let json: serde_json::Value = match res.json().await {
+                    let json: serde_json::Value = match crate::common::http::read_json_capped::<serde_json::Value>(res).await {
                         Ok(v) => v,
                         Err(_) => {
                             retry_count += 1;
@@ -175,7 +175,7 @@ impl PlayableTrack for DeezerTrack {
                         }
                     };
 
-                    let json: serde_json::Value = match res.json().await {
+                    let json: serde_json::Value = match crate::common::http::read_json_capped::<serde_json::Value>(res).await {
                         Ok(v) => v,
                         Err(_) => {
                             retry_count += 1;

@@ -43,7 +43,7 @@ pub async fn get_json(client: &Arc<reqwest::Client>, url: &str) -> Option<Value>
         return None;
     }
 
-    crate::common::http::read_json_capped::<Value>(res)
+    crate::common::http::read_json_capped::<serde_json::Value>(res)
         .await
         .ok()
 }

@@ -44,7 +44,10 @@ impl LyricsProvider for LrcLibProvider {
         );
 
         let resp = self.client.get(url).send().await.ok()?;
-        let results: serde_json::Value = resp.json().await.ok()?;
+        let results: serde_json::Value =
+            crate::common::http::read_json_capped::<serde_json::Value>(resp)
+                .await
+                .ok()?;
 
         let results_arr = results.as_array()?;
         if results_arr.is_empty() {

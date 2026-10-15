@@ -92,7 +92,7 @@ impl AudiomackSource {
         };
 
         let status = resp.status();
-        let text = match resp.text().await {
+        let text = match crate::common::http::read_text_capped(resp).await {
             Ok(t) => t,
             Err(e) => {
                 error!("Failed to read Audiomack response text: {e}");

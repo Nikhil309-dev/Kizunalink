@@ -80,7 +80,7 @@ impl VimeoSource {
             debug!("Vimeo oEmbed returned HTTP {}", response.status());
             return None;
         }
-        let body: Value = crate::common::http::read_json_capped::<Value>(response)
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(response)
             .await
             .ok()?;
         let title = body.get("title")?.as_str()?.to_string();

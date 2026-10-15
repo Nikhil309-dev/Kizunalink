@@ -168,7 +168,9 @@ impl YouTubePotProvider {
 
         let status = response.status();
         if !status.is_success() {
-            let text = response.text().await.unwrap_or_default();
+            let text = crate::common::http::read_text_capped(response)
+                .await
+                .unwrap_or_default();
             return Err(PotError::ProviderStatus(status.as_u16(), text));
         }
 

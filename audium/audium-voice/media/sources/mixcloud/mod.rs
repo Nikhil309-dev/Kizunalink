@@ -341,10 +341,11 @@ impl MixcloudSource {
             Err(_) => return LoadResult::Empty {},
         };
 
-        let body: Value = match crate::common::http::read_json_capped::<Value>(resp).await {
-            Ok(v) => v,
-            Err(_) => return LoadResult::Empty {},
-        };
+        let body: Value =
+            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                Ok(v) => v,
+                Err(_) => return LoadResult::Empty {},
+            };
 
         let mut tracks = Vec::new();
         if let Some(data) = body["data"].as_array() {

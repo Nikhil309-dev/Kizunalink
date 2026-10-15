@@ -49,7 +49,10 @@ impl LyricsProvider for GeniusProvider {
             urlencoding::encode(&query)
         );
         let resp = self.client.get(url).send().await.ok()?;
-        let search_data: serde_json::Value = resp.json().await.ok()?;
+        let search_data: serde_json::Value =
+            crate::common::http::read_json_capped::<serde_json::Value>(resp)
+                .await
+                .ok()?;
 
         let song = search_data["response"]["sections"]
             .as_array()?
@@ -63,7 +66,9 @@ impl LyricsProvider for GeniusProvider {
         let song_url = format!("https://genius.com{}", song_path);
 
         let song_resp = self.client.get(song_url).send().await.ok()?;
-        let song_page = song_resp.text().await.ok()?;
+        let song_page = crate::common::http::read_text_capped(song_resp)
+            .await
+            .ok()?;
 
         let re = Regex::new(r#"(?s)window\.__PRELOADED_STATE__\s*=\s*JSON\.parse\('(.*?)'\);"#)
             .expect("valid regex");

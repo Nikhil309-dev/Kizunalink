@@ -39,7 +39,9 @@ impl NeteaseProvider {
             .send()
             .await.ok()?;
 
-        let body: Value = resp.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let songs = body["result"]["songs"].as_array()?;
 
         songs.first().cloned()
@@ -69,7 +71,9 @@ impl LyricsProvider for NeteaseProvider {
             .send()
             .await.ok()?;
 
-        let body: Value = resp.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let raw_lrc = body["lrc"]["lyric"].as_str()?;
 
         let lines = utils::parse_lrc(raw_lrc);
