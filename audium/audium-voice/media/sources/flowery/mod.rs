@@ -186,6 +186,7 @@ impl SourcePlugin for FlowerySource {
             url,
             local_addr: routeplanner.and_then(|rp| rp.get_address()),
             proxy: None,
+                headers: None,
         }))
     }
 

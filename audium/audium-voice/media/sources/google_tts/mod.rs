@@ -133,6 +133,7 @@ impl SourcePlugin for GoogleTtsSource {
             url,
             local_addr: routeplanner.and_then(|rp| rp.get_address()),
             proxy: None, // Google TTS doesn't currently support proxy config directly in the new implementation, similar to Spotify
+                headers: None,
         }))
     }
 

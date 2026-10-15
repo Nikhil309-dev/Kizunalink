@@ -51,6 +51,7 @@ impl PlayableTrack for BandcampTrack {
                         url,
                         local_addr,
                         proxy: None,
+                headers: None,
                     };
                     let (inner_rx, inner_cmd_tx, inner_err_rx) =
                         http_track.start_decoding(config.clone());

@@ -327,6 +327,7 @@ impl SourcePlugin for HttpSource {
                 url: clean.to_owned(),
                 local_addr: routeplanner.and_then(|rp| rp.get_address()),
                 proxy: None,
+                headers: None,
             }))
         } else {
             None
@@ -338,6 +339,9 @@ pub struct HttpTrack {
     pub url: String,
     pub local_addr: Option<std::net::IpAddr>,
     pub proxy: Option<crate::config::sources::HttpProxyConfig>,
+    /// Extra headers some CDNs require (e.g. a session `Cookie` or `Referer`).
+    /// Applied to the manifest and every segment of an HLS stream.
+    pub headers: Option<reqwest::header::HeaderMap>,
 }
 
 impl PlayableTrack for HttpTrack {
@@ -349,6 +353,7 @@ impl PlayableTrack for HttpTrack {
         let url = self.url.clone();
         let local_addr = self.local_addr;
         let proxy = self.proxy.clone();
+        let headers = self.headers.clone();
 
         let handle = tokio::runtime::Handle::current();
         tokio::task::spawn_blocking(move || {
@@ -375,7 +380,7 @@ impl PlayableTrack for HttpTrack {
                     crate::common::utils::default_user_agent(),
                     local_addr,
                     proxy.clone(),
-                    None,
+                    headers.clone(),
                     Some(host),
                     Some(addresses),
                 ) {
@@ -385,6 +390,8 @@ impl PlayableTrack for HttpTrack {
                         return;
                     }
                 };
+                // The client already carries any per-track headers, so the
+                // manifest and every segment request inherit them.
                 match crate::media::sources::youtube::hls::HlsReader::with_client(
                     &url, client, None, None,
                 ) {
@@ -396,7 +403,7 @@ impl PlayableTrack for HttpTrack {
                     }
                 }
             } else {
-                match reader::HttpReader::new(&url, local_addr, proxy) {
+                match reader::HttpReader::with_headers(&url, local_addr, proxy, headers.clone()) {
                     Ok(r) => Box::new(r) as Box<dyn symphonia::core::io::MediaSource>,
                     Err(e) => {
                         error!("Failed to create HttpReader for HTTP: {e}");

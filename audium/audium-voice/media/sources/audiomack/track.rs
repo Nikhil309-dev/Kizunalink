@@ -22,6 +22,7 @@ impl PlayableTrack for AudiomackTrack {
             url: self.stream_url.clone(),
             local_addr: self.local_addr,
             proxy: None,
+                headers: None,
         };
         http_track.start_decoding(config)
     }
