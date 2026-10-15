@@ -4,6 +4,8 @@
 mod handler;
 mod opcodes;
 
+pub use opcodes::{MAX_RESUME_TIMEOUT_SECS, clamp_resume_timeout};
+
 use std::sync::Arc;
 
 use axum::{

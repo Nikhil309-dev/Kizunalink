@@ -309,4 +309,35 @@ mod tests {
 
         assert_eq!(session.take_event_queue().len(), 1);
     }
+
+    /// Regression: the REST `PATCH /v4/sessions/{id}` path stored the raw
+    /// client timeout while only the WS `configureResuming` path clamped it.
+    #[test]
+    fn resume_timeout_is_clamped_from_every_entry_point() {
+        use crate::api::ws::{MAX_RESUME_TIMEOUT_SECS, clamp_resume_timeout};
+
+        assert_eq!(clamp_resume_timeout(0), 0, "0 must still disable resuming");
+        assert_eq!(clamp_resume_timeout(30), 30);
+        assert_eq!(
+            clamp_resume_timeout(u64::MAX),
+            MAX_RESUME_TIMEOUT_SECS,
+            "an arbitrarily large client timeout must not be honoured"
+        );
+
+        let (sender, _receiver) = flume::unbounded();
+        let session = Session::new(
+            audium::common::types::SessionId("test-session".into()),
+            None,
+            sender,
+            1,
+        );
+        session.resume_timeout.store(
+            clamp_resume_timeout(u64::MAX),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        assert_eq!(
+            session.resume_timeout.load(Ordering::Relaxed),
+            MAX_RESUME_TIMEOUT_SECS
+        );
+    }
 }

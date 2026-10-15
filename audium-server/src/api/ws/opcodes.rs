@@ -21,7 +21,7 @@ pub const MAX_RESUME_TIMEOUT_SECS: u64 = 3600;
 
 /// Clamp a client-requested resume timeout into `0..=MAX_RESUME_TIMEOUT_SECS`.
 /// `0` disables resuming and is preserved.
-fn clamp_resume_timeout(timeout: u64) -> u64 {
+pub fn clamp_resume_timeout(timeout: u64) -> u64 {
     timeout.min(MAX_RESUME_TIMEOUT_SECS)
 }
 
