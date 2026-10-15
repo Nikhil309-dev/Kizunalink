@@ -12,11 +12,13 @@ use crate::{
         audiomack::AudiomackSource,
         audius::AudiusSource,
         bandcamp::BandcampSource,
+        bluesky::BlueskySource,
         deezer::DeezerSource,
         flowery::FlowerySource,
         gaana::GaanaSource,
         google_tts::GoogleTtsSource,
         http::HttpSource,
+        iheartradio::IheartradioSource,
         jiosaavn::JioSaavnSource,
         lastfm::LastFMSource,
         local::LocalSource,
@@ -26,6 +28,7 @@ use crate::{
         plugin::BoxedSource,
         qobuz::QobuzSource,
         reddit::RedditSource,
+        rss::RssSource,
         shazam::ShazamSource,
         soundcloud::SoundCloudSource,
         spotify::SpotifySource,
@@ -344,6 +347,48 @@ fn register_core_sources(
     register_netease(sources, config, http_pool);
     register_twitch(sources, config, http_pool);
     register_amazonmusic(sources, config, http_pool);
+
+    // RSS must be registered before the HTTP catch-all, which claims any URL.
+    if let Some(c) = config.sources.rss.as_ref()
+        && c.enabled
+    {
+        let proxy = c.proxy.clone();
+        match RssSource::new(c.clone(), http_pool.get(proxy.clone())) {
+            Ok(src) => {
+                tracing::info!("Loaded source: RSS");
+                sources.push(Box::new(src));
+            }
+            Err(e) => tracing::error!("RSS source failed to initialize: {e}"),
+        }
+    }
+
+    // iHeartRadio likewise handles specific iheart.com/live/<id> URLs only.
+    if let Some(c) = config.sources.iheartradio.as_ref()
+        && c.enabled
+    {
+        let proxy = c.proxy.clone();
+        match IheartradioSource::new(c.clone(), http_pool.get(proxy.clone())) {
+            Ok(src) => {
+                tracing::info!("Loaded source: iHeartRadio");
+                sources.push(Box::new(src));
+            }
+            Err(e) => tracing::error!("iHeartRadio source failed to initialize: {e}"),
+        }
+    }
+
+    // Bluesky handles bsky.app post URLs only.
+    if let Some(c) = config.sources.bluesky.as_ref()
+        && c.enabled
+    {
+        let proxy = c.proxy.clone();
+        match BlueskySource::new(c.clone(), http_pool.get(proxy.clone())) {
+            Ok(src) => {
+                tracing::info!("Loaded source: Bluesky");
+                sources.push(Box::new(src));
+            }
+            Err(e) => tracing::error!("Bluesky source failed to initialize: {e}"),
+        }
+    }
 
     // HTTP Source
     if config.sources.http.as_ref().is_some_and(|c| c.enabled) {

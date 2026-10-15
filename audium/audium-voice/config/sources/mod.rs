@@ -9,11 +9,13 @@ pub mod applemusic;
 pub mod audiomack;
 pub mod audius;
 pub mod bandcamp;
+pub mod bluesky;
 pub mod deezer;
 pub mod flowery;
 pub mod gaana;
 pub mod google_tts;
 pub mod http;
+pub mod iheartradio;
 pub mod jiosaavn;
 pub mod lastfm;
 pub mod local;
@@ -22,6 +24,7 @@ pub mod netease;
 pub mod pandora;
 pub mod qobuz;
 pub mod reddit;
+pub mod rss;
 pub mod shazam;
 pub mod soundcloud;
 pub mod spotify;
@@ -37,11 +40,13 @@ pub use applemusic::*;
 pub use audiomack::*;
 pub use audius::*;
 pub use bandcamp::*;
+pub use bluesky::*;
 pub use deezer::*;
 pub use flowery::*;
 pub use gaana::*;
 pub use google_tts::*;
 pub use http::*;
+pub use iheartradio::*;
 pub use jiosaavn::*;
 pub use lastfm::*;
 pub use local::*;
@@ -50,6 +55,7 @@ pub use netease::*;
 pub use pandora::*;
 pub use qobuz::*;
 pub use reddit::*;
+pub use rss::*;
 pub use shazam::*;
 pub use soundcloud::*;
 pub use spotify::*;
@@ -96,6 +102,9 @@ pub struct SourcesConfig {
     pub flowery: Option<FloweryConfig>,
     pub reddit: Option<RedditConfig>,
     pub lastfm: Option<LastFmConfig>,
+    pub rss: Option<RssConfig>,
+    pub iheartradio: Option<IheartradioConfig>,
+    pub bluesky: Option<BlueskyConfig>,
 }
 
 pub fn default_true() -> bool {

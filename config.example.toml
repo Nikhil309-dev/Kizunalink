@@ -344,6 +344,28 @@ enabled = false
 search_limit = 10
 # proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
 
+[sources.rss]
+# Expands an RSS/Atom podcast feed URL into a playlist of its media enclosures.
+# Matches feed URLs (*.rss, /feed, /rss, feed.xml, /podcast/.../rss).
+enabled = false
+# Maximum items expanded into a playlist (hard cap 500).
+max_items = 100
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.iheartradio]
+# Resolves public iHeart *live* radio stations (iheart.com/live/<id>) to their
+# live stream, and "ihsearch:<query>" to station search results. No key needed.
+# On-demand songs are not exposed (protected streams).
+enabled = false
+search_limit = 10
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.bluesky]
+# Resolves a public Bluesky post's embedded video (bsky.app/profile/<handle>/post/<rkey>).
+# Uses the unauthenticated public AppView API; no credentials required.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
 [lyrics]
 youtubemusic = true
 lrclib = true
