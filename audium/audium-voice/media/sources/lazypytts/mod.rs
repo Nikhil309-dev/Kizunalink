@@ -174,11 +174,7 @@ impl LazypyttsSource {
             return LoadResult::Empty {};
         };
 
-        let title = if text.len() > 50 {
-            format!("{}...", &text[..47])
-        } else {
-            text.clone()
-        };
+        let title = crate::common::utils::truncate_chars(&text, 50);
         let mut track = Track::new(TrackInfo {
             identifier: identifier.to_string(),
             is_seekable: true,

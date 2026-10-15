@@ -32,11 +32,7 @@ impl FlowerySource {
     }
 
     fn build_track_info(&self, text: &str, identifier: &str, url: &str) -> TrackInfo {
-        let title_text = if text.len() > 50 {
-            format!("{}...", &text[..47])
-        } else {
-            text.to_string()
-        };
+        let title_text = crate::common::utils::truncate_chars(text, 50);
 
         TrackInfo {
             identifier: identifier.to_string(),

@@ -60,6 +60,26 @@ pub fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+/// Truncate `s` to at most `max_chars` characters, appending `…` when cut.
+///
+/// Byte slicing (`&s[..47]`) panics when the offset lands inside a multi-byte
+/// UTF-8 character, which is reachable from any user-supplied text (TTS
+/// queries, search terms). Count characters, not bytes.
+pub fn truncate_chars(s: &str, max_chars: usize) -> String {
+    let mut chars = s.chars();
+    let mut out = String::new();
+    for _ in 0..max_chars {
+        match chars.next() {
+            Some(c) => out.push(c),
+            None => return out,
+        }
+    }
+    if chars.next().is_some() {
+        out.push('…');
+    }
+    out
+}
+
 /// Simple ANSI stripper to prevent the log file from being polluted with escape sequences.
 pub fn strip_ansi_escapes(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
@@ -128,4 +148,38 @@ pub const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) 
 /// Returns the default User-Agent string.
 pub fn default_user_agent() -> String {
     DEFAULT_USER_AGENT.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_chars;
+
+    #[test]
+    fn truncate_chars_never_splits_a_multibyte_character() {
+        // The old `&text[..47]` idiom panicked here: byte 47 lands inside a
+        // 3-byte CJK character.
+        let text = "楽".repeat(80);
+        let out = truncate_chars(&text, 50);
+        assert_eq!(out.chars().filter(|c| *c == '楽').count(), 50);
+        assert!(out.ends_with('…'));
+
+        let emoji = "🎵".repeat(30);
+        let out = truncate_chars(&emoji, 10);
+        assert_eq!(out.chars().filter(|c| *c == '🎵').count(), 10);
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn truncate_chars_leaves_short_strings_untouched() {
+        assert_eq!(truncate_chars("hello", 50), "hello");
+        assert_eq!(truncate_chars("", 5), "");
+        assert_eq!(truncate_chars("exact", 5), "exact");
+        assert_eq!(truncate_chars(&"楽".repeat(30), 50), "楽".repeat(30));
+    }
+
+    #[test]
+    fn truncate_chars_zero_budget_yields_only_the_ellipsis() {
+        assert_eq!(truncate_chars("abc", 0), "…");
+        assert_eq!(truncate_chars("", 0), "");
+    }
 }
