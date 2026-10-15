@@ -7,7 +7,7 @@ use std::{
 };
 
 use axum::{
-    extract::Request,
+    extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
@@ -173,6 +173,22 @@ pub async fn observe_request_latency(req: Request, next: Next) -> Response {
     REQUEST_LATENCY
         .with_label_values(&[&method, &status])
         .observe(start.elapsed().as_secs_f64());
+    resp
+}
+
+/// Middleware: count every HTTP request and error status for `detailedStats`.
+/// Always installed (independent of Prometheus) so the counters are meaningful
+/// whenever the operator flips `monitoring.detailed_stats` on.
+pub async fn count_requests(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let resp = next.run(req).await;
+    state.detailed_counters.inc_requests();
+    if resp.status().is_client_error() || resp.status().is_server_error() {
+        state.detailed_counters.inc_errors();
+    }
     resp
 }
 

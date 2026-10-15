@@ -27,6 +27,9 @@ pub struct Version {
     // Official nodes serialize `preRelease` as an empty string when absent
     // (never `null`); match that so strict clients don't choke.
     pub pre_release: String,
+    // Non-standard extension: Lavalink omits `build` entirely. Emit it only when
+    // a build number is actually stamped so the default payload matches Lavalink.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub build: Option<String>,
 }
 

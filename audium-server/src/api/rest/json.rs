@@ -74,7 +74,15 @@ where
                     }
                     other => other.body_text(),
                 };
-                Err(error_response(StatusCode::BAD_REQUEST, message, &path))
+                // A body that exceeds `server.max_body_bytes` is reported as 413
+                // (NodeLink parity) rather than a generic 400, so clients can tell
+                // "too big" apart from "malformed".
+                let status = if message.contains("length limit exceeded") {
+                    StatusCode::PAYLOAD_TOO_LARGE
+                } else {
+                    StatusCode::BAD_REQUEST
+                };
+                Err(error_response(status, message, &path))
             }
         }
     }

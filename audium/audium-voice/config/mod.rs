@@ -220,6 +220,18 @@ impl AppConfig {
             .into());
         }
 
+        // A zero body cap would reject every POST; require a sane floor/ceiling.
+        if self.server.max_body_bytes == 0 {
+            return Err("server.max_body_bytes must be > 0".into());
+        }
+        if self.server.max_body_bytes > 64 * 1024 * 1024 {
+            return Err(format!(
+                "server.max_body_bytes must be <= 67108864 (64 MiB), got {}",
+                self.server.max_body_bytes
+            )
+            .into());
+        }
+
         // TLS must have a cert + key when enabled.
         if self.server.tls.enabled
             && (self.server.tls.cert_path.is_none() || self.server.tls.key_path.is_none())

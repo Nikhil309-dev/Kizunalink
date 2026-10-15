@@ -15,6 +15,47 @@ pub struct Stats {
     // Official nodes always emit this key, serialized as `null` when there are
     // no players (both over the WebSocket and on `/v4/stats`).
     pub frame_stats: Option<FrameStats>,
+    // Non-standard, additive extension (NodeLink parity): omitted unless the
+    // `monitoring.detailed_stats` toggle is on, so the default payload stays
+    // byte-identical to Lavalink's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detailed_stats: Option<DetailedStats>,
+}
+
+/// Additive `/v4/stats` extras. Kept here (rather than importing the server
+/// crate) so the protocol type stays self-contained for reuse.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetailedStats {
+    pub total_requests: u64,
+    pub total_errors: u64,
+    pub process: DetailedProcess,
+    pub sources: DetailedSources,
+    pub playback: DetailedPlayback,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetailedProcess {
+    pub process_id: u32,
+    pub threads: usize,
+    pub cpu_cores: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetailedSources {
+    pub loaded: usize,
+    pub enabled: usize,
+    pub top: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetailedPlayback {
+    pub tracks_started: u64,
+    pub tracks_ended: u64,
+    pub exceptions: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,6 +104,7 @@ mod tests {
                 lavalink_load: 0.0,
             },
             frame_stats: None,
+            detailed_stats: None,
         }
     }
 

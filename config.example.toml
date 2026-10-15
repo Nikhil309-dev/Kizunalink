@@ -18,6 +18,8 @@ stats_interval = 30               # seconds
 websocket_ping_interval = 20      # seconds
 max_event_queue_size = 100
 rate_limit_per_minute = 2000      # requests/min per client IP over REST + WS upgrade (0 disables)
+max_body_bytes = 8388608          # reject JSON request bodies larger than this (8 MiB)
+max_connections = 1024            # cap concurrent HTTP/WS connections (0 = unlimited)
 
 # Optional TLS termination (HTTPS/WSS). Set enabled = true and point at PEM
 # cert/key paths to serve the REST API + WebSocket over TLS with rustls.
@@ -378,3 +380,8 @@ spatial = true
 [metrics.prometheus]
 enabled = false
 endpoint = "/metrics"
+
+# Emit the additive `detailedStats` block on GET /v4/stats (NodeLink parity:
+# request/error counters, source counts, playback event totals). Off by default
+# so the payload stays byte-identical to Lavalink's.
+detailed_stats = false

@@ -80,6 +80,9 @@ pub fn collect_stats(app_state: &AppState, session: Option<&Session>) -> protoco
         },
         frame_stats: session
             .and_then(|sess| FrameMetrics::calculate(sess, app_state.config.server.stats_interval)),
+        // Filled by the REST/WS layer when `monitoring.detailed_stats` is on;
+        // `collect_stats` stays pure so WS per-tick stats don't rebuild it.
+        detailed_stats: None,
     }
 }
 

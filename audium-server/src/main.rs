@@ -113,6 +113,9 @@ async fn run() -> AnyResult<()> {
         rate_limiter: Arc::new(audium_server::api::RateLimiter::new(
             config.server.rate_limit_per_minute,
         )),
+        connection_limit: (config.server.max_connections > 0)
+            .then(|| Arc::new(tokio::sync::Semaphore::new(config.server.max_connections))),
+        detailed_counters: audium_server::monitoring::detailed::DetailedCounters::new(),
     });
 
     audium_server::monitoring::prometheus::init(shared_state.clone());
@@ -124,13 +127,22 @@ async fn run() -> AnyResult<()> {
         .route("/v4/websocket", get(ws::websocket_handler))
         .with_state(shared_state.clone())
         .merge(rest::router(shared_state.clone()))
-        .layer(DefaultBodyLimit::max(4 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(config.server.max_body_bytes))
         .layer(tower_http::trace::TraceLayer::new_for_http())
-        // S06: outermost layer so flood traffic is rejected before auth work.
-        // Needs ConnectInfo below, hence `into_make_service_with_connect_info`.
         .layer(axum::middleware::from_fn_with_state(
             shared_state.clone(),
             audium_server::api::rate_limit::rate_limit,
+        ))
+        // Admission control: cap concurrent connections before handler work.
+        .layer(axum::middleware::from_fn_with_state(
+            shared_state.clone(),
+            audium_server::api::conn_limit::connection_limit,
+        ))
+        // detailedStats: outermost so every request/error (including 429/503
+        // rejections) is counted. Cheap atomic bumps only.
+        .layer(axum::middleware::from_fn_with_state(
+            shared_state.clone(),
+            audium_server::monitoring::prometheus::count_requests,
         ));
 
     if config.metrics.prometheus.enabled {

@@ -30,6 +30,10 @@ pub struct AppState {
     pub process_stat: parking_lot::Mutex<ProcessStat>,
     /// Per-IP token bucket guarding the public HTTP/WS surface (S06).
     pub rate_limiter: Arc<crate::api::RateLimiter>,
+    /// Bounds simultaneously-open HTTP/WS connections. `None` = unlimited.
+    pub connection_limit: Option<Arc<tokio::sync::Semaphore>>,
+    /// NodeLink-parity `/v4/stats` extras (see `monitoring::detailed`).
+    pub detailed_counters: Arc<crate::monitoring::detailed::DetailedCounters>,
 }
 
 // Implement the library's ServerContext marker trait for AppState.

@@ -78,8 +78,29 @@ pub async fn websocket_handler(
     let ws = ws
         .max_message_size(MAX_CLIENT_WS_MESSAGE_SIZE)
         .max_frame_size(MAX_CLIENT_WS_MESSAGE_SIZE);
-    let upgrade_callback =
-        move |socket| handle_socket(socket, state, Some(user_id), client_session_id);
+
+    // Hold an admission permit for the *whole* socket lifetime. The global
+    // connection middleware deliberately skips this route (see `conn_limit`) and
+    // returns its permit once the 101 response is produced, so the socket task —
+    // which outlives that response — must own its own permit.
+    let ws_permit = match &state.connection_limit {
+        Some(limit) => match limit.clone().try_acquire_owned() {
+            Ok(permit) => Some(permit),
+            Err(_) => {
+                warn!("WebSocket rejected: connection limit reached");
+                return Err((StatusCode::SERVICE_UNAVAILABLE, "Connection limit reached"));
+            }
+        },
+        None => None,
+    };
+
+    let upgrade_callback = move |socket| async move {
+        // Held here, inside the socket future, so the permit is released only
+        // when the connection task ends. Binding it outside the `async` block
+        // (in the closure body) would drop it as soon as the closure returns.
+        let _permit = ws_permit;
+        handle_socket(socket, state, Some(user_id), client_session_id).await
+    };
     let mut response = ws.on_upgrade(upgrade_callback).into_response();
 
     let resumed_val = if resuming {
