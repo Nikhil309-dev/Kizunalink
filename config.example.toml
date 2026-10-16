@@ -5,6 +5,13 @@
 # ║  Tokens shown as "your-*-token" must be replaced.            ║
 # ║  Leave values empty or commented out to disable features.     ║
 # ╚════════════════════════════════════════════════════════════════╝
+#
+# Plugin compatibility: Audium is a native server, so it does not load Lavalink
+# .jar plugins — it implements their behaviour directly. It still advertises the
+# matching plugin names in /v4/info (e.g. lavasrc-plugin, lavalyrics-plugin,
+# sponsorblock-plugin, lavadspx-plugin) whenever the underlying capability is
+# enabled here, so stock clients that gate features on that array work
+# unmodified. Disable a source/filter and its plugin entry disappears too.
 
 [server]
 address = "0.0.0.0"

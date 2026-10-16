@@ -6,6 +6,7 @@
 //! - [`protocol`]: Wire format, opcodes, events, tracks, stats, and session management.
 //! - [`routeplanner`]: IP rotation and balancing for source APIs.
 
+pub mod plugins;
 pub mod protocol;
 pub mod routeplanner;
 pub mod sponsorblock;
