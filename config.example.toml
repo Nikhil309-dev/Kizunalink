@@ -457,6 +457,32 @@ enabled = false
 enabled = false
 # proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
 
+[sources.ocremix]
+# Resolves OC ReMix community remixes (ocremix.org/remix/OCR<id>) via their
+# public XML metadata, streaming from a public OC ReMix mirror host.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.clypit]
+# Resolves Clyp.it audio clips (clyp.it/<id>) via the public api.clyp.it JSON.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.getyarn]
+# Resolves getyarn.io clips (getyarn.io/yarn-clip/<id>) to y.yarn.co streams.
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.soundgasm]
+# Resolves Soundgasm audio pages (soundgasm.net/u/<author>/<slug>).
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
+[sources.pixeldrain]
+# Resolves Pixeldrain audio files (pixeldrain.com/u/<id>, music.song only).
+enabled = false
+# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
+
 [lyrics]
 youtubemusic = true
 lrclib = true

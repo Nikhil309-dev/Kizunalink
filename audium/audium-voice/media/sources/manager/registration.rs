@@ -14,9 +14,11 @@ use crate::{
         bandcamp::BandcampSource,
         bilibili::BilibiliSource,
         bluesky::BlueskySource,
+        clypit::ClypitSource,
         deezer::DeezerSource,
         flowery::FlowerySource,
         gaana::GaanaSource,
+        getyarn::GetyarnSource,
         google_tts::GoogleTtsSource,
         googledrive::GoogleDriveSource,
         http::HttpSource,
@@ -31,8 +33,10 @@ use crate::{
         netease::NeteaseSource,
         newgrounds::NewgroundsSource,
         nicovideo::NicovideoSource,
+        ocremix::OcremixSource,
         pandora::PandoraSource,
         pinterest::PinterestSource,
+        pixeldrain::PixeldrainSource,
         plugin::BoxedSource,
         qobuz::QobuzSource,
         reddit::RedditSource,
@@ -40,6 +44,7 @@ use crate::{
         shazam::ShazamSource,
         songlink::SonglinkSource,
         soundcloud::SoundCloudSource,
+        soundgasm::SoundgasmSource,
         spotify::SpotifySource,
         telegram::TelegramSource,
         tidal::TidalSource,
@@ -418,6 +423,17 @@ fn register_core_sources(
     );
     register_simple!(config.sources.kwai, "Kwai", KwaiSource::new);
     register_simple!(config.sources.telegram, "Telegram", TelegramSource::new);
+
+    // Sources ported from the DuncteBot plugin's extra source managers.
+    register_simple!(config.sources.ocremix, "OCReMix", OcremixSource::new);
+    register_simple!(config.sources.clypit, "Clypit", ClypitSource::new);
+    register_simple!(config.sources.getyarn, "Getyarn", GetyarnSource::new);
+    register_simple!(config.sources.soundgasm, "Soundgasm", SoundgasmSource::new);
+    register_simple!(
+        config.sources.pixeldrain,
+        "Pixeldrain",
+        PixeldrainSource::new
+    );
 
     register_simple!(config.sources.bilibili, "Bilibili", BilibiliSource::new);
     register_simple!(config.sources.nicovideo, "NicoVideo", NicovideoSource::new);
