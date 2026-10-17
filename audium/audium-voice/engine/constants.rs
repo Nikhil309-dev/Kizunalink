@@ -53,6 +53,10 @@ pub const PROBE_TIMEOUT_SECS: u64 = 10;
 
 pub const HTTP_PREFETCH_BUFFER_SIZE: usize = 2 * 1_024 * 1_024;
 pub const MAX_HTTP_BUF_BYTES: usize = 8 * 1_024 * 1_024;
+/// Upper bound on a tracker module read fully into memory for playback. Real
+/// MOD/XM/S3M/IT files are a few MiB at most; the cap only stops a hostile or
+/// mislabeled URL from exhausting memory.
+pub const MAX_MODULE_BYTES: usize = 32 * 1_024 * 1_024;
 pub const HTTP_INITIAL_BUF_CAPACITY: usize = 256 * 1_024;
 pub const HTTP_SOCKET_SKIP_LIMIT: u64 = 1_000_000;
 pub const HTTP_FETCH_CHUNK_LIMIT: u64 = 2 * 1_024 * 1_024;

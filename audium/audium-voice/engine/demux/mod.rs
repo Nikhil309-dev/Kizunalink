@@ -53,9 +53,9 @@ pub fn open_format(
             .map(|c| c.count())
             .unwrap_or(MIXER_CHANNELS);
         let decoder: Box<dyn Decoder> = Box::new(
-            crate::engine::codec::tracker_decoder::TrackerCodecDecoder::try_new(
+            crate::engine::codec::tracker_decoder::TrackerCodecDecoder::with_module(
                 &track.codec_params,
-                &DecoderOptions::default(),
+                format.module_bytes(),
             )?,
         );
         return Ok(DemuxResult::Transcode {

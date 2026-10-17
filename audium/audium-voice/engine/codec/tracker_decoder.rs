@@ -127,6 +127,17 @@ pub struct TrackerCodecDecoder {
 unsafe impl Sync for TrackerCodecDecoder {}
 
 impl TrackerCodecDecoder {
+    /// Build a decoder that already owns `bytes`, the module it replays.
+    ///
+    /// Preferred over the registry constructor: the module then no longer has to
+    /// travel through packets, so a seek issued before the first packet (for
+    /// example resuming at a saved position) still finds a parsed module.
+    pub fn with_module(params: &CodecParameters, bytes: &[u8]) -> Result<Self> {
+        let mut decoder = Self::try_new(params, &DecoderOptions::default())?;
+        decoder.parse(bytes)?;
+        Ok(decoder)
+    }
+
     fn parse(&mut self, bytes: &[u8]) -> Result<()> {
         let module = Module::load(bytes).map_err(|e| {
             Error::IoError(std::io::Error::other(format!(
@@ -180,40 +191,47 @@ impl Decoder for TrackerCodecDecoder {
     }
 
     fn decode(&mut self, packet: &Packet) -> Result<AudioBufferRef<'_>> {
-        if self.cell.is_none() {
+        let Some(cell) = self.cell.as_mut() else {
+            // The module normally arrives via `with_module`. Falling back to the
+            // first packet keeps the registry constructor usable, but a stream
+            // that never supplied one must fail loudly rather than emit silence.
+            if packet.data.is_empty() {
+                return Err(Error::IoError(std::io::Error::other(
+                    "tracker decoder was given no module",
+                )));
+            }
             self.parse(packet.data.as_ref())?;
-        }
+            return self.decode(packet);
+        };
 
         let target = packet.ts();
         let mut rendered_until = self.rendered_until;
         let mut pcm = std::mem::take(&mut self.pcm);
         let mut frames = 0usize;
 
-        if let Some(cell) = self.cell.as_mut() {
-            cell.with_dependent_mut(|_m, player| {
-                if target != rendered_until {
-                    let seconds = target as f64 / TARGET_SAMPLE_RATE as f64;
-                    let _ = player.seek_seconds(seconds);
-                    rendered_until = target;
-                }
-                while frames < CHUNK_FRAMES {
-                    match (player.next(), player.next()) {
-                        (Some(left), Some(right)) => {
-                            pcm[frames * 2] = left;
-                            pcm[frames * 2 + 1] = right;
-                            frames += 1;
-                        }
-                        (Some(left), None) => {
-                            pcm[frames * 2] = left;
-                            pcm[frames * 2 + 1] = left;
-                            frames += 1;
-                            break;
-                        }
-                        _ => break,
+        cell.with_dependent_mut(|_m, player| {
+            if target != rendered_until {
+                let seconds = target as f64 / TARGET_SAMPLE_RATE as f64;
+                let _ = player.seek_seconds(seconds);
+                rendered_until = target;
+            }
+            while frames < CHUNK_FRAMES {
+                match (player.next(), player.next()) {
+                    (Some(left), Some(right)) => {
+                        pcm[frames * 2] = left;
+                        pcm[frames * 2 + 1] = right;
+                        frames += 1;
                     }
+                    (Some(left), None) => {
+                        pcm[frames * 2] = left;
+                        pcm[frames * 2 + 1] = left;
+                        frames += 1;
+                        break;
+                    }
+                    _ => break,
                 }
-            });
-        }
+            }
+        });
 
         // Pad the tail with silence when the module ended mid-chunk.
         for sample in &mut pcm[frames * 2..CHUNK_FRAMES * 2] {
@@ -276,13 +294,13 @@ mod tests {
         let frames = module_duration_frames(&bytes).expect("duration");
         assert!(frames > 0, "a module must have a positive duration");
 
-        let src = Box::new(BytesSource(std::io::Cursor::new(bytes)));
+        let src = Box::new(BytesSource(std::io::Cursor::new(bytes.clone())));
         let mut reader = TrackerFormatReader::open(src).expect("open");
         let first = reader.next_packet().expect("first packet");
 
         let params = reader.tracks()[0].codec_params.clone();
         let mut decoder =
-            TrackerCodecDecoder::try_new(&params, &DecoderOptions::default()).expect("decoder");
+            TrackerCodecDecoder::with_module(&params, reader.module_bytes()).expect("decoder");
         let decoded = decoder.decode(&first).expect("decode");
         let spec = decoded.spec();
         assert_eq!(spec.rate, TARGET_SAMPLE_RATE);
@@ -306,7 +324,7 @@ mod tests {
 
         let params = reader.tracks()[0].codec_params.clone();
         let mut decoder =
-            TrackerCodecDecoder::try_new(&params, &DecoderOptions::default()).expect("decoder");
+            TrackerCodecDecoder::with_module(&params, reader.module_bytes()).expect("decoder");
         let decoded = decoder.decode(&first).expect("decode");
         let spec = *decoded.spec();
         let mut buf = SampleBuffer::<i16>::new(decoded.capacity() as u64, spec);
@@ -315,5 +333,30 @@ mod tests {
             buf.samples().iter().any(|&s| s != 0),
             "a triggered note must produce non-silent samples"
         );
+    }
+
+    #[test]
+    fn decodes_after_a_seek_issued_before_the_first_packet() {
+        // The processor checks for a pending seek before reading any packet, so a
+        // decoder built without the module in hand must still render after one.
+        let bytes = mod_with_note_for_tests();
+        let src = Box::new(BytesSource(std::io::Cursor::new(bytes)));
+        let mut reader = TrackerFormatReader::open(src).expect("open");
+        let params = reader.tracks()[0].codec_params.clone();
+
+        let mut decoder =
+            TrackerCodecDecoder::with_module(&params, reader.module_bytes()).expect("decoder");
+        reader
+            .seek(
+                symphonia::core::formats::SeekMode::Coarse,
+                symphonia::core::formats::SeekTo::Time {
+                    time: symphonia::core::units::Time::new(1, 0.0),
+                    track_id: Some(0),
+                },
+            )
+            .expect("seek");
+        let packet = reader.next_packet().expect("packet after seek");
+        assert_eq!(packet.ts(), 48_000);
+        assert!(decoder.decode(&packet).is_ok(), "seek must still render");
     }
 }

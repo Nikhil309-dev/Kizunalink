@@ -23,7 +23,7 @@ use symphonia::core::{
 use crate::engine::codec::tracker_decoder::{
     CHUNK_FRAMES, CODEC_TYPE_TRACKER, module_duration_frames, seconds_to_ts,
 };
-use crate::engine::constants::TARGET_SAMPLE_RATE;
+use crate::engine::constants::{MAX_MODULE_BYTES, TARGET_SAMPLE_RATE};
 
 /// A `FormatReader` that re-emits a tracker module one chunk at a time.
 ///
@@ -55,6 +55,11 @@ impl TrackerFormatReader {
         self.n_frames.saturating_mul(1000) / TARGET_SAMPLE_RATE as u64
     }
 
+    /// The module bytes captured on open, for the decoder to parse directly.
+    pub fn module_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
     fn build(mut source: MediaSourceStream) -> Result<Self> {
         if !source.is_seekable() {
             return Err(Error::Unsupported(
@@ -65,8 +70,18 @@ impl TrackerFormatReader {
         // the whole module is captured.
         source.seek(SeekFrom::Start(0)).map_err(Error::IoError)?;
 
+        // A module is a single self-contained document that is parsed and then
+        // replayed from memory, so the whole file is held resident. Read
+        // through `take` so a hostile or mislabeled URL cannot exhaust memory by
+        // pointing at an arbitrarily large body.
         let mut bytes = Vec::new();
-        source.read_to_end(&mut bytes).map_err(Error::IoError)?;
+        (&mut source)
+            .take(MAX_MODULE_BYTES as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(Error::IoError)?;
+        if bytes.len() > MAX_MODULE_BYTES {
+            return Err(Error::Unsupported("tracker module exceeds the size limit"));
+        }
 
         // Parse up front so an unplayable module fails the load rather than
         // producing a stream of silence.
@@ -140,13 +155,13 @@ impl FormatReader for TrackerFormatReader {
         let ts = self.frame_pos;
         self.frame_pos = self.frame_pos.saturating_add(CHUNK_FRAMES as u64);
 
-        // The module bytes are re-sent every packet; the decoder parses them
-        // exactly once. `ts` is the frame offset to render next.
+        // The module reaches the decoder through `module_bytes`, not through the
+        // stream, so packets only need to carry the timestamp to render from.
         Ok(Packet::new_from_boxed_slice(
             0,
             ts,
             CHUNK_FRAMES as u64,
-            self.bytes.clone().into_boxed_slice(),
+            Box::new([]),
         ))
     }
 
@@ -191,11 +206,15 @@ mod tests {
         let first = reader.next_packet().expect("first packet");
         assert_eq!(first.track_id(), 0);
         assert_eq!(first.ts(), 0);
-        assert_eq!(first.data.as_ref(), data.as_slice());
+        // The module reaches the decoder through `module_bytes`, so packets are
+        // timestamp-only.
+        assert!(first.data.is_empty());
+        assert_eq!(reader.module_bytes(), data.as_slice());
 
         // The stream advances one chunk at a time and eventually ends.
         let second = reader.next_packet().expect("second packet");
         assert_eq!(second.ts(), CHUNK_FRAMES as u64);
+        assert!(second.data.is_empty());
 
         let mut packets = 2u64;
         while reader.next_packet().is_ok() {
@@ -203,6 +222,16 @@ mod tests {
             assert!(packets < 100_000, "module must terminate");
         }
         assert!(packets >= 3);
+    }
+
+    #[test]
+    fn rejects_a_module_larger_than_the_cap() {
+        // A valid MOD followed by padding past the limit must be refused rather
+        // than read fully into memory.
+        let mut data = tiny_mod_for_tests();
+        data.resize(crate::engine::constants::MAX_MODULE_BYTES + 1, 0);
+        let src = Box::new(BytesSource(std::io::Cursor::new(data)));
+        assert!(TrackerFormatReader::open(src).is_err());
     }
 
     #[test]
