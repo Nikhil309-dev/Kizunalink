@@ -3,13 +3,15 @@
 > **Fastest path — prebuilt static binary, downloaded automatically.**
 > Import [`egg-audium-binary.json`](./egg-audium-binary.json) and start. The
 > installer runs automatically at install time: it picks the right asset for the
-> host architecture, downloads it from GitHub Releases, verifies its SHA-256, and
-> writes a `start.sh` wrapper that injects the panel variables into `config.toml`
-> and runs the binary. There is **nothing to build and nothing to upload by
-> hand** — no `cargo`, Rustup, CMake or `c++`. All runtime logs stream to the
-> **Console** tab (`INFO`/`DEBUG` on stdout, `WARN`/`ERROR` on stderr); file
-> logging is opt-in. See [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for
-> the full walkthrough. The sections below cover the build-from-source variants.
+> host architecture, downloads **only** the binary from GitHub Releases, verifies
+> its SHA-256, and installs a full `config.toml` matched to that release. There
+> is **nothing to build, no wrapper script, and nothing to upload by hand** — no
+> `cargo`, Rustup, CMake or `c++`. There is no `start.sh`: the released binary
+> reads the panel's `AUDIUM_*` Startup Variables directly from the environment,
+> so they always override `config.toml`. All runtime logs stream to the
+> **Console** tab (`TRACE`/`DEBUG`/`INFO` on stdout, `WARN`/`ERROR` on stderr).
+> See [`../DEPLOYMENT.md`](../DEPLOYMENT.md) for the full walkthrough. The
+> sections below cover the build-from-source variants.
 
 Pterodactyl runs each server in a container it controls: the panel mounts the
 server volume at `/home/container`, drops to the `container` user, runs from
@@ -106,8 +108,24 @@ working directory can be the repo without the config silently falling back to
 | `AUDIUM_ADDRESS` | yes | `0.0.0.0` so the panel can route the allocation. |
 | `AUDIUM_PORT` | yes | Must equal the allocation port. |
 | `AUDIUM_LOG_LEVEL` | no | `trace`..`off`. |
+| `AUDIUM_CONFIG_PATH` | no | Defaults to `/home/container/config.toml`. |
 | `AUDIUM_RATE_LIMIT_PER_MINUTE` | no | `0` disables. |
 | `AUDIUM_METRICS_ENABLED` | no | Prometheus endpoint. |
+| `AUDIUM_TLS_ENABLED` | no | Serve REST + WebSocket over TLS. |
+| `AUDIUM_TLS_CERT` / `AUDIUM_TLS_KEY` | no | PEM paths; used only when TLS is enabled. |
+
+## Editing the config (media sources and filters)
+
+The installer writes the **full** example `config.toml` for the release it just
+downloaded, so every media source and filter section is present. Open it in the
+panel's **Files** tab and edit it directly — enable a source, add a proxy, set a
+token. The file is yours: the installer never overwrites an existing
+`config.toml` on a later reinstall.
+
+Precedence is **environment > file**. The variables above override the matching
+keys, so the secret and port stay controlled by the panel even if the file also
+sets them. Everything else (sources, filters, mirrors, route planner) comes from
+the file.
 
 ## Gotchas
 

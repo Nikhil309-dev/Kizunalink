@@ -1,29 +1,28 @@
 {
-    "_comment": "Audium (Lavalink v4 node) \u2014 Pterodactyl egg that DOWNLOADS the prebuilt Linux binary from GitHub Releases at install time and runs it. No Rust/C++/CMake/Cargo on the host. Logs stream to the Console tab. See ../DEPLOYMENT.md.",
+    "_comment": "Audium (Lavalink v4 node) - Pterodactyl egg that downloads ONLY the prebuilt Linux release binary at install time and runs it. No start.sh, no repo clone, no toolchain. Ships the full example config.toml so every source/filter section is editable in the panel. See ../DEPLOYMENT.md.",
     "meta": {
         "version": "PTDL_v2",
         "update_url": null
     },
-    "exported_at": "2026-10-11T00:00:00+00:00",
-    "name": "Audium (Lavalink v4 node, prebuilt download)",
+    "exported_at": "2026-10-17T00:00:00+00:00",
+    "name": "Audium (Lavalink v4 node, prebuilt binary)",
     "author": "openhands@all-hands.dev",
-    "description": "Audium \u2014 a native Rust Lavalink v4 audio node. This egg downloads the correct prebuilt release binary (kizunalink-linux-x86_64-musl on x86_64, kizunalink-linux-arm64 on ARM64), verifies its SHA-256, and runs it. Nothing is compiled on the host. Startup Variables are injected into config.toml on every boot, and all runtime logs stream to the Console tab (console-only logging by default; file logging is opt-in).",
+    "description": "Audium - a native Rust Lavalink v4 audio node. This egg downloads the correct prebuilt release binary (static musl on x86_64, glibc on ARM64), verifies its SHA-256, and runs it directly. Nothing is compiled and no wrapper script is created. The full example config.toml is installed so every media source and filter is present and editable; the panel's Startup Variables are injected through AUDIUM_* environment variables.",
     "features": null,
     "docker_images": {
-        "ghcr.io/pterodactyl/yolks:debian": "ghcr.io/pterodactyl/yolks:debian",
-        "ghcr.io/pterodactyl/yolks:java_21": "ghcr.io/pterodactyl/yolks:java_21"
+        "ghcr.io/parkervcp/yolks:debian": "ghcr.io/parkervcp/yolks:debian"
     },
     "file_denylist": [],
-    "startup": "cd /home/container && ./start.sh",
+    "startup": "./audium",
     "config": {
         "files": "{}",
-        "startup": "{\r\n    \"done\": \"Server listening on\"\r\n}",
+        "startup": "{\"done\": \"Audium Server listening on\"}",
         "logs": "{}",
         "stop": "^^C"
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\n# Audium (prebuilt-binary) installer.\n#\n# Downloads the correct prebuilt Linux binary from GitHub Releases at install\n# time, verifies its SHA-256, and writes a start.sh wrapper. No Rust toolchain,\n# C++ compiler, CMake or Cargo is required on the panel host.\nset -e\n\nREPO=\"Nikhil309-dev/Kizunalink\"\nBASE=\"https://github.com/${REPO}/releases/latest/download\"\n\n# Pick the asset for this machine's architecture.\nARCH=\"$(uname -m)\"\ncase \"$ARCH\" in\n    x86_64|amd64)  ASSET=\"kizunalink-linux-x86_64-musl\" ;;   # fully static\n    aarch64|arm64) ASSET=\"kizunalink-linux-arm64\" ;;         # glibc >= 2.34\n    *) echo \"[audium] Unsupported architecture: $ARCH\"; exit 1 ;;\nesac\n\nmkdir -p /mnt/server/logs\ncd /mnt/server\n\necho \"[audium] Downloading ${ASSET} ...\"\nif ! curl -fSL --retry 3 -o \"${ASSET}\" \"${BASE}/${ASSET}\"; then\n    echo \"[audium] Download failed. Check the release and network access.\"\n    exit 1\nfi\n\nif curl -fSL --retry 3 -o \"${ASSET}.sha256\" \"${BASE}/${ASSET}.sha256\"; then\n    echo \"[audium] Verifying SHA-256 ...\"\n    if ! sha256sum -c \"${ASSET}.sha256\"; then\n        echo \"[audium] Checksum mismatch. Refusing to install a corrupt binary.\"\n        exit 1\n    fi\n    rm -f \"${ASSET}.sha256\"\nelse\n    echo \"[audium] warning: no checksum published for ${ASSET}; skipping verification\"\nfi\n\nchmod +x \"${ASSET}\"\n\n# start.sh injects the panel's Startup Variables into config.toml on every boot.\n# This is required because some published binaries predate AUDIUM_* environment\n# overrides and read config.toml only -- the panel variables must win regardless.\n# The default config logs to the CONSOLE only (no [logging.file] section), so the\n# Pterodactyl Console tab shows all startup/API/player/error logs out of the box.\ncat > start.sh <<EOF\n#!/bin/bash\nset -e\ncd /home/container\n\n: \"\\${AUDIUM_AUTHORIZATION:?Set the Authorization Secret in the panel Startup tab}\"\nADDR=\"\\${AUDIUM_ADDRESS:-0.0.0.0}\"\nPORT=\"\\${AUDIUM_PORT:-2333}\"\nLEVEL=\"\\${AUDIUM_LOG_LEVEL:-info}\"\n\nif [ ! -f config.toml ]; then\n    cat > config.toml <<'CFG'\n[server]\naddress = \"0.0.0.0\"\nport = 2333\nauthorization = \"unset-until-injected\"\nplayer_update_interval = 5\nstats_interval = 30\nwebsocket_ping_interval = 20\nmax_event_queue_size = 100\nrate_limit_per_minute = 2000\n\n[logging]\nlevel = \"info\"\nCFG\nfi\n\n# Rewrite address / port / authorization / level inside their sections only, so\n# any other settings the user added to config.toml are preserved.\nawk -v a=\"\\$ADDR\" -v p=\"\\$PORT\" -v k=\"\\$AUDIUM_AUTHORIZATION\" -v lvl=\"\\$LEVEL\" '\n  /^[[:space:]]*\\[/ { sec=\\$0 }\n  sec==\"[server]\" && \\$0 ~ /^[[:space:]]*address[[:space:]]*=/       { print \"address = \\\\\"\" a \"\\\\\"\"; next }\n  sec==\"[server]\" && \\$0 ~ /^[[:space:]]*port[[:space:]]*=/          { print \"port = \" p; next }\n  sec==\"[server]\" && \\$0 ~ /^[[:space:]]*authorization[[:space:]]*=/ { print \"authorization = \\\\\"\" k \"\\\\\"\"; next }\n  sec==\"[logging]\" && \\$0 ~ /^[[:space:]]*level[[:space:]]*=/        { print \"level = \\\\\"\" lvl \"\\\\\"\"; next }\n  { print }\n' config.toml > config.toml.tmp && mv config.toml.tmp config.toml\n\n# Also export the level for builds that support AUDIUM_* env overrides.\nexport AUDIUM_LOG_LEVEL=\"\\$LEVEL\"\n\nexec ./${ASSET}\nEOF\nchmod +x start.sh\n\necho \"[audium] Install complete. Binary: ${ASSET}\"\n",
+            "script": "#!/bin/bash\n# Audium (prebuilt-binary) installer.\n#\n# Downloads ONLY the prebuilt release binary for this architecture, verifies its\n# SHA-256, and drops in a full config.toml. No Rust toolchain, no C/C++ compiler,\n# no CMake, no Cargo, no repository clone. There is deliberately no start.sh:\n# the binary reads AUDIUM_* from the environment, so the panel injects the\n# settings directly.\nset -e\n\nREPO=\"Nikhil309-dev/Kizunalink\"\nBASE=\"https://github.com/${REPO}/releases/latest/download\"\n\n# --- 1. Pick the asset for this machine's architecture -----------------------\nARCH=\"$(uname -m)\"\ncase \"$ARCH\" in\n    x86_64|amd64)  ASSET=\"kizunalink-linux-x86_64-musl\" ;;   # fully static\n    aarch64|arm64) ASSET=\"kizunalink-linux-arm64\" ;;         # glibc >= 2.34\n    *) echo \"[audium] Unsupported architecture: $ARCH\"; exit 1 ;;\nesac\n\nmkdir -p /mnt/server/logs\ncd /mnt/server\n\n# --- 2. Download the binary (fixed local name: ./audium) ---------------------\necho \"[audium] Downloading ${ASSET} ...\"\nif ! curl -fSL --retry 3 -o audium.tmp \"${BASE}/${ASSET}\"; then\n    echo \"[audium] Download failed. Check the release and network access.\"\n    exit 1\nfi\nmv audium.tmp audium\n\n# --- 3. Verify the checksum (hard failure when published) -------------------\nif curl -fSL --retry 3 -o \"${ASSET}.sha256\" \"${BASE}/${ASSET}.sha256\"; then\n    echo \"[audium] Verifying SHA-256 ...\"\n    # The published .sha256 names the release asset; compare it against our file.\n    EXPECTED=\"$(awk '{print $1}' \"${ASSET}.sha256\")\"\n    ACTUAL=\"$(sha256sum audium | awk '{print $1}')\"\n    if [ \"$EXPECTED\" != \"$ACTUAL\" ]; then\n        echo \"[audium] Checksum mismatch. Refusing to install a corrupt binary.\"\n        echo \"  expected: $EXPECTED\"\n        echo \"  actual:   $ACTUAL\"\n        rm -f audium \"${ASSET}.sha256\"\n        exit 1\n    fi\n    rm -f \"${ASSET}.sha256\"\n    echo \"[audium] Checksum OK.\"\nelse\n    echo \"[audium] WARNING: no checksum published for ${ASSET}; skipping verification.\"\nfi\n\nchmod +x audium\n\n# --- 4. Install the full config.toml (never clobber an edited one) ----------\n# The config MUST match the binary's version: main can list media sources or\n# YouTube clients that an older release does not know, which would log\n# \"Unknown YouTube client\" warnings. So prefer the config from the SAME release\n# tag we just downloaded, and only fall back to the copy embedded in this egg.\nif [ -f config.toml ]; then\n    echo \"[audium] Keeping the existing config.toml (not overwriting).\"\nelse\n    echo \"[audium] Resolving the release tag ...\"\n    TAG=\"$(curl -fsSLI -o /dev/null -w '%{url_effective}' \\\n        \"https://github.com/${REPO}/releases/latest\" 2>/dev/null | sed -n 's#.*/tag/##p')\"\n    WROTE=\"\"\n    if [ -n \"$TAG\" ]; then\n        echo \"[audium] Fetching config.example.toml from ${TAG} ...\"\n        if curl -fsSL --retry 3 -o config.toml \\\n            \"https://raw.githubusercontent.com/${REPO}/${TAG}/config.example.toml\"; then\n            WROTE=\"release ${TAG}\"\n        fi\n    fi\n    if [ -z \"$WROTE\" ]; then\n        echo \"[audium] Falling back to the config bundled with this egg.\"\n        cat > config.toml <<'AUDIUM_CONFIG_EOF'\n# ╔════════════════════════════════════════════════════════════════╗\n# ║  Audium — Example Configuration                          ║\n# ║                                                              ║\n# ║  Copy this file to config.toml and customize for production. ║\n# ║  Tokens shown as \"your-*-token\" must be replaced.            ║\n# ║  Leave values empty or commented out to disable features.     ║\n# ╚════════════════════════════════════════════════════════════════╝\n\n[server]\naddress = \"0.0.0.0\"\nport = 2333\n# REQUIRED. There is no default. The server refuses to start if this is missing,\n# empty, or a known placeholder (e.g. \"youshallnotpass\"). Replace it with a\n# strong, unique secret, or omit the line and set AUDIUM_AUTHORIZATION instead.\nauthorization = \"replace-with-your-strong-secret\"\nplayer_update_interval = 5        # seconds\nstats_interval = 30               # seconds\nwebsocket_ping_interval = 20      # seconds\nmax_event_queue_size = 100\nrate_limit_per_minute = 2000      # requests/min per client IP over REST + WS upgrade (0 disables)\n\n# Optional TLS termination (HTTPS/WSS). Set enabled = true and point at PEM\n# cert/key paths to serve the REST API + WebSocket over TLS with rustls.\n# Leave disabled (default) if you terminate TLS at a reverse proxy instead.\n# These values can also be provided via AUDIUM_TLS_ENABLED / AUDIUM_TLS_CERT /\n# AUDIUM_TLS_KEY environment variables.\n#\n# [server.tls]\n# enabled = false\n# cert_path = \"/etc/audium/certs/fullchain.pem\"\n# key_path = \"/etc/audium/certs/privkey.pem\"\n\n[player]\nstuck_threshold_ms = 25000\nbuffer_duration_ms = 400\nframe_buffer_duration_ms = 5000\nresampling_quality = \"medium\"                                                  # low | medium | high\nopus_encoding_quality = 10                                                     # 1-10\ntape = { tape_stop = true, tape_stop_duration_ms = 500, curve = \"sinusoidal\" } # curve: linear | exponential | sinusoidal\n\n[player.sponsorblock]\n# Natively skips sponsor / intro / outro segments (API-compatible with the\n# SponsorBlock plugin; no JVM plugin required).\nenabled = false\ncategories = [\"sponsor\", \"intro\", \"outro\", \"interaction\", \"selfpromo\", \"music_offtopic\"]\n# api_url = \"https://sponsor.ajay.app\"\n\n[player.mirrors]\nmirror_on_stream_failure = true\n# Fallback providers tried, in order, when a track's own source cannot stream it\n# (e.g. a Spotify/Apple URL that must be re-resolved elsewhere).\n#\n# ISRC-capable providers (patterns containing %ISRC%) are attempted first so a\n# track is matched by its exact recording id; the rest run in parallel and are\n# ranked by the best_match scorer below.\n#\n# YouTube is deliberately LAST. On datacenter/cloud IPs YouTube returns HTTP 403\n# (\"Sign in to confirm you're not a bot\"), and paths that mirror Spotify/Apple to\n# YouTube by ISRC will hit that 403 too. For regional/Indian catalogs prefer\n# region-native sources (jssearch: = JioSaavn, gnsearch: = Gaana) which stream\n# from their own CDNs and are unaffected by the YouTube block.\n# Note: JioSaavn/Gaana do not resolve a bare ISRC as an id, so they are listed as\n# %QUERY% providers rather than %ISRC% providers.\nproviders = [\"tdsearch:%ISRC%\",\"dzsearch:%ISRC%\",\"jssearch:%QUERY%\",\"amksearch:%QUERY%\",\"gnsearch:%QUERY%\",\"dzsearch:%QUERY%\",\"ytsearch:%ISRC%\", \"ytsearch:%QUERY%\", \"scsearch:%QUERY%\"]\n\n[player.mirrors.best_match]\n# Enable weighted scoring to find the best-matching candidate.\n# When false, the first resolvable result from each provider is accepted immediately.\n# Default: true\nscoring = true\n\n# Prefixes treated as throttled (rate-sensitive) — tried sequentially after all parallel free providers.\n# Default: [\"ytmsearch:\", \"ytsearch:\"]\nthrottled_prefixes = [\"ytmsearch:\", \"ytsearch:\"]\n\n# Confidence thresholds (only used when scoring = true). All values in [0.0, 1.0].\n# immediate_use   — accept instantly, cancel remaining parallel searches.\n# high_confidence — try up to 2 candidates instead of 3.\n# min_similarity  — discard anything below this score entirely.\nimmediate_use   = 0.88\nhigh_confidence = 0.75\nmin_similarity  = 0.50\n\n# Scoring weights (should sum to 1.0).\nweight_title    = 0.50\nweight_artist   = 0.30\nweight_duration = 0.20\n\n# Milliseconds within which two track durations are considered identical.\nduration_tolerance_ms = 3000\n\n[logging]\nlevel = \"info\"              # trace | debug | info | warn | error | off\nfilters = \"audium=debug\" # e.g. \"audium=debug,davey=off\"\n\n# Console output is always on: INFO/DEBUG go to stdout and WARN/ERROR to stderr,\n# so container platforms (Pterodactyl, Docker, systemd) capture everything.\n# [logging.file] is OPTIONAL and only mirrors logs to a file *in addition* to the\n# console. Omit the section (or set enabled = false) to log to the console only.\n[logging.file]\nenabled = true\npath = \"./logs/audium.log\"\nmax_lines = 10000\nrotate_daily = false  # when true, creates audium-YYYY-MM-DD.log each day\nmax_files = 7         # max daily log files to keep (0 = unlimited, only applies when rotate_daily = true)\n\n[route_planner]\nenabled = false\ncidrs = []        # [\"1.2.3.4/24\"]\nexcluded_ips = []\n\n[sources.youtube]\nenabled = true\n# --- YouTube authentication (pick ONE; you do NOT need both) -------------------\n#\n# OPTION A — PoToken (recommended; no Google account, no ban risk).\n#   The PoToken is NOT a token you copy in. It is minted by a small provider\n#   process you run yourself. You need the ability to run one container OR to\n#   have a provider URL from someone. See the section below.\n#\n# OPTION B — OAuth (optional; needs a burner Google account).\n#   Works with NO shell access, e.g. a Pterodactyl panel: set the two values\n#   below, restart, and the panel console prints a link + code to approve.\n#   The public client_secret is not a secret (it ships in yt-dlp / lavalink).\n#\n# get_oauth_token = true\n# client_secret = \"SboVhoG9s0rNafixCSGGKXAT\"   # public YouTube-on-TV client secret\n# refresh_tokens = []   # leave empty the first time; the console prints the token\n#                       # to paste back here so you don't re-approve on every restart\n\n# YouTube blocks datacenter/cloud IPs (\"Sign in to confirm you're not a bot\" /\n# HTTP 403 from googlevideo.com). Routing YouTube through a clean/residential\n# proxy is the most reliable fix. Uncomment and edit to enable:\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n# Proof-of-Origin (PoToken) provider — OPTION A above.\n# YouTube enforces a PoToken on the GVS format URLs returned by the\n# WEB/ANDROID/IOS clients, which surfaces as HTTP 403 on googlevideo.com under\n# bursts. There is no token to paste: the token is minted by the provider below.\n# Run it on the same host as Audium (or anywhere Audium can reach):\n#   docker run --name bgutil-pot -d -p 4416:4416 brainicism/bgutil-ytdlp-pot-provider\n#   https://github.com/Brainicism/bgutil-ytdlp-pot-provider\n# If you cannot run a container (e.g. a panel with no shell), use OPTION B\n# (OAuth) or ask whoever runs your host to expose a provider URL you can reach.\n# [sources.youtube.pot]\n# enabled = true\n# url = \"http://127.0.0.1:4416\"   # or \"http://bgutil-pot:4416\" in Docker Compose\n# bypass_cache = false\n\n[sources.youtube.clients]\nsearch = [\"MUSIC_ANDROID\", \"MUSIC_WEB\", \"ANDROID\", \"WEB\"]\nplayback = [\"TV_CAST\", \"TV_EMBEDDED\", \"ANDROID_VR\", \"WEB_EMBEDDED\", \"ANDROID\", \"MUSIC_ANDROID\", \"WEB\"]\nresolve = [\"WEB\", \"MUSIC_WEB\", \"ANDROID\", \"TVHTML5_SIMPLY\"]\n\n[sources.youtube.cipher]\nurl = \"https://cipher.kikkia.dev/\"\n# token = \"your-auth-token\"\n\n[sources.spotify]\nenabled = true\nsearch_limit = 10\nrecommendations_limit = 10\nplaylist_load_limit = 6\nalbum_load_limit = 6\nplaylist_page_load_concurrency = 10\nalbum_page_load_concurrency = 5\ntrack_resolve_concurrency = 50\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.jiosaavn]\nenabled = true\nsearch_limit = 10\nrecommendations_limit = 10\nplaylist_load_limit = 50\nalbum_load_limit = 50\nartist_load_limit = 20\n# decryption = { secretKey = \"your-secret-key\" }\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.applemusic]\nenabled = true\ncountry_code = \"us\"\nplaylist_load_limit = 0\nalbum_load_limit = 0\nplaylist_page_load_concurrency = 5\nalbum_page_load_concurrency = 5\n# media_api_token = \"your-media-api-token\"\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.gaana]\nenabled = true\nsearch_limit = 10\nplaylist_load_limit = 50\nalbum_load_limit = 50\nartist_load_limit = 20\nstream_quality = \"high\"  # low | medium | high\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.deezer]\nenabled = false\n# arls = [\"your-arl-token\"]\n# master_decryption_key = \"your-key\"\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.tidal]\nenabled = false\ncountry_code = \"US\"\nhifi_apis = [\"http://localhost:8000\"]          # at least one HiFi API URL required\nhifi_qualities = [\"LOSSLESS\", \"HIGH\", \"LOW\"]   \nplaylist_load_limit = 50\nalbum_load_limit = 50\nartist_load_limit = 20\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.soundcloud]\nenabled = true\nsearch_limit = 10\nplaylist_load_limit = 100\n# client_id = \"your-client-id\"\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.qobuz]\nenabled = false\nsearch_limit = 10\nplaylist_load_limit = 100\nalbum_load_limit = 50\nartist_load_limit = 20\n# user_token = \"your-user-token\"\n# app_id = \"your-app-id\"\n# app_secret = \"your-app-secret\"\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.yandexmusic]\nenabled = false\nsearch_limit = 10\nplaylist_load_limit = 10\nalbum_load_limit = 10\nartist_load_limit = 10\n# access_token = \"your-oauth-token\"\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.vkmusic]\nenabled = false\nsearch_limit = 10\nplaylist_load_limit = 1   # pages × 50 tracks\nartist_load_limit = 1     # pages × 10 tracks\nrecommendations_load_limit = 10\n# user_token = \"your-vk-access-token\"    # get from browser devtools: POST /?act=web_token → response → access_token\n# user_cookie = \"your-full-vk-cookie\"    # get from browser devtools: POST /?act=web_token → request → cookie header\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.netease]\nenabled = false\nsearch_limit = 10\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.anghami]\nenabled = false\nsearch_limit = 10\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.shazam]\n# Disabled: shazam.com's catalog API now returns 403 to datacenter traffic,\n# so search can never resolve. Enable manually only if it works in your network.\nenabled = false\nsearch_limit = 10\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.mixcloud]\nenabled = true\nsearch_limit = 10\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.bandcamp]\n# Disabled: bandcamp.com/search serves a CSP \"Client Challenge\" anti-bot wall,\n# so the HTML parser never sees parseable results. Enable manually only if it\n# works in your network.\nenabled = false\nsearch_limit = 10\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.audiomack]\nenabled = true\nsearch_limit = 20\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.audius]\nenabled = true\nsearch_limit = 10\nplaylist_load_limit = 100\nalbum_load_limit = 100\n# app_name = \"your-app-name\"\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.pandora]\nenabled = false\nsearch_limit = 10\nplaylist_load_limit = 100\n# csrf_token = \"your-csrf-token\"\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.http]\nenabled = true\n\n[sources.local]\nenabled = false\n# Required when enabling local playback; paths outside this directory are rejected.\nmedia_dir = \"./media\"\n\n[sources.google_tts]\nenabled = false\nlanguage = \"en-US\"\n\n[sources.flowery]\nenabled = false\nvoice = \"Salli\"\ntranslate = false\nsilence = 0\nspeed = 1.0\nenforce_config = false\n\n[sources.reddit]\nenabled = false\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.lastfm]\nenabled = false\nsearch_limit = 10\n# Create your API key here: https://www.last.fm/api/account/create\n# api_key = \"your-lastfm-api-key\"\n\n[sources.twitch]\nenabled = true\n# client_id = \"your-client-id\"  # leave blank for auto-discovery from twitch.tv\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[sources.amazonmusic]\n# Requires an authenticated Amazon Music session (accessToken/csrf from\n# music.amazon.com/config.json); without one it returns empty results.\n# Disabled by default because the public site config cannot authenticate.\nenabled = false\nsearch_limit = 10\n# proxy = { url = \"http://proxy:8080\", username = \"user\", password = \"pass\" }\n\n[lyrics]\nyoutubemusic = true\nlrclib = true\ngenius = true\ndeezer = true\nyandex = true\nmusixmatch = true\nletrasmus = true\nnetease = true\n\n[filters]\nvolume = true\nequalizer = true\nkaraoke = true\ntimescale = true\ntremolo = true\nvibrato = true\ndistortion = true\nrotation = true\nchannel_mix = true\nlow_pass = true\necho = true\nhigh_pass = true\nnormalization = true\nchorus = true\ncompressor = true\nflanger = true\nphaser = true\nphonograph = true\nreverb = true\nspatial = true\n\n\n[metrics.prometheus]\nenabled = false\nendpoint = \"/metrics\"\nAUDIUM_CONFIG_EOF\n        WROTE=\"egg default\"\n    fi\n    echo \"[audium] config.toml written from ${WROTE} ($(wc -l < config.toml) lines).\"\n    echo \"[audium] Edit it in the panel's Files tab to enable sources and filters.\"\nfi\n\necho \"[audium] Install complete. Binary: ./audium\"\necho \"[audium] Set AUDIUM_AUTHORIZATION and AUDIUM_PORT in the Startup tab, then start.\"\n",
             "container": "ghcr.io/pterodactyl/installers:debian",
             "entrypoint": "bash"
         }
@@ -31,12 +30,22 @@
     "variables": [
         {
             "name": "Authorization Secret",
-            "description": "Required. Strong random secret clients use as the Lavalink password. Generate with: openssl rand -hex 32",
+            "description": "Required. The Lavalink password your bot uses to connect. Generate with: openssl rand -hex 32",
             "env_variable": "AUDIUM_AUTHORIZATION",
             "default_value": "",
             "user_viewable": true,
             "user_editable": true,
             "rules": "required|string|min:16",
+            "field_type": "text"
+        },
+        {
+            "name": "Port",
+            "description": "Port to listen on. Must equal the primary allocation port shown for this server.",
+            "env_variable": "AUDIUM_PORT",
+            "default_value": "2333",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:1,65535",
             "field_type": "text"
         },
         {
@@ -50,18 +59,8 @@
             "field_type": "text"
         },
         {
-            "name": "Port",
-            "description": "Port to listen on. Must equal the primary allocation port the panel shows for this server.",
-            "env_variable": "AUDIUM_PORT",
-            "default_value": "2333",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "required|integer|between:1,65535",
-            "field_type": "text"
-        },
-        {
             "name": "Log Level",
-            "description": "Console log verbosity: trace | debug | info | warn | error | off. Injected into config.toml and exported as AUDIUM_LOG_LEVEL.",
+            "description": "Console log verbosity: trace | debug | info | warn | error | off.",
             "env_variable": "AUDIUM_LOG_LEVEL",
             "default_value": "info",
             "user_viewable": true,
@@ -70,8 +69,18 @@
             "field_type": "text"
         },
         {
+            "name": "Config Path",
+            "description": "Absolute path to config.toml. Leave as-is unless you move the file.",
+            "env_variable": "AUDIUM_CONFIG_PATH",
+            "default_value": "/home/container/config.toml",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string",
+            "field_type": "text"
+        },
+        {
             "name": "Rate Limit Per Minute",
-            "description": "Per-IP request cap over REST + WS upgrade. 0 disables.",
+            "description": "Per-IP request cap over REST + WebSocket upgrade. 0 disables.",
             "env_variable": "AUDIUM_RATE_LIMIT_PER_MINUTE",
             "default_value": "2000",
             "user_viewable": true,
@@ -81,12 +90,42 @@
         },
         {
             "name": "Prometheus Metrics",
-            "description": "Enable the Prometheus metrics endpoint.",
+            "description": "Expose the Prometheus metrics endpoint.",
             "env_variable": "AUDIUM_METRICS_ENABLED",
             "default_value": "false",
             "user_viewable": true,
             "user_editable": true,
             "rules": "required|string|in:true,false",
+            "field_type": "text"
+        },
+        {
+            "name": "TLS Enabled",
+            "description": "Serve the REST API + WebSocket over TLS. Requires the cert and key paths below.",
+            "env_variable": "AUDIUM_TLS_ENABLED",
+            "default_value": "false",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|in:true,false",
+            "field_type": "text"
+        },
+        {
+            "name": "TLS Certificate Path",
+            "description": "Absolute path to the PEM full-chain certificate. Only used when TLS Enabled is true.",
+            "env_variable": "AUDIUM_TLS_CERT",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string",
+            "field_type": "text"
+        },
+        {
+            "name": "TLS Key Path",
+            "description": "Absolute path to the PEM private key. Only used when TLS Enabled is true.",
+            "env_variable": "AUDIUM_TLS_KEY",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string",
             "field_type": "text"
         }
     ]

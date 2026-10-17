@@ -11,9 +11,10 @@ the host. It is the path to use when the panel image lacks native build tools.
 
 > **Automatic (recommended):** instead of uploading anything by hand, import
 > [`pterodactyl/egg-audium-binary.json`](../pterodactyl/egg-audium-binary.json).
-> Its installer detects the host architecture, downloads the matching release
-> asset, verifies the SHA-256, and runs it — and the panel Startup Variables are
-> injected into `config.toml` on every boot. The rest of this guide is the
+> Its installer detects the host architecture, downloads **only** the matching
+> release binary, verifies the SHA-256, and installs the version-matched
+> `config.toml`. There is no `start.sh`: the binary reads the panel's `AUDIUM_*`
+> Startup Variables straight from the environment. The rest of this guide is the
 > **manual upload** path, useful when you want to pin a specific binary or the
 > panel cannot reach GitHub at install time.
 
@@ -104,25 +105,26 @@ panel variable below; environment variables always override the file.
 
 ## 4. Startup command
 
-Set the server's **Startup Command** (Admin → Nests → the Audium egg → or
-the server's startup parameters) to:
+The egg sets the Startup Command to:
 
 ```bash
-cd /home/container && ./start.sh
+./audium
 ```
 
-`start.sh` is written by the installer. It injects the panel's Startup Variables
-(address, port, authorization, log level) into `config.toml` on every boot and
-then `exec`s the binary — so panel variables always win and the process replaces
-the shell (clean SIGTERM handling). If you manage `config.toml` by hand instead,
-you can start the binary directly:
+That is the whole thing — **there is no `start.sh`.** The released binary reads
+`AUDIUM_*` environment variables directly, and Pterodactyl puts the panel's
+Startup Variables into the process environment, so the panel settings reach the
+server with no wrapper script and no file rewriting. Environment variables
+override `config.toml`, so the secret and port always win.
+
+If you manage `config.toml` by hand and want to start the binary yourself:
 
 ```bash
-cd /home/container && ./kizunalink-linux-x86_64-musl
+cd /home/container && ./audium
 ```
 
-No `cargo`, no `PATH` mangling, no `AUDIUM_CONFIG_PATH` needed when the config
-sits in `/home/container`.
+No `cargo`, no `PATH` mangling, and no `AUDIUM_CONFIG_PATH` needed when the
+config sits in `/home/container` (the working directory).
 
 > If the egg's startup command is **locked** (greyed out / not editable), you
 > must edit the egg itself: **Admin → Nests → Audium → Startup Command**.
@@ -201,8 +203,10 @@ With the **glibc** `amd64` binary, the only runtime libraries are `libgcc_s.so.1
 error while loading shared libraries: libc.so.6: version `GLIBC_2.34' not found
 ```
 
-the container's glibc is too old (Pterodactyl's stock `yolks:debian` is glibc
-2.28). Fix it by using `kizunalink-linux-x86_64-musl` instead, or by pointing the
+the container's glibc is too old (Pterodactyl's own `ghcr.io/pterodactyl/yolks:debian`
+is Debian 10, glibc 2.28). The egg avoids this by shipping
+`ghcr.io/parkervcp/yolks:debian` (glibc 2.41). If you switched to the stock
+image, fix it by using `kizunalink-linux-x86_64-musl` instead, or by pointing the
 server at a newer image (see §8).
 
 If a non-base library is ever reported missing, install it in the egg's install
@@ -239,10 +243,10 @@ The startup command runs whatever binary you upload, so the image mainly matters
 for the C runtime. Two options:
 
 - **Use the musl static binary.** Recommended; no image change needed.
-- **Change the egg's `docker_images`.** In the egg JSON, set a newer image, e.g.
-  `ghcr.io/pterodactyl/yolks:debian` is glibc 2.28 — prefer a Debian 12+ based
-  image, or keep the user's `ghcr.io/ptero-eggs/yolks:rust_latest` (Debian 13,
-  glibc 2.41) which already satisfies the glibc build. Apply the change in
+- **Change the egg's `docker_images`.** Pterodactyl's own
+  `ghcr.io/pterodactyl/yolks:debian` is glibc 2.28 and cannot run the ARM64
+  binary; the egg therefore ships `ghcr.io/parkervcp/yolks:debian` (glibc 2.41),
+  which satisfies both architectures. Apply any change in
   **Admin → Nests → Audium → Docker Images**, then restart.
 
 ## 9. Updating the binary
