@@ -24,10 +24,7 @@ impl Encoder {
         encoder
             .set_bitrate(Bitrate::Auto)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-        // Voice UDP is lossy and has no retransmission. In-band FEC embeds a
-        // redundant copy of the previous frame so the receiver can conceal a
-        // single lost packet instead of producing an audible gap. libopus
-        // defaults both of these to 0 (off), which is wrong for this transport.
+
         encoder
             .set_packet_loss_perc(ASSUMED_PACKET_LOSS_PERCENT)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
@@ -73,7 +70,7 @@ mod tests {
     #[test]
     fn test_encoder_encode_silence() {
         let mut encoder = Encoder::new().unwrap();
-        let input = vec![0i16; 960 * 2]; // 20ms stereo frame at 48kHz
+        let input = vec![0i16; 960 * 2];
         let mut output = vec![0u8; 4000];
 
         let result = encoder.encode(&input, &mut output);
@@ -90,7 +87,7 @@ mod tests {
     #[test]
     fn test_encoder_encode_tone() {
         let mut encoder = Encoder::new().unwrap();
-        // Generate a simple 440Hz tone
+
         let mut input = vec![0i16; 960 * 2];
         for (i, sample) in input.iter_mut().enumerate() {
             let t = (i / 2) as f32 / 48000.0;
@@ -133,7 +130,6 @@ mod tests {
         let input = vec![1000i16; 960 * 2];
         let mut output = vec![0u8; 4000];
 
-        // Encode multiple frames to ensure state is maintained
         for _ in 0..5 {
             let result = encoder.encode(&input, &mut output);
             assert!(result.is_ok(), "Multiple encodings should succeed");
@@ -146,14 +142,12 @@ mod tests {
         let mut encoder1 = Encoder::new().unwrap();
         let mut output1 = vec![0u8; 4000];
 
-        // Silence
         let silence = vec![0i16; 960 * 2];
         let size1 = encoder1.encode(&silence, &mut output1).unwrap();
 
         let mut encoder2 = Encoder::new().unwrap();
         let mut output2 = vec![0u8; 4000];
 
-        // Tone
         let tone = vec![5000i16; 960 * 2];
         let size2 = encoder2.encode(&tone, &mut output2).unwrap();
 

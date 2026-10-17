@@ -37,8 +37,6 @@ pub async fn get_youtube_info(
         }
     };
 
-    // Do not echo configured refresh tokens: they are long-lived credentials.
-    // Clients exchange a token for an access token via `GET /youtube/oauth/{token}`.
     let count = ctx.oauth.get_refresh_tokens().await.len();
     tracing::debug!("GET /youtube: {} refresh token(s) configured", count);
     (
@@ -198,8 +196,6 @@ pub async fn youtube_stream(
         found_formats = true;
         last_was_exception = false;
 
-        // An explicit itag request must keep using the direct-URL path, so HLS
-        // is only considered when the caller did not ask for a specific format.
         if params.itag.is_none()
             && let Some(hls_url) = streaming_data
                 .get("hlsManifestUrl")
@@ -467,9 +463,6 @@ async fn stream_via_hls(
     let cipher = ctx.cipher_manager.clone();
     let player_url = format!("https://www.youtube.com/watch?v={}", video_id);
 
-    // The init/map segment carries the codec configuration, so it must lead the
-    // body. Both it and the media segments may carry an n-param that has to be
-    // translated before the fetch will be accepted.
     let mut body = Vec::new();
     if let Some(map_res) = &map {
         let mut resolved = map_res.clone();
@@ -495,8 +488,6 @@ async fn stream_via_hls(
         }
     }
 
-    // Fetch the first media segment. Success here is the proof that HLS is
-    // actually usable, so it gates the decision to serve an HLS response.
     let first = &segments[0];
     let mut resolved_first = first.clone();
     resolved_first.url = match resolve_seg_url(&first.url, &cipher, &player_url).await {
@@ -522,9 +513,6 @@ async fn stream_via_hls(
     }
     body.extend_from_slice(&first_data);
 
-    // A client that only ever receives the first segment will stop reading; the
-    // channel bounds how far ahead the fetcher may run so a slow consumer cannot
-    // grow memory without limit.
     const PREFETCH_AHEAD: usize = 3;
     let (tx, rx) = flume::bounded::<Result<bytes::Bytes, String>>(PREFETCH_AHEAD);
     let rest = segments[1..].to_vec();
@@ -681,7 +669,6 @@ fn parse_range_header(
     let start_str = caps.get(1).map(|m| m.as_str()).unwrap_or("");
     let end_str = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-    // A suffix range (`bytes=-N`) requests the final N bytes.
     if start_str.is_empty() {
         if end_str.is_empty() {
             return None;
@@ -697,8 +684,7 @@ fn parse_range_header(
     if start > last {
         return None;
     }
-    // Clamp the end to the last byte; RFC 9110 treats an over-long end as the
-    // end of the representation, and an absent end as "to the end".
+
     let end = match end_str.parse::<u64>() {
         Ok(end) => end.min(last),
         Err(_) => last,
@@ -720,7 +706,6 @@ mod tests {
 
     #[test]
     fn absent_range_falls_back_to_the_caller_default() {
-        // The caller substitutes the full `[0, len - 1]` range on `None`.
         assert_eq!(parse_range_header(None, 1000), None);
     }
 
@@ -742,7 +727,6 @@ mod tests {
 
     #[test]
     fn clamps_an_over_long_end_to_the_last_byte() {
-        // RFC 9110: an end past the representation means "to the end".
         assert_eq!(
             parse_range_header(range("bytes=900-99999").as_ref(), 1000),
             Some((900, 999))
@@ -751,25 +735,24 @@ mod tests {
 
     #[test]
     fn rejects_unsatisfiable_or_malformed_ranges() {
-        // Start past the end.
         assert_eq!(
             parse_range_header(range("bytes=5000-6000").as_ref(), 1000),
             None
         );
-        // Inverted.
+
         assert_eq!(
             parse_range_header(range("bytes=800-100").as_ref(), 1000),
             None
         );
-        // Zero-length suffix and garbage.
+
         assert_eq!(parse_range_header(range("bytes=-0").as_ref(), 1000), None);
         assert_eq!(parse_range_header(range("bytes=abc").as_ref(), 1000), None);
-        // Multiple ranges are not supported; fall back to the full range.
+
         assert_eq!(
             parse_range_header(range("bytes=0-1,5-6").as_ref(), 1000),
             None
         );
-        // Empty representation has no satisfiable range.
+
         assert_eq!(parse_range_header(None, 0), None);
     }
 
@@ -781,10 +764,9 @@ mod tests {
 
     #[test]
     fn rejects_malformed_or_injected_video_ids() {
-        // Wrong length.
         assert!(!is_valid_video_id("dQw4w9WgXc"));
         assert!(!is_valid_video_id("dQw4w9WgXcQQ"));
-        // Path/query metacharacters used to escape the interpolated URL.
+
         assert!(!is_valid_video_id("aaaaaaaaa/ "));
         assert!(!is_valid_video_id("a?b=c&d=e#f"));
         assert!(!is_valid_video_id("../../etc/x"));

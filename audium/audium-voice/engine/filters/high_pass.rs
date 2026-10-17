@@ -35,7 +35,7 @@ impl HighPassFilter {
 
         let fs = 48000.0;
         let fc = self.cutoff_frequency as f64;
-        let q = 0.7071067811865475; // 1 / sqrt(2)
+        let q = 0.7071067811865475;
 
         let w0 = 2.0 * std::f64::consts::PI * (fc / fs);
         let cos_w0 = w0.cos();

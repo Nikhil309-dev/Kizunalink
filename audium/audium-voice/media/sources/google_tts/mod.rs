@@ -38,7 +38,7 @@ impl GoogleTtsSource {
             identifier: format!("gtts://{}:{}", language, text),
             is_seekable: true,
             author: "Google TTS".to_string(),
-            length: 0, // length is unknown/unlimited
+            length: 0,
             is_stream: false,
             position: 0,
             title: format!("TTS: {}", title_text),
@@ -69,7 +69,6 @@ impl GoogleTtsSource {
             }
         }
 
-        // Handle // after prefix (e.g., gtts://en:hello)
         if path.starts_with("//") {
             path = &path[2..];
         }
@@ -124,11 +123,10 @@ impl SourcePlugin for GoogleTtsSource {
         let (language, text) = self.parse_query(identifier);
         let url = self.build_url(&language, &text);
 
-        // Use HttpTrack to decode the audio stream
         Some(Box::new(HttpTrack {
             url,
             local_addr: routeplanner.and_then(|rp| rp.get_address()),
-            proxy: None, // Google TTS doesn't currently support proxy config directly in the new implementation, similar to Spotify
+            proxy: None,
             headers: None,
         }))
     }

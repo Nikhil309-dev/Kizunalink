@@ -79,8 +79,7 @@ pub fn collect_stats(app_state: &AppState, session: Option<&Session>) -> protoco
         },
         frame_stats: session
             .and_then(|sess| FrameMetrics::calculate(sess, app_state.config.server.stats_interval)),
-        // Filled by the REST/WS layer when `monitoring.detailed_stats` is on;
-        // `collect_stats` stays pure so WS per-tick stats don't rebuild it.
+
         detailed_stats: None,
     }
 }
@@ -118,7 +117,6 @@ impl FrameMetrics {
         let delta_sent = historical_sent.saturating_sub(last_sent) as i32;
         let delta_nulled = historical_nulled.saturating_sub(last_nulled) as i32;
 
-        // Standard 50 fps per active player
         let expected_total = (interval_secs * 50) as i32 * active_player_count;
         let deficit = expected_total - (delta_sent + delta_nulled);
 

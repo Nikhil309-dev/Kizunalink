@@ -58,22 +58,21 @@ pub fn is_tracker_magic(header: &[u8]) -> bool {
         return false;
     }
 
-    // XM: "Extended Module: "
     if header.starts_with(b"Extended Module: ") {
         return true;
     }
-    // IT: "IMPM"
+
     if header.starts_with(b"IMPM") {
         return true;
     }
-    // S3M: "SCRM" at offset 44
+
     if header.len() >= 48 && &header[44..48] == b"SCRM" {
         return true;
     }
-    // MOD: a 4-byte signature at offset 1080.
+
     if header.len() >= 1084 {
         let sig = &header[1080..1084];
-        // ProTracker / FastTracker / Octalyser / Composer family signatures.
+
         const SIGS: [&[u8; 4]; 12] = [
             b"M.K.", b"M!K!", b"M&K!", b"N.T.", b"FLT4", b"FLT8", b"4CHN", b"6CHN", b"8CHN",
             b"OCTA", b"OKTA", b"CD81",
@@ -81,7 +80,7 @@ pub fn is_tracker_magic(header: &[u8]) -> bool {
         if SIGS.iter().any(|s| s.as_slice() == sig) {
             return true;
         }
-        // Channel-count signatures such as "10CH" / "32CH".
+
         if sig[2] == b'C' && sig[3] == b'H' && sig[0].is_ascii_digit() && sig[1].is_ascii_digit() {
             return true;
         }
@@ -151,9 +150,8 @@ mod tests {
 
     #[test]
     fn mod_magic_needs_the_signature_offset() {
-        // A short buffer cannot be a MOD: the signature lives at byte 1080.
         assert!(!is_tracker_magic(&[0u8; 512]));
-        // Nor does arbitrary leading data match the leading-magic formats.
+
         assert!(!is_tracker_magic(b"RIFFxxxxWAVE"));
     }
 }

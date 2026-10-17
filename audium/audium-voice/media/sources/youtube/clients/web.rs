@@ -266,7 +266,6 @@ impl YouTubeClient for WebClient {
             .and_then(|v| v.as_str())
             .or_else(|| context.get("visitorData").and_then(|v| v.as_str()));
 
-        // Web client requires cipher resolution (signatureTimestamp / n-param).
         let signature_timestamp = cipher_manager.get_signature_timestamp().await.ok();
         let body = self
             .player_request(track_id, visitor_data, signature_timestamp, &oauth, None)
@@ -282,7 +281,6 @@ impl YouTubeClient for WebClient {
             }
         };
 
-        // HLS for live streams
         if let Some(hls) = streaming_data
             .get("hlsManifestUrl")
             .and_then(|v| v.as_str())

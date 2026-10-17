@@ -259,7 +259,6 @@ impl YouTubeClient for TvClient {
             }
         };
 
-        // TV client gets HLS for live streams
         if let Some(hls) = streaming_data
             .get("hlsManifestUrl")
             .and_then(|v| v.as_str())

@@ -80,7 +80,6 @@ impl LyricsProvider for YandexProvider {
         let track_id = if track.source_name == "yandexmusic" {
             track.identifier.clone()
         } else {
-            // Search logic if not directly from yandex
             let query = format!("{} {}", title, author);
             let search_url = format!(
                 "https://api.music.yandex.net/search?text={}&type=track&page=0",

@@ -19,7 +19,7 @@ use crate::{
 
 const DAVE_MIN_VERSION: NonZeroU16 = match NonZeroU16::new(DAVE_INITIAL_VERSION) {
     Some(v) => v,
-    // B24: give a clear const-panic message if someone sets DAVE_INITIAL_VERSION = 0.
+
     None => panic!("DAVE_INITIAL_VERSION must be non-zero"),
 };
 
@@ -110,10 +110,10 @@ impl DaveHandler {
     pub fn setup_session(&mut self, version: u16) -> AnyResult<Vec<u8>> {
         if version == 0 {
             self.reset();
-            self.encryption_required = false; // explicit negotiation of plaintext
+            self.encryption_required = false;
             return Ok(Vec::new());
         }
-        // Record the requirement before any potentially failing MLS operation.
+
         self.encryption_required = true;
         if version != DAVE_INITIAL_VERSION {
             return Err(map_boxed_err(format!(
@@ -137,7 +137,7 @@ impl DaveHandler {
                 .map_err(map_boxed_err)?;
             self.session = Some(session);
         }
-        // Both branches above guarantee the session is present.
+
         let session = self
             .session
             .as_mut()
@@ -198,12 +198,7 @@ impl DaveHandler {
                 }
             }
             self.protocol_version = next_version;
-            if next_version == 0 {
-                // A gateway-executed transition to v0 is an explicit downgrade.
-                self.encryption_required = false;
-            } else {
-                self.encryption_required = true;
-            }
+            self.encryption_required = next_version != 0;
             trace!(
                 "DAVE transition {} executed (v{})",
                 transition_id, next_version
@@ -251,8 +246,6 @@ impl DaveHandler {
             return EpochOutcome::Ignored;
         }
 
-        // The group is retained: record the version we are transitioning to and let
-        // the caller announce readiness so the gateway can execute the transition.
         self.prepared_protocol_version = protocol_version;
         debug!("DAVE epoch {epoch} retains the MLS group; pending protocol v{protocol_version}");
         EpochOutcome::Ready
@@ -481,10 +474,6 @@ mod tests {
 
     #[test]
     fn advertised_dave_version_is_implementable() {
-        // identify() sends this as `max_dave_protocol_version`, so the node must
-        // never advertise a version the vendored davey cannot implement. When a
-        // future davey adds a newer version, this test fails loudly and forces the
-        // constant (and the ciphersuite plumbing behind it) to be revisited.
         assert_eq!(
             crate::discord::gateway::constants::DAVE_INITIAL_VERSION,
             davey::DAVE_PROTOCOL_VERSION,
@@ -496,29 +485,25 @@ mod tests {
     fn test_handshake_buffering_logic() {
         let mut handler = DaveHandler::new(UserId(1), ChannelId(1));
 
-        // Buffering should happen if external_sender_set is false
-        let welcome_data = vec![0, 42, 1, 2, 3]; // tid 42
+        let welcome_data = vec![0, 42, 1, 2, 3];
         let res = handler.process_welcome(&welcome_data);
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), 42);
         assert_eq!(handler.pending_handshake.len(), 1);
 
-        let commit_data = vec![0, 43, 4, 5, 6]; // tid 43
+        let commit_data = vec![0, 43, 4, 5, 6];
         let res = handler.process_commit(&commit_data);
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), 43);
         assert_eq!(handler.pending_handshake.len(), 2);
 
-        // setup_session should clear buffers
         handler.setup_session(1).unwrap();
         assert_eq!(handler.pending_handshake.len(), 0);
         assert!(!handler.external_sender_set);
 
-        // Buffering again after setup
         handler.process_welcome(&welcome_data).unwrap();
         assert_eq!(handler.pending_handshake.len(), 1);
 
-        // reset should clear buffers
         handler.reset();
         assert_eq!(handler.pending_handshake.len(), 0);
     }
@@ -527,18 +512,15 @@ mod tests {
     fn epoch_one_creates_a_group_while_higher_epochs_only_report_readiness() {
         let mut handler = DaveHandler::new(UserId(1), ChannelId(1));
 
-        // epoch == 1 asks for (re-)creation: a key package must be sent.
         let outcome = handler.prepare_epoch(1, DAVE_INITIAL_VERSION);
         assert!(matches!(outcome, EpochOutcome::KeyPackage(_)));
         assert!(handler.session.is_some());
 
-        // epoch > 1 retains the group and only reports readiness to transition.
         assert_eq!(
             handler.prepare_epoch(4, DAVE_INITIAL_VERSION),
             EpochOutcome::Ready
         );
 
-        // Invalid epochs and unsupported versions are ignored, never "ready".
         assert_eq!(
             handler.prepare_epoch(0, DAVE_INITIAL_VERSION),
             EpochOutcome::Ignored
@@ -592,8 +574,7 @@ mod tests {
         handler.setup_session(DAVE_INITIAL_VERSION).unwrap();
         assert!(!handler.can_send_media());
         assert!(handler.encrypt_opus(media).is_err());
-        // The davey library permits a silence packet in a *ready* session;
-        // it must not bypass the readiness gate during a failed negotiation.
+
         assert!(
             handler
                 .encrypt_opus(&crate::discord::gateway::constants::SILENCE_FRAME)
@@ -611,7 +592,6 @@ mod tests {
         assert!(handler.setup_session(DAVE_INITIAL_VERSION + 1).is_err());
         assert!(handler.encrypt_opus(media).is_err());
 
-        // Only an explicit gateway negotiation of version zero can downgrade.
         handler.setup_session(0).unwrap();
         assert!(handler.can_send_media());
         assert_eq!(handler.encrypt_opus(media).unwrap().as_slice(), media);
@@ -643,28 +623,23 @@ mod tests {
     #[test]
     fn user_churn_keeps_the_recognized_set_and_cache_consistent() {
         let mut handler = DaveHandler::new(UserId(1), ChannelId(1));
-        // The local user is always part of its own group.
+
         assert_eq!(handler.cached_user_ids, vec![1]);
 
-        // Growth beyond two members.
         handler.add_users(&[10, 20, 30]);
         assert_eq!(handler.cached_user_ids, vec![1, 10, 20, 30]);
         assert_eq!(handler.recognized_users.len(), 4);
 
-        // Duplicate adds are idempotent (no cache drift, stays sorted).
         handler.add_users(&[20, 30]);
         assert_eq!(handler.cached_user_ids, vec![1, 10, 20, 30]);
 
-        // Intermediate member leaves: only that member is dropped.
         handler.remove_user(20);
         assert_eq!(handler.cached_user_ids, vec![1, 10, 30]);
         assert_eq!(handler.recognized_users.len(), 3);
 
-        // Removing an unknown user is a no-op.
         handler.remove_user(999);
         assert_eq!(handler.cached_user_ids, vec![1, 10, 30]);
 
-        // Rejoin restores the member without reordering.
         handler.add_users(&[20]);
         assert_eq!(handler.cached_user_ids, vec![1, 10, 20, 30]);
     }

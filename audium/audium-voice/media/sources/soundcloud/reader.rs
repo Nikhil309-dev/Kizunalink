@@ -67,7 +67,7 @@ impl MediaSource for SoundCloudReader {
 #[derive(Debug, Clone)]
 enum PrefetchCommand {
     Continue,
-    Seek(usize), // Segment index
+    Seek(usize),
     Stop,
 }
 
@@ -124,10 +124,8 @@ impl SoundCloudHlsReader {
             .collect();
         let all_segments = segment_urls.clone();
 
-        // SoundCloud bitrate is in bits per second. We need bytes per second for seeking.
         let byte_rate = bitrate_bps / 8;
 
-        // ── Bootstrap: fetch first batch into active buffer ──
         let mut initial_buf = Vec::with_capacity(512 * 1024);
         let first_batch_count = PREFETCH_SEGMENTS.min(segment_urls.len());
         let mut pending = segment_urls;
@@ -184,7 +182,6 @@ impl SoundCloudHlsReader {
         let current_byte = self.total_bytes_read;
         let diff = (target_byte as i64) - (current_byte as i64);
 
-        // Gapless optimization: seek within the already demuxed active buffer.
         let buf_len = self.buf.len() as i64;
         let current_pos_in_buf = self.pos as i64;
         let new_pos_in_buf = current_pos_in_buf + diff;
@@ -199,7 +196,6 @@ impl SoundCloudHlsReader {
             return Ok(target_byte);
         }
 
-        // Hard seek: map byte offset to segment index.
         let target_secs = target_byte as f64 / self.byte_rate as f64;
         let mut segment_start_secs = 0.0;
         let mut target_index = 0;
@@ -217,7 +213,6 @@ impl SoundCloudHlsReader {
             target_index = self.all_segments.len().saturating_sub(1);
         }
 
-        // Calculate virtual skip within the physical segment.
         let segment_start_byte = (segment_start_secs * self.byte_rate as f64) as u64;
         let skip_in_segment = target_byte.saturating_sub(segment_start_byte);
 
@@ -226,12 +221,10 @@ impl SoundCloudHlsReader {
             target_byte, target_index, segment_start_secs, skip_in_segment
         );
 
-        // Clear active buffer
         self.buf.clear();
         self.pos = 0;
         self.total_bytes_read = target_byte;
 
-        // Signal prefetcher
         {
             let (lock, cvar) = &*self.shared;
             let mut state = lock.lock();
@@ -245,7 +238,6 @@ impl SoundCloudHlsReader {
             }
             state.seek_done = false;
 
-            // Swap in the seek target segment
             std::mem::swap(&mut self.buf, &mut state.next_buf);
             state.next_buf.clear();
             debug!(
@@ -253,7 +245,6 @@ impl SoundCloudHlsReader {
                 self.buf.len()
             );
 
-            // Align the buffer position to match the requested virtual byte.
             self.pos = (skip_in_segment as usize).min(self.buf.len());
             if self.pos > 0 || skip_in_segment > 0 {
                 debug!(
@@ -309,7 +300,6 @@ impl Read for SoundCloudHlsReader {
             cvar.wait(&mut state);
         }
 
-        // Swap next buffer into active position
         let next_len = state.next_buf.len();
         self.buf.clear();
         self.pos = 0;
@@ -361,7 +351,7 @@ impl Drop for SoundCloudHlsReader {
         state.command = PrefetchCommand::Stop;
         state.need_data = true;
         cvar.notify_one();
-        drop(state); // Drop the lock before waiting on the thread
+        drop(state);
         if let Some(handle) = self.bg_thread.take() {
             let _ = handle.join();
         }
@@ -418,7 +408,7 @@ fn prefetch_loop(
                     tracing::warn!("SoundCloud HLS prefetcher: seek fetch error: {}", e);
                     state.next_buf.extend_from_slice(&tmp_buf);
                     state.error = Some(e);
-                    state.seek_done = true; // unblock the seeking reader
+                    state.seek_done = true;
                     state.need_data = false;
                     state.eos = true;
                     cvar.notify_one();
@@ -465,14 +455,10 @@ fn prefetch_loop(
 
         let mut state = lock.lock();
         if !matches!(state.command, PrefetchCommand::Continue) {
-            // Re-enter the loop to immediately handle the new command (e.g. Seek)
-            // without resetting need_data to false, which would cause a deadlock
             continue;
         }
 
         if let Some(e) = fetch_error {
-            // Preserve segments decoded before the failure, then fail the stream
-            // so the caller sees a real error rather than premature EOS.
             state.next_buf.extend_from_slice(&tmp_buf);
             state.error = Some(e);
             state.eos = true;
@@ -497,7 +483,6 @@ async fn fetch_and_demux_into(
     let mut raw = Vec::new();
     fetch_segment_into(client, res, &mut raw).await?;
 
-    // If segment is MPEG-TS (starts with sync byte 0x47), demux to ADTS/MP3
     if raw.first() == Some(&0x47) {
         let adts = extract_adts_from_ts(&raw);
         if !adts.is_empty() {

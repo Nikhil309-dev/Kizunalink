@@ -211,9 +211,7 @@ impl SourceManager {
                     if !transparent {
                         return Ok(track);
                     }
-                    // Keep the original metadata; if this source fails at stream
-                    // time (e.g. YouTube 403 on a datacenter IP) playback continues
-                    // from a mirror without the client noticing.
+
                     return Ok(TransparentFallbackTrack::wrap(
                         track,
                         track_info.clone(),
@@ -378,8 +376,6 @@ authorization = 'test'
 
     #[tokio::test]
     async fn disabled_sources_are_not_registered() {
-        // Bandcamp/Shazam are disabled by default in config.example.toml because
-        // they are known-broken; ensure a caller turning them off gets nothing.
         let m = manager_with(
             "[sources.bandcamp]\nenabled = false\n[sources.shazam]\nenabled = false\n",
         );

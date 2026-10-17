@@ -41,15 +41,12 @@ impl HeartbeatTracker {
     /// milliseconds. A mismatched nonce leaves the count unchanged and returns
     /// `None`.
     pub fn validate_ack(&self, acked_nonce: u64) -> Option<u64> {
-        // Acquire pairs with the Release stores in `spawn`, so the nonce written by
-        // the heartbeat task is guaranteed visible to the WS read loop.
         let expected = self.last_nonce.load(Ordering::Acquire);
         if expected != acked_nonce {
             warn!("Heartbeat mismatch: sent={expected} got={acked_nonce}");
             return None;
         }
-        // A valid ACK proves the connection is alive — reset the miss counter so
-        // recovery after a single dropped heartbeat isn't punished forever.
+
         self.missed_acks.store(0, Ordering::Release);
         Some(now_ms().saturating_sub(self.sent_at.load(Ordering::Acquire)))
     }
@@ -85,8 +82,7 @@ impl HeartbeatTracker {
                 }
 
                 let nonce = now_ms();
-                // Release so `validate_ack` (Acquire) on the read-loop task is
-                // guaranteed to observe these values.
+
                 last_nonce.store(nonce, Ordering::Release);
                 sent_at.store(nonce, Ordering::Release);
 
@@ -142,7 +138,7 @@ mod tests {
         assert!(result.is_some());
 
         let rtt = result.unwrap();
-        assert!(rtt < 1000); // Should be very small for local test
+        assert!(rtt < 1000);
     }
 
     #[test]
@@ -172,7 +168,6 @@ mod tests {
         let tracker = HeartbeatTracker::new();
         let nonce = 12345u64;
 
-        // Simulate a heartbeat sent 100ms ago
         let sent_time = now_ms().saturating_sub(100);
         tracker.last_nonce.store(nonce, Ordering::Relaxed);
         tracker.sent_at.store(sent_time, Ordering::Relaxed);
@@ -182,7 +177,7 @@ mod tests {
 
         let rtt = result.unwrap();
         assert!(rtt >= 100);
-        assert!(rtt < 200); // Allow some tolerance
+        assert!(rtt < 200);
     }
 
     #[test]
@@ -225,7 +220,6 @@ mod tests {
         assert!(tracker.validate_ack(42).is_some());
         assert_eq!(tracker.missed_acks.load(Ordering::Relaxed), 0);
 
-        // A mismatched ACK must not reset the counter.
         tracker.missed_acks.store(1, Ordering::Relaxed);
         assert!(tracker.validate_ack(43).is_none());
         assert_eq!(tracker.missed_acks.load(Ordering::Relaxed), 1);

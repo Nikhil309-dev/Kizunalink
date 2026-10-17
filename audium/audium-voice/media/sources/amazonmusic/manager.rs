@@ -370,10 +370,6 @@ impl AmazonMusicSource {
         {
             Some(i) => i.iter().take(self.search_limit).cloned().collect(),
             None => {
-                // Amazon returns a plain `template.body` message (no `widgets`) when the
-                // request is not authenticated, i.e. the site config lacked a usable
-                // accessToken/csrf token. Surface this instead of returning a silent
-                // `Empty`, which is otherwise indistinguishable from "no results".
                 tracing::warn!(
                     "Amazon Music: search '{query}' returned no result widgets — the site \
                      config (accessToken/csrf) was unavailable or expired. Amazon Music \

@@ -81,7 +81,6 @@ impl FadeEffect {
             return;
         }
 
-        // Short-circuit: no fade, gain == 1.0 → nothing to do.
         if !self.fade_active && (self.current_gain - 1.0).abs() < f32::EPSILON {
             return;
         }

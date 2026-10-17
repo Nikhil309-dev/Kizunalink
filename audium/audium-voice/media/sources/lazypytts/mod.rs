@@ -69,7 +69,6 @@ impl LazypyttsSource {
         let third = parts.next();
 
         match (second, third) {
-            // service:voice:text
             (Some(voice), Some(text)) if !voice.is_empty() && !text.trim().is_empty() => Some((
                 if first.is_empty() {
                     self.default_service.clone()
@@ -79,7 +78,7 @@ impl LazypyttsSource {
                 voice.to_string(),
                 text.trim().to_string(),
             )),
-            // voice:text  (service defaults)
+
             (Some(text), None) if !text.trim().is_empty() => Some((
                 self.default_service.clone(),
                 if first.is_empty() {

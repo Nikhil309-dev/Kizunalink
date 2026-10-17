@@ -33,8 +33,6 @@ impl YouTubeOAuth {
         client: reqwest::Client,
         client_secret: Option<String>,
     ) -> Self {
-        // Prefer the explicit config value; fall back to the environment so existing
-        // deployments that only set `YOUTUBE_OAUTH_CLIENT_SECRET` keep working.
         let client_secret = client_secret
             .filter(|secret| !secret.is_empty())
             .or_else(|| {
@@ -164,7 +162,7 @@ impl YouTubeOAuth {
         tokio::time::interval_at(tokio::time::Instant::now() + period, period)
     }
 
-    #[allow(clippy::print_stdout)] // interactive OAuth flow console output (see above)
+    #[allow(clippy::print_stdout)]
     async fn poll_for_token(&self, device_code: String, interval: u64) {
         let mut interval_timer = Self::poll_interval(interval);
         loop {
@@ -207,10 +205,7 @@ impl YouTubeOAuth {
                         crate::log_println!(
                             "\x1b[1;32mOAUTH INTEGRATION: Token retrieved successfully!\x1b[0m"
                         );
-                        // Print the token so an operator with no shell access (e.g. a
-                        // Pterodactyl panel console) can persist it into
-                        // `sources.youtube.refresh_tokens` and skip the device flow on
-                        // the next start. Without this the enrollment is lost on restart.
+
                         crate::log_println!(
                             "\x1b[1;33mPaste this into sources.youtube.refresh_tokens in config.toml to keep it across restarts:\x1b[0m\n\x1b[1;36m\"{}\"\x1b[0m",
                             refresh_token
@@ -343,7 +338,7 @@ impl YouTubeOAuth {
             val
         };
 
-        drop(tokens); // Release read lock before calling get_access_token which may acquire it
+        drop(tokens);
 
         self.get_access_token(idx)
             .await
@@ -386,7 +381,6 @@ mod tests {
 
     #[tokio::test]
     async fn poll_interval_zero_does_not_panic() {
-        // Google can return `interval: 0`; a zero period panics `interval`.
         let interval = YouTubeOAuth::poll_interval(0);
         assert_eq!(interval.period(), std::time::Duration::from_secs(1));
     }

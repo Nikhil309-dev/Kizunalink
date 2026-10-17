@@ -145,7 +145,6 @@ impl BalancingIpRoutePlanner {
         let mut b_idx = self.block_index.lock().unwrap_or_else(|e| e.into_inner());
         let mut indices = self.ip_indices.lock().unwrap_or_else(|e| e.into_inner());
 
-        // B06: Defensive check against empty blocks (would cause division by zero)
         if self.parsed_blocks.is_empty() {
             return std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
         }
@@ -219,10 +218,6 @@ impl RoutePlanner for BalancingIpRoutePlanner {
             })
             .collect();
 
-        // Mirror `next_ip`/`get_address`: an empty block list is a valid
-        // configuration with no address to report, so expose an empty
-        // placeholder block instead of indexing into `parsed_blocks` (which
-        // would panic).
         let Some(first_block) = self.parsed_blocks.first() else {
             return RoutePlannerStatus::BalancingIpRoutePlanner(BalancingIpDetails {
                 ip_block: IpBlock {
@@ -236,7 +231,7 @@ impl RoutePlanner for BalancingIpRoutePlanner {
         if self.ip_blocks.len() == 1 {
             let indices = self.ip_indices.lock().unwrap_or_else(|e| e.into_inner());
             let index = indices.first().copied().unwrap_or(0);
-            drop(indices); // B06: release lock before computing IP
+            drop(indices);
             let current_ip = Self::calculate_ip(first_block, index).to_string();
 
             RoutePlannerStatus::RotatingIpRoutePlanner(RotatingIpDetails {

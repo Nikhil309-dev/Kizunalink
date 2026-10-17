@@ -27,15 +27,9 @@ pub struct OpusDecoder {
     _private: [u8; 0],
 }
 
-// Safety: An Opus encoder state can be safely transferred across threads
-// when not actively in concurrent use.
 unsafe impl Send for OpusEncoder {}
 
-// Safety: An Opus decoder state can be safely transferred across threads
-// when not actively in concurrent use.
 unsafe impl Send for OpusDecoder {}
-
-// --- Opus Error and Return Codes ---
 
 /// No error occurred.
 pub const OPUS_OK: i32 = 0;
@@ -54,14 +48,10 @@ pub const OPUS_INVALID_STATE: i32 = -6;
 /// Memory allocation has failed.
 pub const OPUS_ALLOC_FAIL: i32 = -7;
 
-// --- Generic Configuration Constants ---
-
 /// Auto/default configuration setting.
 pub const OPUS_AUTO: i32 = -1000;
 /// Maximum allowable bitrate.
 pub const OPUS_BITRATE_MAX: i32 = -1;
-
-// --- Application Profile Constants ---
 
 /// Best for most VoIP/videoconference applications where listening quality and intelligibility matter most.
 pub const OPUS_APPLICATION_VOIP: i32 = 2048;
@@ -69,8 +59,6 @@ pub const OPUS_APPLICATION_VOIP: i32 = 2048;
 pub const OPUS_APPLICATION_AUDIO: i32 = 2049;
 /// Only use when lowest-achievable latency is what matters most.
 pub const OPUS_APPLICATION_RESTRICTED_LOWDELAY: i32 = 2051;
-
-// --- Encoder and Decoder CTL Request Constants ---
 
 /// Configures the application profile of the encoder.
 pub const OPUS_SET_APPLICATION_REQUEST: i32 = 4000;
@@ -115,14 +103,10 @@ pub const OPUS_RESET_STATE: i32 = 4028;
 /// Gets the sampling rate of the encoder or decoder in Hz.
 pub const OPUS_GET_SAMPLE_RATE_REQUEST: i32 = 4029;
 
-// --- Signal Type Constants ---
-
 /// Signal is voice speech.
 pub const OPUS_SIGNAL_VOICE: i32 = 3001;
 /// Signal is music.
 pub const OPUS_SIGNAL_MUSIC: i32 = 3002;
-
-// --- Bandwidth Constants ---
 
 /// Narrowband audio (4 kHz bandpass).
 pub const OPUS_BANDWIDTH_NARROWBAND: i32 = 1101;
@@ -135,10 +119,6 @@ pub const OPUS_BANDWIDTH_SUPERWIDEBAND: i32 = 1104;
 /// Fullband audio (20 kHz bandpass).
 pub const OPUS_BANDWIDTH_FULLBAND: i32 = 1105;
 
-// --- C Foreign Function Declarations ---
-//
-// NOTE: deliberately no `#[link(name = "opus")]` here — see the module docs.
-// The `build.rs` of this crate emits the `cargo:rustc-link-lib=opus` directive.
 #[allow(non_snake_case)]
 unsafe extern "C" {
     /// Allocates and initializes an `OpusEncoder` state.

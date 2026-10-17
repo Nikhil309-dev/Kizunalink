@@ -102,10 +102,6 @@ impl HttpSource {
             return Err(format!("HTTP {} for {}", res.status(), url).into());
         }
 
-        // A range request (offset > 0 or an explicit limit) must be answered with
-        // `206 Partial Content`. A bare `200 OK` means the server ignored the
-        // Range header and is streaming from byte 0; accepting it would splice the
-        // whole file in at the seek target and corrupt playback.
         let wants_range = limit.is_some() || offset > 0;
         if wants_range && res.status() == reqwest::StatusCode::OK {
             return Err(

@@ -60,9 +60,7 @@ impl<T: AsRef<[u8]>> BinaryBuffer<T> {
 impl BinaryBuffer<Vec<u8>> {
     pub fn write_string(&mut self, text: &str) -> io::Result<()> {
         let raw = text.as_bytes();
-        // The Lavalink wire format length-prefixes strings with a u16. Reject
-        // anything longer instead of silently truncating the length (which would
-        // corrupt the token and desynchronize the decoder).
+
         let len = u16::try_from(raw.len()).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidInput, "string exceeds u16 length")
         })?;

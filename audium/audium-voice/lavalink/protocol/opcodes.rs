@@ -55,7 +55,6 @@ mod tests {
 
     #[test]
     fn parses_lavalink_camel_case_client_ops() {
-        // Exact shapes emitted by Lavalink v4 clients (wavelink, lavalink-client, poru).
         let voice = parse(
             r#"{"op":"voiceUpdate","guildId":"123","sessionId":"abc","channelId":"456",
                 "event":{"token":"t","endpoint":"e","guild_id":"123"}}"#,
@@ -92,7 +91,6 @@ mod tests {
             other => panic!("expected Destroy, got {other:?}"),
         }
 
-        // `channelId: null` is Discord's leave-voice signal and must still parse.
         match parse(
             r#"{"op":"voiceUpdate","guildId":"1","sessionId":"s","channelId":null,"event":{}}"#,
         ) {

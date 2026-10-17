@@ -37,9 +37,6 @@ pub async fn discover_ip(
     packet[2..4].copy_from_slice(&70u16.to_be_bytes());
     packet[4..8].copy_from_slice(&ssrc.to_be_bytes());
 
-    // A failed discovery would otherwise be completely silent for the whole retry budget
-    // (~30s by default), which reaches users as "the track started but no audio ever plays".
-    // Log the target up front and every attempt so the cause is visible.
     debug!(
         "IP discovery: target={addr} ssrc={ssrc} attempts={IP_DISCOVERY_RETRIES} \
          timeout={IP_DISCOVERY_TIMEOUT_SECS}s interval={IP_DISCOVERY_RETRY_INTERVAL_MS}ms"
@@ -73,9 +70,6 @@ pub async fn discover_ip(
         {
             Ok(Ok((n, peer))) if n >= DISCOVERY_PACKET_SIZE => {
                 if peer.ip() != addr.ip() {
-                    // NATs and load balancers can rewrite the UDP source port of
-                    // the response. Validate the server IP, packet length, and
-                    // SSRC instead of requiring an identical source SocketAddr.
                     debug!(
                         "IP discovery: ignoring {n}B reply from {peer} (expected IP {})",
                         addr.ip()
@@ -196,8 +190,6 @@ impl VoiceSession {
             interval.tick().await;
             self.tick(encoder, &mut pcm, &mut opus, &mut ts_pcm).await?;
 
-            // Diagnostic: 100 ticks must span ~2s at the correct 50 Hz cadence.
-            // A longer span means the send loop is falling behind real time.
             ticks += 1;
             if ticks.is_multiple_of(100) {
                 debug!(
@@ -228,8 +220,6 @@ impl VoiceSession {
         opus: &mut [u8],
         ts_pcm: &mut [i16],
     ) -> Result<(), GatewayError> {
-        // Do not consume mixer frames, emit silence, or advance RTP until the
-        // gateway has executed the DAVE transition and MLS keys are ready.
         if !self.config.dave.lock().await.can_send_media() {
             self.config.voice_ready.store(false, Ordering::Release);
             let since = self.dave_wait_since.get_or_insert_with(Instant::now);

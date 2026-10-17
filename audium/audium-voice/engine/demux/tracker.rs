@@ -66,14 +66,9 @@ impl TrackerFormatReader {
                 "tracker modules require a seekable source",
             ));
         }
-        // The prober may have read ahead while sniffing; start from byte 0 so
-        // the whole module is captured.
+
         source.seek(SeekFrom::Start(0)).map_err(Error::IoError)?;
 
-        // A module is a single self-contained document that is parsed and then
-        // replayed from memory, so the whole file is held resident. Read
-        // through `take` so a hostile or mislabeled URL cannot exhaust memory by
-        // pointing at an arbitrarily large body.
         let mut bytes = Vec::new();
         (&mut source)
             .take(MAX_MODULE_BYTES as u64 + 1)
@@ -83,14 +78,11 @@ impl TrackerFormatReader {
             return Err(Error::Unsupported("tracker module exceeds the size limit"));
         }
 
-        // Parse up front so an unplayable module fails the load rather than
-        // producing a stream of silence.
         let n_frames =
             module_duration_frames(&bytes).map_err(|e| Error::IoError(std::io::Error::other(e)))?;
 
         let mut params = CodecParameters::new();
-        // Placeholder rate/channels: the packets below carry raw module bytes,
-        // not timestamped PCM. The codec id selects the tracker decoder.
+
         params
             .for_codec(CODEC_TYPE_TRACKER)
             .with_sample_rate(TARGET_SAMPLE_RATE)
@@ -122,9 +114,6 @@ impl FormatReader for TrackerFormatReader {
     }
 
     fn seek(&mut self, _mode: SeekMode, to: SeekTo) -> Result<SeekedTo> {
-        // No byte-level index exists. Translate the request into a frame offset
-        // and resume emitting from there; the decoder re-points the player when
-        // it sees the new packet timestamp.
         let (track_id, ts) = match to {
             SeekTo::TimeStamp { ts, track_id } => (track_id, ts),
             SeekTo::Time { time, .. } => (
@@ -155,8 +144,6 @@ impl FormatReader for TrackerFormatReader {
         let ts = self.frame_pos;
         self.frame_pos = self.frame_pos.saturating_add(CHUNK_FRAMES as u64);
 
-        // The module reaches the decoder through `module_bytes`, not through the
-        // stream, so packets only need to carry the timestamp to render from.
         Ok(Packet::new_from_boxed_slice(
             0,
             ts,
@@ -206,12 +193,10 @@ mod tests {
         let first = reader.next_packet().expect("first packet");
         assert_eq!(first.track_id(), 0);
         assert_eq!(first.ts(), 0);
-        // The module reaches the decoder through `module_bytes`, so packets are
-        // timestamp-only.
+
         assert!(first.data.is_empty());
         assert_eq!(reader.module_bytes(), data.as_slice());
 
-        // The stream advances one chunk at a time and eventually ends.
         let second = reader.next_packet().expect("second packet");
         assert_eq!(second.ts(), CHUNK_FRAMES as u64);
         assert!(second.data.is_empty());
@@ -226,8 +211,6 @@ mod tests {
 
     #[test]
     fn rejects_a_module_larger_than_the_cap() {
-        // A valid MOD followed by padding past the limit must be refused rather
-        // than read fully into memory.
         let mut data = tiny_mod_for_tests();
         data.resize(crate::engine::constants::MAX_MODULE_BYTES + 1, 0);
         let src = Box::new(BytesSource(std::io::Cursor::new(data)));
@@ -250,7 +233,7 @@ mod tests {
                 },
             )
             .expect("seek");
-        // 1.5s at 48 kHz.
+
         assert_eq!(seeked.actual_ts, 72_000);
         let resumed = reader.next_packet().expect("after seek");
         assert_eq!(resumed.ts(), 72_000);

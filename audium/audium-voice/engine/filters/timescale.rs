@@ -69,7 +69,6 @@ impl TimescaleFilter {
             let p2_idx = i1 + 1;
             let p3_idx = i1 + 2;
 
-            // Left channel
             let p0_l = self.input_buffer[p0_idx * 2] as f32 / 32768.0;
             let p1_l = self.input_buffer[p1_idx * 2] as f32 / 32768.0;
             let p2_l = self.input_buffer[p2_idx * 2] as f32 / 32768.0;
@@ -77,7 +76,6 @@ impl TimescaleFilter {
             let out_l = cubic_resample(p0_l, p1_l, p2_l, p3_l, frac);
             output.push((out_l.clamp(-1.0, 1.0) * 32767.0) as i16);
 
-            // Right channel
             let p0_r = self.input_buffer[p0_idx * 2 + 1] as f32 / 32768.0;
             let p1_r = self.input_buffer[p1_idx * 2 + 1] as f32 / 32768.0;
             let p2_r = self.input_buffer[p2_idx * 2 + 1] as f32 / 32768.0;
@@ -104,10 +102,7 @@ impl TimescaleFilter {
 }
 
 impl AudioFilter for TimescaleFilter {
-    fn process(&mut self, _samples: &mut [i16]) {
-        // Timescale cannot work in-place because it changes buffer length.
-        // Use `process_resample` instead. This is a no-op for the in-place trait.
-    }
+    fn process(&mut self, _samples: &mut [i16]) {}
 
     fn is_enabled(&self) -> bool {
         (self.final_rate - 1.0).abs() > f32::EPSILON

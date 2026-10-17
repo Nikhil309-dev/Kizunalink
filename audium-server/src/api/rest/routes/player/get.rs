@@ -44,8 +44,6 @@ pub async fn get_players(
 
     players.sort_by(|a, b| a.guild_id.cmp(&b.guild_id));
 
-    // Lavalink v4 returns a bare JSON array for this endpoint (not an object
-    // with a "players" key). Serialize the Vec directly.
     (StatusCode::OK, Json(players)).into_response()
 }
 

@@ -92,7 +92,6 @@ impl UDPVoiceTransport {
     pub async fn transmit_opus(&mut self, opus_data: &[u8]) -> AnyResult<()> {
         let (seq, ts, nonce_val) = self.rtp.next();
 
-        // Build RTP Header (12 bytes)
         let mut header = [0u8; 12];
         header[0] = RTP_VERSION_BYTE;
         header[1] = RTP_OPUS_PAYLOAD_TYPE;
@@ -106,10 +105,6 @@ impl UDPVoiceTransport {
 
         match &self.crypto {
             CryptoBackend::XChaCha20Poly1305(cipher) => {
-                // 24-byte XChaCha20 nonce: the 4-byte counter occupies the leading
-                // bytes and the remainder is zero-padded, matching Discord's
-                // `*_rtpsize` nonce construction. The counter itself is appended to
-                // the packet after the 16-byte tag, as required by the wire format.
                 let mut nonce = [0u8; 24];
                 nonce[0..4].copy_from_slice(&nonce_val.to_be_bytes());
 
@@ -183,7 +178,6 @@ mod tests {
         let state1 = RtpState::randomize();
         let state2 = RtpState::randomize();
 
-        // Random states should be different (very high probability)
         assert!(
             state1.sequence != state2.sequence
                 || state1.timestamp != state2.timestamp
@@ -204,7 +198,6 @@ mod tests {
         assert_eq!(ts, 1000);
         assert_eq!(n, 50);
 
-        // State should be incremented
         assert_eq!(state.sequence, 101);
         assert_eq!(state.timestamp, 1000 + RTP_TIMESTAMP_STEP);
         assert_eq!(state.nonce, 51);
@@ -223,7 +216,6 @@ mod tests {
         assert_eq!(ts, u32::MAX);
         assert_eq!(n, u32::MAX);
 
-        // Should wrap around
         assert_eq!(state.sequence, 0);
         assert_eq!(state.timestamp, u32::MAX.wrapping_add(RTP_TIMESTAMP_STEP));
         assert_eq!(state.nonce, 0);

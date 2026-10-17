@@ -95,7 +95,7 @@ impl KwaiSource {
         } else {
             title
         };
-        // `sound:<n>` inside `ext_params` is the duration in seconds.
+
         let length = Regex::new(r"ext_params:\{[^}]*sound:(\d+)")
             .ok()
             .and_then(|re| re.captures(block))
@@ -227,8 +227,6 @@ mod tests {
 
     #[test]
     fn parses_server_payload() {
-        // Real payloads are `__APOLLO_STATE__={"k":]={…entry…};` — the parser
-        // locates the entry by its `]={` opening after the matching id.
         let body = r#"window.__APOLLO_STATE__={"x":]={photo_id_str:"1234567890",user_name:"\u5f20\u4e09",caption:"My \u89c6\u9891",main_mv_urls:[{url:"https:\/\/cdn.kwai.com\/a.mp4"}],cover_thumbnail_urls:[{url:"https:\/\/cdn.kwai.com\/t.jpg"}],ext_params:{sound:42}};"#;
         let v = KwaiSource::parse(body, "1234567890").expect("video");
         assert_eq!(v.url, "https://cdn.kwai.com/a.mp4");

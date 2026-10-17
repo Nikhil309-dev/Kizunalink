@@ -186,7 +186,7 @@ pub async fn get_eapi_json<T: DeserializeOwned>(
             .header("X-Forwarded-For", "118.88.88.88")
             .header("X-Netease-PC-IP", "118.88.88.88")
             .header("Cookie", format!(
-                "os=iOS; appver=2.5.1; _ntes_nuid={}; deviceId={}; channel=AppStore; mobilename=iPhone15,3", 
+                "os=iOS; appver=2.5.1; _ntes_nuid={}; deviceId={}; channel=AppStore; mobilename=iPhone15,3",
                 nuid, device_id
             ))
             .form(&[("params", params.clone())])

@@ -234,7 +234,6 @@ impl AudioProcessor {
                                 if right_count > 0 {
                                     self.downmix_buf.push((r / right_count as i32) as i16);
                                 } else {
-                                    // Upmix mono to stereo
                                     self.downmix_buf.push((l / left_count as i32) as i16);
                                 }
                             }
@@ -426,8 +425,7 @@ mod tests {
             PlayerConfig::default(),
         )
         .expect("processor builds from valid WAV");
-        // The command sender must outlive `run`; a dropped sender ends the loop
-        // before the first packet, exactly as it would in production.
+
         (processor, cmd_tx)
     }
 

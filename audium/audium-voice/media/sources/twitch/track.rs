@@ -129,7 +129,6 @@ impl LiveHlsReader {
                         return;
                     }
 
-                    // Mark as seen only after successful fetch and send
                     if seen.insert(seg.url.clone()) {
                         seen_history.push_back(seg.url);
                         if seen_history.len() > 50

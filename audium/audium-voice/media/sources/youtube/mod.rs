@@ -68,9 +68,7 @@ pub struct YoutubeStreamContext {
 impl YouTubeSource {
     pub fn new(config: Option<YouTubeConfig>, http: Arc<reqwest::Client>) -> Self {
         let config = config.unwrap_or_default();
-        // OAuth token refresh must use the same proxy-aware client as playback:
-        // datacenter IPs are blocked by Google, and token requests would otherwise
-        // leave from the blocked host even when `sources.youtube.proxy` is set.
+
         let oauth = Arc::new(YouTubeOAuth::new(
             config.refresh_tokens.clone(),
             http.as_ref().clone(),
@@ -78,7 +76,6 @@ impl YouTubeSource {
         ));
         let cipher_manager = Arc::new(YouTubeCipherManager::new(config.cipher.clone()));
 
-        // Call initialization in background if no tokens provided and enabled in config
         if config.get_oauth_token && config.refresh_tokens.is_empty() {
             let oauth_clone = oauth.clone();
             tokio::spawn(async move {
@@ -86,7 +83,6 @@ impl YouTubeSource {
             });
         }
 
-        // Warm the cipher cache on startup (Issue #21)
         let cm_clone = cipher_manager.clone();
         tokio::spawn(async move {
             debug!("YouTubeSource: Warming cipher cache...");
@@ -107,10 +103,7 @@ impl YouTubeSource {
                     url,
                     config.pot.bypass_cache,
                 ));
-                // Confirm the provider is actually reachable and well-formed before
-                // playback traffic starts. A configured-but-dead provider is an
-                // operator error that would otherwise surface later as an opaque
-                // HTTP 403, so it must be loud here.
+
                 let probe = provider.clone();
                 tokio::spawn(async move {
                     match probe.probe().await {
@@ -654,9 +647,7 @@ impl YouTubeSource {
     async fn handle_url(&self, identifier: &str, context: &Value) -> LoadResult {
         let is_music_url = identifier.contains("music.youtube.com");
 
-        // Playlist handling
         if let Some(playlist_id) = self.extract_playlist_id(identifier) {
-            // Prioritize resolve clients; prefer Android first for reliability.
             let mut playlist_clients: Vec<&Arc<dyn YouTubeClient>> = Vec::new();
             if let Some(android) = self.resolve_clients.iter().find(|c| c.name() == "Android") {
                 playlist_clients.push(android);
@@ -666,7 +657,7 @@ impl YouTubeSource {
                     playlist_clients.push(c);
                 }
             }
-            // Fallback: include remaining clients not yet in the list.
+
             for c in self.fallback_clients(&playlist_clients, is_music_url) {
                 if !playlist_clients.iter().any(|x| x.name() == c.name()) {
                     playlist_clients.push(c);
@@ -719,7 +710,6 @@ impl YouTubeSource {
             }
         }
 
-        // All resolve clients failed — fall back to all remaining clients.
         let fallback = self.fallback_clients(&resolve_clients, false);
         if !fallback.is_empty() {
             tracing::debug!(

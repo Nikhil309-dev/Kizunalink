@@ -50,11 +50,9 @@ pub fn decode_track(encoded: &str) -> Result<Track, CodecError> {
     };
 
     let source_name = stream.read_string()?;
-    // `position` is a required field like the ones above: a truncated buffer must
-    // be rejected, not silently decoded as position 0.
+
     let position = stream.read_u64::<BigEndian>()?;
 
-    // Optional userData follows the standard fields
     let user_data = stream.read_json().unwrap_or_else(|_| serde_json::json!({}));
 
     Ok(Track {

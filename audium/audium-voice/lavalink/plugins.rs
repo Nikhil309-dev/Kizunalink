@@ -61,8 +61,6 @@ fn source_on<T>(source: &Option<T>, enabled: impl Fn(&T) -> bool) -> bool {
 pub fn advertised(config: &AppConfig) -> Vec<Plugin> {
     let mut plugins = Vec::new();
 
-    // LavaSrc: the extra source managers it provides. Enabled if any is present
-    // and turned on.
     let lavasrc_on = source_on(&config.sources.spotify, |c| c.enabled)
         || source_on(&config.sources.applemusic, |c| c.enabled)
         || source_on(&config.sources.deezer, |c| c.enabled)
@@ -72,10 +70,8 @@ pub fn advertised(config: &AppConfig) -> Vec<Plugin> {
         plugins.push(entry(LAVASRC, LAVASRC_VERSION));
     }
 
-    // LavaSearch: `/v4/loadsearch` is always available natively.
     plugins.push(entry(LAVASEARCH, LAVASEARCH_VERSION));
 
-    // LavaLyrics: available when at least one provider is enabled.
     let lyrics = &config.lyrics;
     let any_lyrics = lyrics.youtubemusic
         || lyrics.lrclib
@@ -97,7 +93,6 @@ pub fn advertised(config: &AppConfig) -> Vec<Plugin> {
         plugins.push(entry(YOUTUBE, YOUTUBE_VERSION));
     }
 
-    // LavaDSPX: the DSP filters it contributes.
     let f = &config.filters;
     let any_dspx = f.echo
         || f.compressor
@@ -185,7 +180,7 @@ mod tests {
         assert!(!has(&cfg(""), LAVASRC));
         assert!(!has(&cfg("[sources.spotify]\nenabled = false"), LAVASRC));
         assert!(has(&cfg("[sources.spotify]\nenabled = true"), LAVASRC));
-        // Any one of the LavaSrc families is enough.
+
         assert!(has(&cfg("[sources.deezer]\nenabled = true"), LAVASRC));
         assert!(has(&cfg("[sources.applemusic]\nenabled = true"), LAVASRC));
         assert!(has(&cfg("[sources.tidal]\nenabled = true"), LAVASRC));
@@ -203,7 +198,6 @@ mod tests {
         assert!(has(&cfg(""), LAVADSPX));
         assert!(has(&cfg(""), FILTER_PLUGIN));
 
-        // Turning off every filter LavaDSPX contributes removes both entries.
         let no_dspx = cfg(
             "[filters]\necho = false\ncompressor = false\nflanger = false\n\
              phaser = false\nphonograph = false\nreverb = false\nspatial = false\n\
@@ -211,7 +205,7 @@ mod tests {
         );
         assert!(!has(&no_dspx, LAVADSPX));
         assert!(!has(&no_dspx, FILTER_PLUGIN));
-        // LavaSearch is unconditional, so the array is never empty.
+
         assert!(has(&no_dspx, LAVASEARCH));
     }
 
@@ -225,7 +219,6 @@ mod tests {
 
     #[test]
     fn every_advertised_entry_is_well_formed() {
-        // Turn everything on that can be turned on without credentials.
         let full = cfg("[sources.youtube]\nenabled = true\n\
              [sources.spotify]\nenabled = true\n\
              [sources.jiosaavn]\nenabled = true\n\

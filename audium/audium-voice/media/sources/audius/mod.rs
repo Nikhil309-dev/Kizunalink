@@ -240,10 +240,6 @@ impl AudiusSource {
     fn build_track(&self, data: &Value) -> Option<Track> {
         let id = data["id"].as_str()?;
 
-        // Audius search can return tracks that are not streamable (e.g. gated or
-        // still processing). Their `/stream` endpoint answers 404, so selecting
-        // one yields a "Failed to fetch stream URL" TrackException. Skip them
-        // here so search/playlist/resolve fall through to playable results.
         if data.get("is_streamable").and_then(Value::as_bool) == Some(false) {
             return None;
         }
@@ -408,7 +404,7 @@ mod tests {
     fn build_track_accepts_streamable_and_unknown() {
         let src = test_source();
         assert!(src.build_track(&track_json("YmJWK", Some(true))).is_some());
-        // A missing field must not be treated as false (default = allow).
+
         assert!(src.build_track(&track_json("ng9rl", None)).is_some());
     }
 

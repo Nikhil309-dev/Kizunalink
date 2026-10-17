@@ -26,10 +26,6 @@ pub async fn websocket_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, (StatusCode, &'static str)> {
-    // 1. Authorization Check. The comparison is the shared constant-time helper
-    // also used by the REST middleware and `/health`; a missing header and a
-    // wrong secret are both 401 here (Lavalink's WS handshake does not split the
-    // two, unlike REST).
     if !crate::health::is_authorized(&state, &headers) {
         if headers.contains_key("authorization") {
             warn!("Authorization failed: Invalid password provided");
@@ -39,10 +35,6 @@ pub async fn websocket_handler(
         return Err((StatusCode::UNAUTHORIZED, "Unauthorized"));
     }
 
-    // 2. User-Id Check. Official Lavalink rejects the handshake with 400 when
-    // this header is missing or unparseable; the id is required for every
-    // subsequent voice update, so accepting the connection without it only
-    // defers the failure to the first opcode.
     let Some(user_id) = headers
         .get("user-id")
         .and_then(|h| h.to_str().ok())
@@ -54,14 +46,12 @@ pub async fn websocket_handler(
         return Err((StatusCode::BAD_REQUEST, "Missing or invalid User-Id header"));
     };
 
-    // 3. Client-Name Check
     if let Some(name) = headers.get("client-name").and_then(|h| h.to_str().ok()) {
         info!("Incoming connection from client: {name}");
     } else {
         debug!("Client connected without 'Client-Name' header");
     }
 
-    // 4. Session Resumption Check
     let client_session_id = headers
         .get("session-id")
         .and_then(|h| h.to_str().ok())
@@ -71,17 +61,11 @@ pub async fn websocket_handler(
         .as_ref()
         .is_some_and(|sid| state.resumable_sessions.contains_key(sid));
 
-    // 5. Upgrade and set headers. Lavalink control payloads are small; keep
-    // malformed or hostile clients from allocating the WebSocket default size.
     const MAX_CLIENT_WS_MESSAGE_SIZE: usize = 1024 * 1024;
     let ws = ws
         .max_message_size(MAX_CLIENT_WS_MESSAGE_SIZE)
         .max_frame_size(MAX_CLIENT_WS_MESSAGE_SIZE);
 
-    // Hold an admission permit for the *whole* socket lifetime. The global
-    // connection middleware deliberately skips this route (see `conn_limit`) and
-    // returns its permit once the 101 response is produced, so the socket task —
-    // which outlives that response — must own its own permit.
     let ws_permit = match &state.connection_limit {
         Some(limit) => match limit.clone().try_acquire_owned() {
             Ok(permit) => Some(permit),
@@ -94,9 +78,6 @@ pub async fn websocket_handler(
     };
 
     let upgrade_callback = move |socket| async move {
-        // Held here, inside the socket future, so the permit is released only
-        // when the connection task ends. Binding it outside the `async` block
-        // (in the closure body) would drop it as soon as the closure returns.
         let _permit = ws_permit;
         handle_socket(socket, state, Some(user_id), client_session_id).await
     };
@@ -110,9 +91,7 @@ pub async fn websocket_handler(
     response
         .headers_mut()
         .insert("Session-Resumed", resumed_val);
-    // Official Lavalink identifies itself with `Lavalink-Api-Version: 4` on
-    // every HTTP response; some clients also still look for the older
-    // `Lavalink-Major-Version` name on the WS handshake, so send both.
+
     response.headers_mut().insert(
         "Lavalink-Api-Version",
         axum::http::HeaderValue::from_static("4"),

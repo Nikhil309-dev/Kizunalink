@@ -30,10 +30,6 @@ pub async fn connection_limit(
         return next.run(req).await;
     };
 
-    // The WebSocket route owns its own long-lived permit inside the handler: this
-    // middleware's permit is released as soon as the 101 response is produced,
-    // while the socket task keeps running afterwards. Skipping avoids counting a
-    // socket twice (here + in the handler), which would halve the real limit.
     if req.uri().path() == "/v4/websocket" {
         return next.run(req).await;
     }

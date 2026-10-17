@@ -28,7 +28,7 @@ pub struct JioSaavnSource {
     pub(crate) client: Arc<reqwest::Client>,
     pub(crate) secret_key: Vec<u8>,
     pub(crate) proxy: Option<crate::config::sources::HttpProxyConfig>,
-    // Limits
+
     pub(crate) search_limit: usize,
     pub(crate) recommendations_limit: usize,
     pub(crate) playlist_load_limit: usize,

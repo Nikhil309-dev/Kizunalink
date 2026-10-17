@@ -212,7 +212,6 @@ impl YouTubeClient for MusicAndroidClient {
                         .or_else(|| renderer.get("videoId").and_then(|v| v.as_str()));
 
                     if let Some(id) = id {
-                        // Title extraction
                         let mut title = renderer
                             .get("title")
                             .and_then(|t| t.get("runs"))
@@ -243,7 +242,6 @@ impl YouTubeClient for MusicAndroidClient {
                             title = t;
                         }
 
-                        // Author extraction
                         let mut author = "Unknown Artist".to_string();
                         let subtitle_runs = renderer
                             .get("subtitle")
@@ -295,7 +293,6 @@ impl YouTubeClient for MusicAndroidClient {
                             author = a.to_string();
                         }
 
-                        // Duration extraction
                         let mut length_ms = 0u64;
                         if let Some(runs) = subtitle_runs {
                             for run in runs {

@@ -45,7 +45,7 @@ macro_rules! define_filters {
         ($variant:ident, $config_field:ident, $filter_ty:ty, $api_name:expr)
     ),* $(,)?) => {
 
-        // ── ConcreteFilter enum ──────────────────────────────────────────
+
         pub enum ConcreteFilter {
             $($variant($filter_ty),)*
         }
@@ -65,7 +65,7 @@ macro_rules! define_filters {
             }
         }
 
-        // ── validate_filters ─────────────────────────────────────────────
+
         pub fn validate_filters(filters: &Filters, config: &FiltersConfig) -> Vec<&'static str> {
             let mut invalid = Vec::new();
             $(if filters.$config_field.is_some() && !config.$config_field {
@@ -77,7 +77,6 @@ macro_rules! define_filters {
     };
 }
 
-// Register all filters: (Variant, config_field, Type, API name)
 define_filters! {
     (Volume,        volume,        volume::VolumeFilter,                              "volume"),
     (Equalizer,     equalizer,     Box<equalizer::EqualizerFilter>,                   "equalizer"),
@@ -353,8 +352,6 @@ impl FilterChain {
             let resampled = ts.process_resample(samples);
             self.timescale_buffer.extend_from_slice(&resampled);
 
-            // Unbounded growth guard — drain oldest (front) to stay within limit.
-            // Stereo alignment is preserved by rounding excess to even.
             if self.timescale_buffer.len() > MAX_TIMESCALE_BUFFER_SAMPLES {
                 let excess = self.timescale_buffer.len() - MAX_TIMESCALE_BUFFER_SAMPLES;
                 let excess = excess - (excess % 2);
@@ -424,7 +421,7 @@ mod tests {
         let mut samples = [100i16, 200, 300, 400];
         let original = samples;
         chain.process(&mut samples);
-        // No filters active, samples unchanged
+
         assert_eq!(samples, original);
     }
 
@@ -436,7 +433,7 @@ mod tests {
         };
         let mut chain = FilterChain::from_config(&filters);
         chain.reset();
-        // After reset, process should still work
+
         let mut samples = [100i16, 200];
         chain.process(&mut samples);
     }
@@ -489,7 +486,6 @@ mod tests {
         );
         assert_eq!(chain.timescale_buffer.len(), produced.len() - 24);
 
-        // Short buffer => no partial drain, returns false.
         let before = chain.timescale_buffer.len();
         let mut too_big = vec![0i16; before + 8];
         assert!(!chain.fill_frame(&mut too_big));
@@ -499,7 +495,6 @@ mod tests {
             "failed fill must not consume"
         );
 
-        // reset() empties the exchange buffer.
         chain.reset();
         assert!(chain.timescale_buffer.is_empty());
     }
@@ -509,7 +504,7 @@ mod tests {
         let filters = Filters::default();
         let config = FiltersConfig::default();
         let invalid = validate_filters(&filters, &config);
-        // No filters set, nothing should be invalid
+
         assert!(invalid.is_empty());
     }
 }

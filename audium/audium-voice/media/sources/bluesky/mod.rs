@@ -87,7 +87,7 @@ impl BlueskySource {
     fn build_track(&self, record: &Value, original_url: &str) -> Option<Track> {
         let value = record.get("value")?;
         let embed = value.get("embed")?;
-        // Support both the current lexicon shape and the older `$type` shape.
+
         let video = embed
             .get("video")
             .or_else(|| embed.get("$type").is_some().then_some(embed))?;
@@ -98,8 +98,6 @@ impl BlueskySource {
             .and_then(|v| v.as_str())
             .or_else(|| video.get("cid").and_then(|v| v.as_str()))?;
 
-        // The video CDN URL requires the blob CID; the poster comes from the
-        // public thumbnail CDN.
         let stream = format!("{VIDEO_CDN}/{did}/{cid}/playlist.m3u8");
         let poster = video
             .get("thumbnail")
@@ -193,7 +191,6 @@ impl SourcePlugin for BlueskySource {
         _identifier: &str,
         _routeplanner: Option<Arc<dyn crate::lavalink::routeplanner::RoutePlanner>>,
     ) -> Option<BoxedTrack> {
-        // The resolved CDN stream is carried as `uri` and decoded by `http`.
         None
     }
 }

@@ -81,7 +81,7 @@ impl GoogleDriveSource {
         if status.is_success() && !final_url.contains("drive.google.com") {
             return Some(final_url);
         }
-        // A redirect that stays on Google means the confirmation page.
+
         if !status.is_success() {
             debug!("Google Drive probe returned HTTP {status}");
         }

@@ -44,7 +44,6 @@ impl LyricsProvider for LetrasMusProvider {
         let author = utils::clean_text(&track.author);
         let query = format!("{} {}", title, author);
 
-        // Search via Solr API
         let search_url = format!(
             "https://solr.sscdn.co/letras/m1/?q={}&wt=json",
             urlencoding::encode(&query)
@@ -63,7 +62,6 @@ impl LyricsProvider for LetrasMusProvider {
         let url_path = best["url"].as_str()?;
         let page_url = format!("https://www.letras.mus.br/{}/{}/", dns, url_path);
 
-        // Fetch HTML to extract metadata and translation links
         let html = self
             .client
             .get(&page_url)
@@ -74,7 +72,6 @@ impl LyricsProvider for LetrasMusProvider {
             .await
             .ok()?;
 
-        // Extract _omq data (metadata)
         let omq_re =
             Regex::new(r#"_omq\.push\(\['ui/lyric',\s*(\{[\s\S]*?\})\s*,"#).expect("valid regex");
         let omq = omq_re
@@ -84,7 +81,6 @@ impl LyricsProvider for LetrasMusProvider {
         let letras_id = omq.as_ref().and_then(|o| o["ID"].as_i64());
         let youtube_id = omq.as_ref().and_then(|o| o["YoutubeID"].as_str());
 
-        // Try synced lyrics if available
         if let (Some(l_id), Some(y_id)) = (letras_id, youtube_id) {
             let api_url = format!(
                 "https://www.letras.mus.br/api/v2/subtitle/{}/{}/",
@@ -133,7 +129,6 @@ impl LyricsProvider for LetrasMusProvider {
             }
         }
 
-        // Fallback to plain lyrics from HTML
         let lyric_re = Regex::new(r#"(?i)<div class="lyric-original[^>]*">([\s\S]*?)</div>"#)
             .expect("valid regex");
         if let Some(c) = lyric_re.captures(&html) {

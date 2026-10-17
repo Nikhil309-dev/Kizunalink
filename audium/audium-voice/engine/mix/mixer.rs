@@ -42,11 +42,10 @@ impl Default for AudioMixer {
 #[inline]
 pub(crate) fn soft_clip_i16(sum: i32) -> i16 {
     /// Soft-knee threshold at 0.9 of full scale, in the i16 sample domain.
-    const SOFT_LIMIT: i32 = 29491; // (0.9 * 32768) as i32
+    const SOFT_LIMIT: i32 = 29491;
     const THRESHOLD: f32 = SOFT_LIMIT as f32 / 32768.0;
     const HEADROOM: f32 = 1.0 - THRESHOLD;
 
-    // `unsigned_abs` keeps the i32::MIN edge case well-defined (no `abs` overflow).
     let mag = sum.unsigned_abs();
     if mag <= SOFT_LIMIT as u32 {
         return sum as i16;
@@ -78,7 +77,7 @@ impl AudioMixer {
         if self.layers.len() >= self.max_layers {
             return Err("Maximum mix layers reached");
         }
-        // Re-enable after stop_all() so layers can be added again
+
         if !self.enabled {
             self.enabled = true;
         }
@@ -130,11 +129,9 @@ pub struct Mixer {
     tracks: Vec<MixerTrack>,
     mix_buf: Vec<i32>,
     pub audio_mixer: AudioMixer,
-    opus_passthrough_track: Option<usize>, // index of track providing opus passthrough
+    opus_passthrough_track: Option<usize>,
     final_pcm_buf: Vec<i16>,
 }
-
-// PassthroughTrack is now implicitly handled by MixerTrack via FlowController's latest_opus
 
 struct MixerTrack {
     flow: FlowController,
@@ -238,7 +235,6 @@ impl Mixer {
             .state
             .store(PlaybackState::Stopped as u8, Ordering::Release);
 
-        // Keep the passthrough index pointing at the same track after removal.
         match self.opus_passthrough_track {
             Some(p) if p == idx => self.opus_passthrough_track = None,
             Some(ref mut p) if *p > idx => *p -= 1,
@@ -271,10 +267,6 @@ impl Mixer {
                 track.flow.volume.set_volume(vol_f);
             }
 
-            // Drive the tape rate toward the desired state whenever no ramp is in
-            // flight. This must key off the *target* state (Playing/Starting vs
-            // Stopping), not the previous state, so that a resume arriving mid
-            // stop-ramp still recovers instead of leaving the tape pinned at 0.01.
             if !track.flow.tape.is_ramping() {
                 let want_play = matches!(state, PlaybackState::Playing | PlaybackState::Starting);
                 let rate = track.flow.tape.rate();
@@ -295,7 +287,6 @@ impl Mixer {
 
             let mut filled = 0usize;
 
-            // 1. Drain pending buffer
             if track.pending_pos < track.pending.len() {
                 let (_, room) = self.mix_buf.split_at_mut(filled);
                 let avail = (out_len - filled)
@@ -314,7 +305,6 @@ impl Mixer {
                 }
             }
 
-            // 2. Pull new frames from flow
             'pull: while filled < out_len && !track.finished {
                 match track.flow.try_pop_frame() {
                     Ok(Some(frame)) => {
@@ -439,17 +429,15 @@ mod tests {
     #[test]
     fn add_layer_re_enables_after_stop_all() {
         let mut mixer = AudioMixer::new();
-        mixer.enabled = false; // state left behind by Mixer::stop_all
+        mixer.enabled = false;
         let (_tx, rx) = flume::unbounded();
         assert!(mixer.add_layer("sfx".into(), rx, 1.0).is_ok());
         assert!(mixer.enabled, "add_layer must re-enable the mixer");
         assert_eq!(mixer.layers.len(), 1);
 
-        // A disabled-but-populated mixer must still modify the frame, proving the
-        // re-enable actually restores the mixing path.
         mixer.enabled = true;
         let mut frame = [0i16, 0, 0, 0];
-        mixer.mix(&mut frame); // populates layer state; no panic
+        mixer.mix(&mut frame);
     }
 
     #[test]
@@ -500,10 +488,10 @@ mod tests {
             }
             prev = out;
         }
-        // Beyond the knee the curve saturates but keeps sign and ordering.
+
         assert!(soft_clip_i16(-1_000_000) < soft_clip_i16(-29492));
         assert!(soft_clip_i16(1_000_000) > soft_clip_i16(29492));
-        // At extreme magnitudes, finite-precision arithmetic rounds the asymptote to full scale.
+
         assert_eq!(soft_clip_i16(1_000_000), i16::MAX);
     }
 
@@ -566,13 +554,11 @@ mod tests {
         }
         assert!(audible, "baseline playback must be audible");
 
-        // Pause: engage the tape stop ramp.
         state.store(PlaybackState::Stopping as u8, Ordering::Release);
         for _ in 0..3 {
             mix_mean_abs(&mut mixer);
         }
 
-        // Resume mid-ramp.
         state.store(PlaybackState::Starting as u8, Ordering::Release);
 
         let mut last = 0;

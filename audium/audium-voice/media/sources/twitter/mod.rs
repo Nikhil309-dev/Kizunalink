@@ -126,7 +126,7 @@ impl TwitterSource {
             .await
             .ok()?;
         let result = body.get("data")?.get("tweetResult")?.get("result")?;
-        // A tombstone/limited tweet wraps the real one under `tweet`.
+
         let result = result.get("tweet").unwrap_or(result);
         result.get("legacy").cloned()
     }

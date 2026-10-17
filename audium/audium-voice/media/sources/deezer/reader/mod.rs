@@ -51,14 +51,12 @@ impl DeezerReader {
 impl Read for DeezerReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         loop {
-            // 1. Drain skip_pending if we have data
             if self.skip_pending > 0 && !self.ready_buf.is_empty() {
                 let to_skip = std::cmp::min(self.skip_pending, self.ready_buf.len());
                 self.ready_buf.drain(..to_skip);
                 self.skip_pending -= to_skip;
             }
 
-            // 2. Supply data from ready_buf if available
             if self.skip_pending == 0 && !self.ready_buf.is_empty() {
                 let n = std::cmp::min(buf.len(), self.ready_buf.len());
                 buf[..n].copy_from_slice(&self.ready_buf[..n]);
@@ -66,7 +64,6 @@ impl Read for DeezerReader {
                 return Ok(n);
             }
 
-            // 3. Need more data from source
             let mut tmp = [0u8; CHUNK_SIZE];
             let n = self.source.read(&mut tmp)?;
 
@@ -74,7 +71,7 @@ impl Read for DeezerReader {
                 if self.raw_buf.is_empty() {
                     return Ok(0);
                 }
-                // Process remaining block even if it's smaller than CHUNK_SIZE
+
                 let leftovers = self.raw_buf.clone();
                 let chunk_idx = self.pos / CHUNK_SIZE as u64;
                 self.crypt
@@ -86,7 +83,6 @@ impl Read for DeezerReader {
 
             self.raw_buf.extend_from_slice(&tmp[..n]);
 
-            // 4. Process all full chunks
             while self.raw_buf.len() >= CHUNK_SIZE {
                 let chunk: Vec<u8> = self.raw_buf.drain(..CHUNK_SIZE).collect();
                 let chunk_idx = self.pos / CHUNK_SIZE as u64;

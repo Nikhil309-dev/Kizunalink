@@ -187,7 +187,6 @@ impl LyricsProvider for YoutubeMusicLyricsProvider {
             .pointer("/tabRenderer/endpoint/browseEndpoint/browseId")
             .and_then(|v| v.as_str())?;
 
-        // Try extracting timed lyrics
         if let Some(mobile_response) = self
             .send_request("browse", json!({ "browseId": browse_id }), true)
             .await
@@ -217,7 +216,6 @@ impl LyricsProvider for YoutubeMusicLyricsProvider {
                 }
             }
 
-        // Extract description normal lyrics
         if let Some(browse_response) = self
             .send_request("browse", json!({ "browseId": browse_id }), false)
             .await

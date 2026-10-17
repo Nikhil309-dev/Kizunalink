@@ -51,8 +51,7 @@ pub async fn monitor_loop(ctx: MonitorCtx) {
     let mut last_pos_changed_at = std::time::Instant::now();
     let mut stuck_fired = false;
     let mut buffering_started_at: Option<std::time::Instant> = None;
-    // True once the decoder has produced audio, so a later failure is reported
-    // as `finished` (ended after starting) rather than `loadFailed` (never started).
+
     let mut audio_started = false;
 
     loop {
@@ -82,12 +81,6 @@ pub async fn monitor_loop(ctx: MonitorCtx) {
 
         if state == PlaybackState::Playing {
             if !ctx.voice_ready.load(Ordering::Acquire) {
-                // Without a voice transport there is nowhere for audio to go, so a stalled
-                // position is not a stuck track — upstream Lavalink does not even start a
-                // track until the voice connection is ready. Reporting `trackStuck` here
-                // replaces the real cause (a failed voice connection, which the gateway logs)
-                // with a misleading playback error. Keep the timer fresh so a genuine stall is
-                // still caught promptly once the connection comes up.
                 last_pos_changed_at = std::time::Instant::now();
                 buffering_started_at = None;
                 stuck_fired = false;
@@ -186,9 +179,7 @@ async fn handle_playback_stopped(ctx: &MonitorCtx, audio_started: bool) {
                     },
                 }),
             });
-            // `loadFailed` means the track never produced audio; once frames have
-            // played, an exception ends the track as `finished` (same as upstream
-            // Lavalink). The `TrackException` above still carries the real cause.
+
             stop_reason_after_error(audio_started)
         }
         Err(_) => TrackEndReason::Finished,
@@ -295,7 +286,6 @@ mod tests {
 
     #[test]
     fn mid_stream_error_ends_as_finished_not_load_failed() {
-        // Audio already played -> clients must advance the queue.
         assert!(matches!(
             stop_reason_after_error(true),
             TrackEndReason::Finished

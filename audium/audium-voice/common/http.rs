@@ -55,9 +55,6 @@ impl HttpClientPool {
                     builder = builder.proxy(proxy_obj);
                 }
                 Err(e) => {
-                    // B18: Proxy config failure is logged loudly. If privacy is critical,
-                    // users should validate their proxy config at startup. We do NOT make
-                    // this fatal because some deployments may intentionally not need proxy.
                     warn!(
                         "HttpClientPool: failed to parse proxy URL '{}': {} — proxy will be ignored",
                         redact_url(url),
@@ -146,11 +143,11 @@ mod tests {
         let pool = HttpClientPool::new();
         let a = pool.get(Some(proxy("http://127.0.0.1:8080")));
         let b = pool.get(Some(proxy("http://127.0.0.1:8080")));
-        // Same proxy config reuses the same pooled client.
+
         assert!(Arc::ptr_eq(&a, &b));
 
         let c = pool.get(None);
-        // A direct client is distinct from a proxied one.
+
         assert!(!Arc::ptr_eq(&a, &c));
     }
 
@@ -206,7 +203,6 @@ mod tests {
 
     #[tokio::test]
     async fn capped_reader_rejects_an_oversized_streamed_body() {
-        // No Content-Length: the cap must still hold while streaming.
         let url = serve_once(vec![b'x'; MAX_SOURCE_BODY_BYTES + 64], None);
         let resp = reqwest::get(&url).await.expect("request");
         assert!(read_body_capped(resp).await.is_err());

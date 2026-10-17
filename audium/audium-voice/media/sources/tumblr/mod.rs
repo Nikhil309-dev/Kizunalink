@@ -137,9 +137,7 @@ impl TumblrSource {
         if let Some(track) = self.build_track(&html, &blog, &post_id, identifier) {
             return LoadResult::Track(track);
         }
-        // A post that only embeds another platform is delegated; the manager
-        // re-routes by identifier, so returning the embed URL as a "playlist"
-        // would be wrong. Emit empty and let the manager's fallback resolve it.
+
         if self.extract_embed(&html).is_some() {
             debug!("Tumblr post embeds an external platform; deferring");
         }

@@ -34,9 +34,6 @@ pub fn open_format(
     source: Box<dyn MediaSource>,
     kind: Option<crate::common::types::AudioFormat>,
 ) -> Result<DemuxResult, Error> {
-    // Tracker modules have no container timestamps and no symphonia probe
-    // support; they get a dedicated reader + decoder. Checked first because the
-    // module magic bytes cannot be mistaken for any probed container.
     if matches!(kind, Some(AudioFormat::Tracker)) {
         let format = TrackerFormatReader::open(source)?;
         let track = format.tracks().first().ok_or_else(|| {

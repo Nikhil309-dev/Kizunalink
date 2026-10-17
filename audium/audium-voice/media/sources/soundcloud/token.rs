@@ -14,7 +14,7 @@ use tracing::{debug, error, info, trace, warn};
 use crate::common::types::SharedRw;
 
 const SOUNDCLOUD_URL: &str = "https://soundcloud.com";
-const CLIENT_ID_REFRESH_INTERVAL: Duration = Duration::from_secs(3600); // 1 hour
+const CLIENT_ID_REFRESH_INTERVAL: Duration = Duration::from_secs(3600);
 const CLIENT_ID_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 fn asset_re() -> &'static Regex {
@@ -100,9 +100,6 @@ impl CachedClientId {
 
 impl SoundCloudTokenTracker {
     pub fn new(client: Arc<reqwest::Client>, config: &crate::config::SoundCloudConfig) -> Self {
-        // Pre-seed client_id from config if provided. An invalid/placeholder
-        // value is ignored so discovery still runs instead of being pinned to a
-        // credential that will only ever return 401.
         let configured = config.client_id.clone().filter(|id| is_valid_client_id(id));
         let cached = CachedClientId {
             last_updated: configured.as_ref().map(|_| Instant::now()),
@@ -125,7 +122,6 @@ impl SoundCloudTokenTracker {
             }
         }
 
-        // Need to refresh
         self.refresh_client_id().await
     }
 
@@ -164,8 +160,6 @@ impl SoundCloudTokenTracker {
         }
         let html = html.replace("&amp;", "&");
 
-        // Try to find client_id directly in page HTML first (assignment or
-        // hydration-blob form).
         if let Some(id) = extract_client_id(&html) {
             trace!("SoundCloud: Found client_id in main page");
             self.store_client_id(id.clone()).await;
@@ -173,7 +167,6 @@ impl SoundCloudTokenTracker {
             return Some(id);
         }
 
-        // Otherwise, find all asset JS URLs and probe them
         let mut asset_urls = HashSet::new();
         for caps in script_src_re().captures_iter(&html) {
             if let Some(src) = caps.get(1).map(|m| m.as_str()) {
@@ -208,7 +201,6 @@ impl SoundCloudTokenTracker {
             asset_urls.len()
         );
 
-        // Try the last few asset scripts (the relevant one is usually one of the last)
         for url in asset_urls.iter().rev().take(9) {
             let js = match self
                 .client
@@ -272,7 +264,6 @@ mod tests {
 
     #[test]
     fn extracts_client_id_from_hydration_blob() {
-        // The form SoundCloud currently ships on the homepage.
         let html = r#"{"hydratable":"apiClient","data":{"id":"QhVEWrrJKvW4uSU5u5EoI0FTXYUGzy5k","isExpiring":true}}"#;
         assert_eq!(
             extract_client_id(html).as_deref(),
@@ -296,7 +287,7 @@ mod tests {
         assert!(!is_valid_client_id("short"));
         assert!(!is_valid_client_id("has spaces in it here"));
         assert!(is_valid_client_id("QhVEWrrJKvW4uSU5u5EoI0FTXYUGzy5k"));
-        // A hydration blob carrying the placeholder must not be accepted.
+
         let html = r#"{"data":{"id":"MISSING_CLIENT_ID"}}"#;
         assert_eq!(extract_client_id(html), None);
     }

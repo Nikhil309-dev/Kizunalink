@@ -35,7 +35,7 @@ pub fn cast_from_bytes(v: Vec<u8>) -> PooledBuffer {
 #[inline]
 pub fn as_byte_slice(v: &[i16]) -> &[u8] {
     // SAFETY: `u8` has alignment 1 and every byte pattern is valid. The output length
-    // exactly covers the initialized `i16` slice and cannot outlive it.
+
     unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 2) }
 }
 
@@ -56,7 +56,7 @@ pub fn i16_samples(v: &[u8]) -> impl Iterator<Item = i16> + '_ {
 #[inline]
 pub fn as_i16_slice(v: &[u8]) -> &[i16] {
     // SAFETY: `align_to` only partitions the existing slice. We return its typed middle
-    // after checking that no unaligned prefix or incomplete suffix exists.
+
     let (prefix, samples, suffix) = unsafe { v.align_to::<i16>() };
     assert!(
         prefix.is_empty() && suffix.is_empty(),

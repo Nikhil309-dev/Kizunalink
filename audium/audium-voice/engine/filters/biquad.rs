@@ -81,7 +81,6 @@ impl BiquadState {
             - coeffs.a2 * self.y2;
 
         if !output.is_finite() {
-            // Reset on NaN/Inf to avoid cascading errors
             self.x1 = 0.0;
             self.x2 = 0.0;
             self.y1 = 0.0;

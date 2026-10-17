@@ -59,7 +59,7 @@ impl PlayableTrack for DeezerTrack {
                         }
                     };
 
-                    // 1. Get Track Token
+
                     let url = format!(
                         "https://www.deezer.com/ajax/gw-light.php?method=song.getData&input=3&api_version=1.0&api_token={}",
                         tokens.api_token
@@ -152,7 +152,7 @@ impl PlayableTrack for DeezerTrack {
                         }
                     };
 
-                    // 2. Get Media URL
+
                     let media_url = "https://media.deezer.com/v1/get_url";
                     let media_body = serde_json::json!({
                         "license_token": tokens.license_token,
@@ -380,7 +380,6 @@ pub(super) async fn verify_track_resolvable(
         }
     };
 
-    // If main track has no RIGHTS, use FALLBACK track if available
     let rights = results.get("RIGHTS");
     if is_rights_empty(rights)
         && let Some(fallback) = results.get("FALLBACK")

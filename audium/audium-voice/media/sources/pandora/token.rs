@@ -93,7 +93,7 @@ impl PandoraTokenTracker {
             auth_token,
             csrf_token_raw: csrf_raw,
             csrf_token_parsed: csrf_parsed,
-            // Tokens usually last 24 hours, but we'll refresh every 12 to be safe
+
             expires_at: Instant::now() + Duration::from_secs(12 * 3600),
         };
 

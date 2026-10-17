@@ -72,7 +72,7 @@ impl CrossfadeController {
         let Some(ring) = &self.ring_buffer else {
             return false;
         };
-        // Ready if we have at least 80% of target buffered or at least 1s
+
         ring.len()
             >= (self.target_buffer_bytes * 8 / 10)
                 .min(self.sample_rate as usize * self.channels * 2)
@@ -95,7 +95,7 @@ impl CrossfadeController {
     }
 
     pub fn clear(&mut self) {
-        self.ring_buffer = None; // Drop returns buffer to pool
+        self.ring_buffer = None;
         self.next_rx = None;
         self.active_fade = None;
         self.target_buffer_bytes = 0;
@@ -119,7 +119,6 @@ impl CrossfadeController {
         };
 
         let Some(next_bytes) = next_bytes else {
-            // No buffered data available?? stall or skip
             return false;
         };
 
@@ -172,10 +171,7 @@ impl CrossfadeController {
         let t = t.clamp(0.0, 1.0);
         match curve {
             FadeCurve::Linear => (1.0 - t, t),
-            FadeCurve::Sinusoidal => {
-                // Constant power: cos for out, sin for in
-                ((t * HALF_PI).cos(), (t * HALF_PI).sin())
-            }
+            FadeCurve::Sinusoidal => ((t * HALF_PI).cos(), (t * HALF_PI).sin()),
         }
     }
 }

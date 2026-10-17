@@ -42,7 +42,6 @@ impl PlayableTrack for RedditTrack {
                 let (inner_rx, inner_cmd_tx, inner_err_rx) =
                     http_track.start_decoding(config.clone());
 
-                // Command proxy
                 let inner_cmd_tx_clone = inner_cmd_tx.clone();
                 tokio::spawn(async move {
                     while let Ok(cmd) = cmd_rx.recv_async().await {
@@ -52,7 +51,6 @@ impl PlayableTrack for RedditTrack {
                     }
                 });
 
-                // Error proxy
                 let err_tx_clone = err_tx.clone();
                 tokio::spawn(async move {
                     while let Ok(err) = inner_err_rx.recv_async().await {
@@ -60,7 +58,6 @@ impl PlayableTrack for RedditTrack {
                     }
                 });
 
-                // Samples proxy
                 while let Ok(sample) = inner_rx.recv_async().await {
                     if tx.send(sample).is_err() {
                         break;

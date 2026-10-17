@@ -6,18 +6,15 @@ use std::collections::VecDeque;
 use super::AudioFilter;
 
 pub struct EchoFilter {
-    echo_length: f32, // in seconds (e.g. 1.0 = 1s)
-    decay: f32,       // feedback multiplier (e.g. 0.5)
+    echo_length: f32,
+    decay: f32,
 
-    // Buffer layout: interleaved L/R samples, so length is frames * 2.
-    // 1 second at 48000Hz = 96000 samples.
     buffer: VecDeque<i16>,
     delay_samples: usize,
 }
 
 impl EchoFilter {
     pub fn new(echo_length: f32, decay: f32) -> Self {
-        // Clamp to avoid excessive memory or invalid values
         let length = echo_length.clamp(0.001, 5.0);
         let decay = decay.clamp(0.0, 1.0);
 

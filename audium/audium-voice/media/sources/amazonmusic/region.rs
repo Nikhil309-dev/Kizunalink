@@ -369,7 +369,7 @@ pub async fn fetch_multi_region(
         if tried_endpoint == Some(region.skill_endpoint) {
             continue;
         }
-        // Clone base config reference for the async move block
+
         let base_config = base_config.clone();
         futs.push(async move {
             let result = fetch_from_endpoint(

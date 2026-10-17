@@ -267,7 +267,6 @@ impl SoundCloudSource {
             };
         }
 
-        // Priority: progressive mp3 > progressive aac > hls opus > hls mp3 > hls aac > any progressive > any hls
         let selected = find_transcoding!("progressive", "mpeg")
             .or_else(|| find_transcoding!("progressive", "aac"))
             .or_else(|| find_transcoding!("hls", "mpeg"))
@@ -312,15 +311,11 @@ impl SoundCloudSource {
                 SoundCloudStreamKind::ProgressiveAac
             }
         } else {
-            // HLS
             if mime.contains("ogg") {
                 SoundCloudStreamKind::HlsOpus
             } else if mime.contains("mpeg") || mime.contains("mp3") {
                 SoundCloudStreamKind::HlsMp3
-            } else if mime.contains("aac") || mime.contains("mp4") || mime.contains("m4a") {
-                SoundCloudStreamKind::HlsAac
             } else {
-                // Unknown HLS format, try as AAC/TS
                 SoundCloudStreamKind::HlsAac
             }
         };
@@ -384,7 +379,6 @@ impl SoundCloudSource {
 
         let stream_url = self.resolve_stream_url(&lookup_url, client_id).await?;
 
-        // Filter preview URLs
         if stream_url.contains("cf-preview-media.sndcdn.com") || stream_url.contains("/preview/") {
             warn!("SoundCloud: Track {} only has a preview URL, skipping", url);
             return None;
@@ -477,7 +471,6 @@ impl SoundCloudSource {
     }
 
     async fn resolve_short_url(&self, url: &str) -> Option<String> {
-        // Do a HEAD request with no redirects to get the Location header
         let resp = self.client.head(url).send().await.ok()?;
 
         let location = resp.headers().get("location")?.to_str().ok()?.to_owned();
@@ -485,7 +478,6 @@ impl SoundCloudSource {
     }
 
     async fn resolve_mobile_url(&self, url: &str) -> Option<String> {
-        // Follow redirects and return final URL
         let resp = self.client.get(url).send().await.ok()?;
         Some(resp.url().to_string())
     }
@@ -517,7 +509,6 @@ impl SoundCloudSource {
             .cloned()
             .unwrap_or_default();
 
-        // Split into complete tracks (have title) and stub (only id)
         let mut complete: Vec<Track> = Vec::new();
         let mut stub_ids: Vec<String> = Vec::new();
 
@@ -538,7 +529,6 @@ impl SoundCloudSource {
             .cloned()
             .collect::<Vec<_>>();
 
-        // Batch fetch stub tracks in groups of 50
         for chunk in needed.chunks(50) {
             let ids = chunk.join(",");
             let batch_url = format!("{BASE_URL}/tracks?ids={ids}&client_id={client_id}");
@@ -557,7 +547,6 @@ impl SoundCloudSource {
             }
         }
 
-        // Respect playlist limit
         complete.truncate(playlist_limit);
 
         if complete.is_empty() {
@@ -615,10 +604,7 @@ impl SoundCloudSource {
             .and_then(|v| v.as_array())
             .unwrap_or(&vec![])
             .iter()
-            .filter_map(|item| {
-                // Liked items have a "track" sub-object
-                item.get("track").and_then(|t| self.parse_track(t).ok())
-            })
+            .filter_map(|item| item.get("track").and_then(|t| self.parse_track(t).ok()))
             .collect();
 
         if tracks.is_empty() {
@@ -727,7 +713,6 @@ impl SoundCloudSource {
                 .await
             }
             "" | "spotlight" => {
-                // For root URL or /spotlight, try spotlight first
                 let result = self
                     .load_collection_tracks(
                         user_id,
@@ -738,7 +723,6 @@ impl SoundCloudSource {
                     )
                     .await;
                 if matches!(result, LoadResult::Empty {}) && sub_path.is_empty() {
-                    // If root URL and spotlight is empty, fall back to tracks
                     self.load_collection_tracks(
                         user_id,
                         &user_name,
@@ -795,8 +779,6 @@ impl SoundCloudSource {
                     } else if item.get("kind").and_then(|v| v.as_str()) == Some("track") {
                         Some(item)
                     } else if item.get("playlist").is_some() {
-                        // We skip playlists inside track collections for now to keep it simple
-                        // and match expected behavior of returning a flat list of tracks
                         None
                     } else {
                         Some(item)
@@ -840,7 +822,7 @@ impl SourcePlugin for SoundCloudSource {
         {
             return true;
         }
-        // Normalize: strip mobile prefix
+
         let url = identifier
             .strip_prefix("https://m.")
             .map(|s| format!("https://{s}"))
@@ -864,7 +846,6 @@ impl SourcePlugin for SoundCloudSource {
         identifier: &str,
         _routeplanner: Option<Arc<dyn crate::lavalink::routeplanner::RoutePlanner>>,
     ) -> LoadResult {
-        // 1. Search
         if let Some(prefix) = self
             .search_prefixes()
             .into_iter()
@@ -874,7 +855,6 @@ impl SourcePlugin for SoundCloudSource {
             return self.search_tracks(query.trim()).await;
         }
 
-        // 2. Resolve redirects
         let url = if mobile_url_re().is_match(identifier) {
             match self.resolve_mobile_url(identifier).await {
                 Some(u) => u,
@@ -886,14 +866,12 @@ impl SourcePlugin for SoundCloudSource {
                 None => return LoadResult::Empty {},
             }
         } else {
-            // Strip mobile subdomain
             identifier
                 .strip_prefix("https://m.")
                 .map(|s| format!("https://{s}"))
                 .unwrap_or_else(|| identifier.to_owned())
         };
 
-        // 3. Search URL
         if search_url_re().is_match(&url)
             && let Ok(uri) = reqwest::Url::parse(&url)
             && let Some((_, query)) = uri.query_pairs().find(|(k, _)| k == "q")
@@ -901,7 +879,6 @@ impl SourcePlugin for SoundCloudSource {
             return self.search_tracks(&query).await;
         }
 
-        // 4. Dispatch
         if liked_url_re().is_match(&url) {
             return self.load_liked_tracks(&url).await;
         }
@@ -926,7 +903,6 @@ impl SourcePlugin for SoundCloudSource {
         identifier: &str,
         routeplanner: Option<Arc<dyn crate::lavalink::routeplanner::RoutePlanner>>,
     ) -> Option<Box<dyn PlayableTrack>> {
-        // Resolve identifier to a URL if needed
         let url = if mobile_url_re().is_match(identifier) {
             self.resolve_mobile_url(identifier).await?
         } else if short_url_re().is_match(identifier) {

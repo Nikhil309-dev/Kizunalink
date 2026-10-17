@@ -95,7 +95,6 @@ impl FlowerySource {
             }
         }
 
-        // Handle // after prefix (e.g., ftts://hello)
         if path_and_query.starts_with("//") {
             path_and_query = &path_and_query[2..];
         }

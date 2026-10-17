@@ -12,12 +12,9 @@ pub struct Stats {
     pub uptime: u64,
     pub memory: Memory,
     pub cpu: Cpu,
-    // Official nodes always emit this key, serialized as `null` when there are
-    // no players (both over the WebSocket and on `/v4/stats`).
+
     pub frame_stats: Option<FrameStats>,
-    // Non-standard, additive extension (NodeLink parity): omitted unless the
-    // `monitoring.detailed_stats` toggle is on, so the default payload stays
-    // byte-identical to Lavalink's.
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detailed_stats: Option<DetailedStats>,
 }

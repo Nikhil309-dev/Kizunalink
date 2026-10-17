@@ -213,7 +213,6 @@ impl YouTubeClient for AndroidVrClient {
             }
         };
 
-        // HLS for live content
         if let Some(hls) = streaming_data
             .get("hlsManifestUrl")
             .and_then(|v| v.as_str())

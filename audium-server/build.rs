@@ -41,14 +41,12 @@ fn set(key: &str, value: Option<String>) {
 /// milliseconds is scaled up. Already-millisecond input is passed through.
 fn to_millis(epoch: &str) -> String {
     match epoch.trim().parse::<i64>() {
-        // Anything below ~1973-03 in milliseconds is really a second count.
         Ok(secs) if secs > 0 && secs < 100_000_000_000 => (secs * 1000).to_string(),
         _ => epoch.trim().to_string(),
     }
 }
 
 fn main() {
-    // Re-run when the checked-out revision changes.
     println!("cargo:rerun-if-changed=../.git/HEAD");
     println!("cargo:rerun-if-changed=../.git/refs/heads");
     println!("cargo:rerun-if-env-changed=BUILD_TIME");
@@ -56,7 +54,6 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GIT_BRANCH");
     println!("cargo:rerun-if-env-changed=GIT_COMMIT_TIME");
 
-    // Build time: prefer the CI-provided epoch, else derive at compile time.
     let build_time = std::env::var("BUILD_TIME").ok().or_else(|| {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)

@@ -132,7 +132,6 @@ impl LyricsProvider for MusixmatchProvider {
         let message = body.get("message")?;
 
         if message.get("header")?.get("status_code")?.as_i64() != Some(200) {
-            // Try title only fallback search if artist search failed
             let resp = self
                 .client
                 .get("https://apic-desktop.musixmatch.com/ws/1.1/track.search")
@@ -162,7 +161,6 @@ impl LyricsProvider for MusixmatchProvider {
 
             let track_id = track_list[0].get("track")?.get("track_id")?.as_i64()?;
 
-            // Fetch subtitles individually
             let sub_resp = self
                 .client
                 .get("https://apic-desktop.musixmatch.com/ws/1.1/track.subtitle.get")
@@ -183,7 +181,6 @@ impl LyricsProvider for MusixmatchProvider {
                     .ok()?;
             let sub_msg = sub_body.get("message")?;
             if sub_msg.get("header")?.get("status_code")?.as_i64() != Some(200) {
-                // Try plain lyrics
                 let lyr_resp = self
                     .client
                     .get("https://apic-desktop.musixmatch.com/ws/1.1/track.lyrics.get")

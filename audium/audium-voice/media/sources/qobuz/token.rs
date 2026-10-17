@@ -93,7 +93,6 @@ impl QobuzTokenTracker {
     async fn refresh_tokens(&self) -> Option<Arc<QobuzTokens>> {
         let mut tokens_lock = self.tokens.write().await;
 
-        // Double check after lock
         if let Some(t) = &*tokens_lock {
             return Some(Arc::new(QobuzTokens {
                 app_id: t.app_id.to_owned(),
@@ -185,8 +184,7 @@ impl QobuzTokenTracker {
             .get(2)
             .ok_or_else(|| "bundle.js seed regex is missing capture group 2".to_owned())?
             .as_str();
-        // Capitalise the first *character*, not the first byte: byte slicing
-        // panics if the timezone ever starts with a multi-byte UTF-8 sequence.
+
         let timezone = {
             let mut chars = timezone_raw.chars();
             match chars.next() {

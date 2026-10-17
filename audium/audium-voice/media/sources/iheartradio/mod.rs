@@ -177,8 +177,6 @@ impl IheartradioSource {
             return Vec::new();
         };
 
-        // The search response omits stream URLs, so resolve each station's live
-        // detail concurrently (bounded by the same search limit).
         let ids: Vec<String> = stations
             .iter()
             .take(self.search_limit)
@@ -197,7 +195,6 @@ impl IheartradioSource {
             self.extract_station(&data)
                 .and_then(|s| self.build_track(s))
         }))
-        // Bound fan-out so a search cannot open dozens of sockets at once.
         .buffer_unordered(5);
         futures::StreamExt::collect::<Vec<Option<Track>>>(fetches)
             .await
@@ -269,8 +266,6 @@ impl SourcePlugin for IheartradioSource {
         _identifier: &str,
         _routeplanner: Option<Arc<dyn crate::lavalink::routeplanner::RoutePlanner>>,
     ) -> Option<BoxedTrack> {
-        // Live stations carry their stream URL as `uri`; resolution flows through
-        // the `http` source.
         None
     }
 
@@ -308,9 +303,9 @@ mod tests {
         let s = source();
         assert!(s.can_handle("https://www.iheart.com/live/8517/"));
         assert!(s.can_handle("https://iheart.com/live/lofi-relax-8517"));
-        // A bare site URL must not be claimed as a station.
+
         assert!(!s.can_handle("https://www.iheart.com/"));
-        // The search prefix is claimed so `load` can dispatch it.
+
         assert!(s.can_handle("ihsearch:lofi"));
     }
 

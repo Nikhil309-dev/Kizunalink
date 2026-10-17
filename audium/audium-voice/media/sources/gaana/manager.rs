@@ -33,7 +33,7 @@ pub struct GaanaSource {
     client: Arc<reqwest::Client>,
     stream_quality: String,
     proxy: Option<crate::config::sources::HttpProxyConfig>,
-    // Limits
+
     search_limit: usize,
     playlist_load_limit: usize,
     album_load_limit: usize,

@@ -40,8 +40,6 @@ pub async fn handle_socket(
 
     send_initial_state(&mut socket, &session, resumed).await;
 
-    // `AppConfig::validate` already rejects zero, but clamp here too so a config
-    // loaded through any other path still cannot panic `interval(Duration::ZERO)`.
     let mut stats_interval = tokio::time::interval(std::time::Duration::from_secs(
         state.config.server.stats_interval.max(1),
     ));
@@ -54,8 +52,7 @@ pub async fn handle_socket(
 
     let last_pong_ms = Arc::new(AtomicU64::new(now_ms()));
     let watchdog_armed = Arc::new(AtomicBool::new(false));
-    // The HTTP limiter only counts the upgrade request. Throttle control
-    // messages too so one long-lived socket cannot bypass it.
+
     let ws_rate_capacity = f64::from(state.config.server.rate_limit_per_minute);
     let mut ws_rate_tokens = ws_rate_capacity;
     let mut ws_rate_updated = Instant::now();

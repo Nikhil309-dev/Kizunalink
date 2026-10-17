@@ -23,8 +23,6 @@ use crate::{
 fn clip_pattern() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        // A clip id is a single alphanumeric path segment; reject other paths
-        // such as `clyp.it/user/<name>` so we do not try to resolve them.
         Regex::new(r"^https?://(?:www\.)?clyp\.it/(?<id>[A-Za-z0-9]+)/?(?:\?[^#]*)?(?:#.*)?$")
             .expect("valid regex")
     })

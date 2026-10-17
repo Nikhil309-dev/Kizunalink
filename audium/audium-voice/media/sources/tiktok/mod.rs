@@ -64,7 +64,7 @@ impl TiktokSource {
         if let Some(caps) = video_pattern().captures(&final_url) {
             return Some(caps[1].to_string());
         }
-        // The id can also live in a redirect body or a `share/video` path.
+
         let body = crate::common::http::read_text_capped(response).await.ok()?;
         let re = Regex::new(r"/video/(\d{15,})").ok()?;
         re.captures(&body).map(|c| c[1].to_string())
@@ -122,7 +122,6 @@ impl TiktokSource {
             title
         };
 
-        // TikTok reports duration in seconds for web payloads; normalise to ms.
         let raw = video_info
             .get("meta")
             .and_then(|m| m.get("duration"))

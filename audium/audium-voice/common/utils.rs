@@ -6,7 +6,6 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
-// ANSI Color Codes
 pub const RESET: &str = "\x1b[0m";
 pub const BOLD: &str = "\x1b[1m";
 pub const DIM: &str = "\x1b[2m";
@@ -19,7 +18,6 @@ pub const BLUE: &str = "\x1b[34m";
 pub const MAGENTA: &str = "\x1b[35m";
 pub const RED: &str = "\x1b[31m";
 
-// Log Level Colors
 pub const COLOR_ERROR: &str = RED;
 pub const COLOR_WARN: &str = YELLOW;
 pub const COLOR_INFO: &str = GREEN;
@@ -161,12 +159,12 @@ pub fn redact_url(raw: &str) -> String {
     let Some((scheme, rest)) = raw.split_once("://") else {
         return "<redacted-url>".to_string();
     };
-    // Split authority from path/query/fragment.
+
     let (authority, tail) = match rest.find(['/', '?', '#']) {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, ""),
     };
-    // Drop `user:pass@` from the authority if present.
+
     let host = match authority.rsplit_once('@') {
         Some((_, host)) => host,
         None => authority,
@@ -251,14 +249,12 @@ mod tests {
             redact_url("https://api.example/v1/track/42"),
             "https://api.example/v1/track/42"
         );
-        // A non-URL has no scheme, so nothing but a placeholder is safe.
+
         assert_eq!(redact_url("not a url"), "<redacted-url>");
     }
 
     #[test]
     fn truncate_chars_never_splits_a_multibyte_character() {
-        // The old `&text[..47]` idiom panicked here: byte 47 lands inside a
-        // 3-byte CJK character.
         let text = "楽".repeat(80);
         let out = truncate_chars(&text, 50);
         assert_eq!(out.chars().filter(|c| *c == '楽').count(), 50);

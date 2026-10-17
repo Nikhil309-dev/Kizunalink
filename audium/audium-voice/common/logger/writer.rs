@@ -11,21 +11,18 @@ use std::{
 use parking_lot::Mutex;
 
 fn today_date() -> String {
-    // Use std::time to get the current UTC date without pulling in chrono.
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
 
-    // Simple arithmetic to derive YYYY-MM-DD from a Unix timestamp.
     let days = (secs / 86400) as u32;
-    // Days since 1970-01-01
+
     let (y, m, d) = days_to_ymd(days);
     format!("{y:04}-{m:02}-{d:02}")
 }
 
 fn days_to_ymd(mut days: u32) -> (u32, u32, u32) {
-    // Using the proleptic Gregorian calendar algorithm.
     days += 719468;
 
     let era = days / 146097;
@@ -48,7 +45,6 @@ fn resolve_path(base_path: &str, rotate_daily: bool, date: &str) -> String {
 
     let base = Path::new(base_path);
 
-    // Derive a stem from the configured path's file name (e.g. "audium" from "audium.log").
     let stem = base
         .file_stem()
         .and_then(|s| s.to_str())
@@ -116,7 +112,6 @@ impl CircularFileWriter {
             };
 
         if need_rotate {
-            // Close the old file handle so the OS can flush/rename it.
             state.file = None;
 
             let path = if self.rotate_daily {
@@ -133,7 +128,6 @@ impl CircularFileWriter {
             state.file = Some(OpenOptions::new().create(true).append(true).open(&path)?);
             state.current_date = today;
 
-            // Clean up old daily files beyond max_files limit.
             if self.rotate_daily && self.max_files > 0 {
                 self.cleanup_old_files();
             }
@@ -151,8 +145,6 @@ impl CircularFileWriter {
         let state_arc = self.state.clone();
 
         std::thread::spawn(move || {
-            // B11: this IS the tracing sink — a `tracing` call here would recurse, so an
-            // `eprintln!` is the only safe reporter; hence the local `print_stderr` allow.
             #[allow(clippy::print_stderr)]
             if let Err(e) = Self::do_prune(&path, max_lines) {
                 eprintln!("Failed to prune log file '{}': {}", path, e);
@@ -191,13 +183,10 @@ impl CircularFileWriter {
             return;
         }
 
-        // Sort by name (YYYY-MM-DD suffix sorts lexicographically = chronologically).
         log_files.sort();
 
         let to_delete = log_files.len() - max_files;
         for path in log_files.iter().take(to_delete) {
-            // B11: same rationale as the prune path — this runs inside the log writer,
-            // so `tracing` is not an option.
             #[allow(clippy::print_stderr)]
             if let Err(e) = std::fs::remove_file(path) {
                 eprintln!("Failed to delete old log file '{}': {}", path.display(), e);
@@ -245,7 +234,7 @@ impl io::Write for CircularFileWriter {
         if state.lines_since_prune >= prune_threshold && !state.is_pruning {
             state.is_pruning = true;
             state.lines_since_prune = 0;
-            state.file = None; // Close file so rename can work on Windows
+            state.file = None;
             self.spawn_prune();
         }
 
@@ -364,7 +353,6 @@ mod tests {
         let writer = CircularFileWriter::new("test_clone.log".to_string(), 100, 0, false);
         let cloned = writer.clone();
 
-        // Both should share the same state
         assert!(Arc::ptr_eq(&writer.state, &cloned.state));
 
         cleanup_test_file("test_clone.log");
@@ -375,7 +363,6 @@ mod tests {
         let writer = CircularFileWriter::new("test_make_writer.log".to_string(), 100, 0, false);
         let made = writer.make_writer();
 
-        // Should be a clone
         assert!(Arc::ptr_eq(&writer.state, &made.state));
 
         cleanup_test_file("test_make_writer.log");
@@ -444,9 +431,9 @@ mod tests {
         let d = today_date();
         let parts: Vec<&str> = d.split('-').collect();
         assert_eq!(parts.len(), 3);
-        assert_eq!(parts[0].len(), 4); // year
-        assert_eq!(parts[1].len(), 2); // month
-        assert_eq!(parts[2].len(), 2); // day
+        assert_eq!(parts[0].len(), 4);
+        assert_eq!(parts[1].len(), 2);
+        assert_eq!(parts[2].len(), 2);
     }
 
     #[test]

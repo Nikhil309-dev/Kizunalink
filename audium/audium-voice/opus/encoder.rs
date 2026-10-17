@@ -23,8 +23,6 @@ pub struct Encoder {
     channels: Channels,
 }
 
-// Safety: An Opus encoder state can be safely transferred across threads
-// when not actively in concurrent use.
 unsafe impl Send for Encoder {}
 
 impl Encoder {

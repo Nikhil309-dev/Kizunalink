@@ -127,7 +127,6 @@ impl YouTubeClient for WebRemixClient {
             crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
         let mut tracks = Vec::new();
 
-        // Improved navigation for YouTube Music search results
         let tab_content = response
             .get("contents")
             .and_then(|c| c.get("tabbedSearchResultsRenderer"))
@@ -171,7 +170,6 @@ impl YouTubeClient for WebRemixClient {
                     .or_else(|| item.get("musicTwoColumnItemRenderer"));
 
                 if let Some(renderer) = renderer {
-                    // Extract video ID safely
                     let id = renderer
                         .get("playlistItemData")
                         .and_then(|d| d.get("videoId"))
@@ -186,7 +184,6 @@ impl YouTubeClient for WebRemixClient {
                         .or_else(|| renderer.get("videoId").and_then(|v| v.as_str()));
 
                     if let Some(id) = id {
-                        // Improved title extraction
                         let title = renderer
                             .get("flexColumns")
                             .and_then(|c| c.get(0))
@@ -198,15 +195,12 @@ impl YouTubeClient for WebRemixClient {
                             .and_then(|t| t.as_str())
                             .unwrap_or("Unknown Title");
 
-                        // Improved author and length extraction from runs
                         let mut author = "Unknown Artist".to_string();
                         let mut length_ms = 0u64;
 
-                        // Check flex columns for author and duration
                         if let Some(flex_cols) =
                             renderer.get("flexColumns").and_then(|c| c.as_array())
                         {
-                            // Column 1 is usually Artist
                             if flex_cols.len() > 1
                                 && let Some(a) = flex_cols[1]
                                     .get("musicResponsiveListItemFlexColumnRenderer")
@@ -219,7 +213,6 @@ impl YouTubeClient for WebRemixClient {
                                 author = a.to_string();
                             }
 
-                            // Scan all columns for duration string
                             for col in flex_cols {
                                 if let Some(runs) = col
                                     .get("musicResponsiveListItemFlexColumnRenderer")
@@ -242,7 +235,6 @@ impl YouTubeClient for WebRemixClient {
                             }
                         }
 
-                        // Fallback author if still default
                         if author == "Unknown Artist"
                             && let Some(subtitle_runs) = renderer
                                 .get("subtitle")
@@ -254,7 +246,6 @@ impl YouTubeClient for WebRemixClient {
                             author = a.to_string();
                         }
 
-                        // Artwork URL extraction
                         let artwork_url = extract_thumbnail(renderer, Some(id));
 
                         let info = TrackInfo {
@@ -363,7 +354,6 @@ impl YouTubeClient for WebRemixClient {
             .and_then(|v| v.as_str())
             .or_else(|| context.get("visitorData").and_then(|v| v.as_str()));
 
-        // Resolve a playlist/album via 'next' endpoint (common for YT Music)
         let body = json!({
             "context": self.config().build_context(visitor_data),
             "playlistId": playlist_id,

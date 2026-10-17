@@ -270,7 +270,7 @@ impl BilibiliSource {
         {
             return Some(url.to_string());
         }
-        // Some content only offers a merged `durl` MP4.
+
         data.get("durl")
             .and_then(|d| d.as_array())
             .and_then(|d| d.first())
@@ -513,7 +513,6 @@ mod tests {
 
     #[test]
     fn derives_mixin_key_from_key_stems() {
-        // The table takes the first 32 permuted characters of img_key+sub_key.
         let key = BilibiliSource::mixin_key(
             "abcdefghijklmnopqrstuvwxyz012345",
             "ABCDEFGHIJKLMNOPQRSTUVWXYZ678901",
@@ -528,7 +527,7 @@ mod tests {
         let signed = BilibiliSource::sign_params(&params, "mixin", 1_700_000_000);
         assert!(signed.starts_with("bvid=BV1xx&cid=123&wts=1700000000"));
         assert!(signed.contains("&w_rid="));
-        // Same inputs must produce the same signature.
+
         assert_eq!(
             signed,
             BilibiliSource::sign_params(&params, "mixin", 1_700_000_000)

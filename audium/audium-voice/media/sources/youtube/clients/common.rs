@@ -103,7 +103,7 @@ impl<'a> ClientConfig<'a> {
     }
 }
 
-pub const AUDIO_ITAG_PRIORITY: &[i64] = &[251, 250, 140]; // 251/250 are opus, 140 is aac
+pub const AUDIO_ITAG_PRIORITY: &[i64] = &[251, 250, 140];
 
 pub const ITAG_FALLBACK: i64 = 18;
 
@@ -175,17 +175,13 @@ pub async fn resolve_format_url(
     player_page_url: &str,
     cipher_manager: &Arc<YouTubeCipherManager>,
 ) -> AnyResult<Option<String>> {
-    // Plain URL path
     if let Some(url) = format.get("url").and_then(|u| u.as_str()) {
-        // n-param throttling: must be decoded via cipher
         let n_param = url
             .split("&n=")
             .nth(1)
             .or_else(|| url.split("?n=").nth(1))
             .and_then(|s| s.split('&').next());
 
-        // If there's no n-param to decode, return the URL directly — no cipher call needed.
-        // (e.g. AndroidVR, TV responses often omit the n throttle param entirely)
         if n_param.is_none() {
             return Ok(Some(url.to_string()));
         }
@@ -252,7 +248,6 @@ pub fn extract_thumbnail(renderer: &Value, video_id: Option<&str>) -> Option<Str
     if let Some(list) = thumbnails.and_then(|t| t.as_array())
         && !list.is_empty()
     {
-        // Prefer any lh3.googleusercontent.com URL (YT Music album art) over ytimg thumbnails.
         let lh3 = list.iter().rev().find_map(|t| {
             t.get("url")
                 .and_then(|u| u.as_str())
@@ -263,13 +258,11 @@ pub fn extract_thumbnail(renderer: &Value, video_id: Option<&str>) -> Option<Str
             return Some(url);
         }
 
-        // For ytimg, pick the entry with the largest declared width, falling back to last.
         let best = list
             .iter()
             .max_by_key(|t| t.get("width").and_then(|w| w.as_u64()).unwrap_or(0));
 
         if let Some(url) = best.and_then(|t| t.get("url")).and_then(|u| u.as_str()) {
-            // Upgrade small thumbnails to maxresdefault when possible.
             let clean = url.split('?').next().unwrap_or(url);
             if clean.contains("i.ytimg.com") {
                 let upgraded = clean
@@ -380,7 +373,6 @@ pub fn classify_playability(status: &str, reason: &str) -> FailureClass {
     let r = reason.to_ascii_lowercase();
     let s = status.to_ascii_uppercase();
 
-    // Sign-in / bot-verification / age gate: needs credentials, not a retry.
     let bot = s == "LOGIN_REQUIRED"
         || s == "AGE_CHECK_REQUIRED"
         || r.contains("not a bot")
@@ -391,7 +383,6 @@ pub fn classify_playability(status: &str, reason: &str) -> FailureClass {
         return FailureClass::BotCheck;
     }
 
-    // Structurally unplayable regardless of client or IP.
     let definitive = s == "UNPLAYABLE"
         || s == "LIVE_STREAM_OFFLINE"
         || s == "REGION_BLOCKED"
@@ -551,15 +542,6 @@ pub fn build_player_body(
 }
 
 pub async fn make_player_request(opts: PlayerRequestOptions<'_>) -> AnyResult<Value> {
-    // Attach a Proof-of-Origin token when a provider is configured; YouTube
-    // requires it on GVS format URLs for the WEB/ANDROID/IOS clients. The token
-    // is bound to the video id. An externally supplied token wins; otherwise we
-    // ask the process-wide provider.
-    //
-    // We deliberately do NOT silently swallow provider failures: a provider that
-    // is configured but unreachable is an operator error that will surface as an
-    // HTTP 403 later, so we log it loudly here while still issuing the request
-    // (a token is not required by every client/IP).
     let po_token: Option<String> = match opts.po_token {
         Some(t) if !t.is_empty() => Some(t.to_string()),
         _ => match crate::media::sources::youtube::pot::fetch_global_typed(opts.video_id).await {
@@ -719,7 +701,7 @@ mod tests {
                 .and_then(|v| v.as_str()),
             Some("po-token-xyz")
         );
-        // visitorData must be embedded in the client context, not just headers.
+
         assert_eq!(
             body.get("context")
                 .and_then(|c| c.get("client"))
@@ -749,8 +731,6 @@ mod tests {
 
     #[test]
     fn token_and_playback_context_coexist() {
-        // A client may send both an encrypted-host-flag playbackContext and a
-        // token; the token must not clobber the signatureTimestamp.
         let cfg = test_config();
         let body = build_player_body(
             &cfg,

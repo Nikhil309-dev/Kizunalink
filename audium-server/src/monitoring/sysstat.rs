@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn reports_a_finite_cpu_percentage() {
         let mut stat = ProcessStat::cur();
-        // First sample may be 0.0 (no delta yet) but must always be a number.
+
         let first = stat.cpu().expect("current process is visible to sysinfo");
         assert!(first.is_finite() && first >= 0.0, "cpu was {first}");
 

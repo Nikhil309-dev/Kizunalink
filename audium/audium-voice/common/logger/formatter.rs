@@ -73,7 +73,6 @@ where
         let level_color = self.get_level_color(level);
         let ram = memory_usage_report();
 
-        // ╭─[ Timestamp ]─[ RAM ]─[ LEVEL ]
         writeln!(
             writer,
             "{dim}╭─{reset} {dim}[{reset}{timestamp}{dim}]{reset} {dim}─{reset} {dim}[{reset}{CYAN}{ram}{reset}{dim}]{reset} {dim}─{reset} {dim}[{reset}{level_color}{bold}{level: <5}{reset}{dim}]{reset}"
@@ -85,10 +84,8 @@ where
             .map(|l| l.to_string())
             .unwrap_or_else(|| "??".to_string());
 
-        // │  target: audium::media::sources::...:79
         writeln!(writer, "{dim}│{reset}  {dim}at:{reset} {target}:{line}")?;
 
-        // ╰─> Message
         write!(writer, "{dim}╰─>{reset} ")?;
         ctx.format_fields(writer.by_ref(), event)?;
 

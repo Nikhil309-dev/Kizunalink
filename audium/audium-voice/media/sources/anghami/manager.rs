@@ -135,7 +135,6 @@ impl AnghamiSource {
     }
 
     fn extract_tracks(&self, body: &Value) -> Vec<Track> {
-        // 1. Try songbuffers (Protobuf-encoded batches)
         if let Some(songbuffers) = body["songbuffers"].as_array() {
             let mut song_map = std::collections::HashMap::new();
             for buffer_base64 in songbuffers {
@@ -164,7 +163,6 @@ impl AnghamiSource {
             }
         }
 
-        // 2. Try sections (new API format)
         if let Some(sections) = body["sections"].as_array() {
             for section in sections {
                 let type_ = section["type"].as_str().unwrap_or("");
@@ -181,7 +179,6 @@ impl AnghamiSource {
             }
         }
 
-        // 3. Try traditional song objects
         for path in &["songs", "playlist/songs", "album/songs"] {
             let parts: Vec<&str> = path.split('/').collect();
             let mut current = body;
@@ -225,7 +222,6 @@ impl AnghamiSource {
             }
         }
 
-        // 4. Fallback to top-level data array
         body["data"]
             .as_array()
             .map(|data| data.iter().filter_map(|s| self.parse_track(s)).collect())
@@ -335,7 +331,6 @@ impl AnghamiSource {
     }
 
     async fn get_song(&self, id: &str) -> LoadResult {
-        // Try direct song data request
         if let Some(body) = self
             .api_request(vec![
                 ("type", "GETsongdata"),
@@ -349,7 +344,6 @@ impl AnghamiSource {
             return LoadResult::Track(track);
         }
 
-        // Fallback to search if direct request fails
         if let Some(body) = self
             .api_request(vec![
                 ("type", "GETtabsearch"),

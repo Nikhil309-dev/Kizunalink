@@ -43,7 +43,6 @@ impl SpotifyMetadata {
 
         let body_bytes = resp.bytes().await.ok()?;
 
-        // Fast binary scan for "isrc" marker
         let isrc_marker = b"isrc";
         if let Some(pos) = body_bytes.windows(4).position(|w| w == isrc_marker) {
             let end = std::cmp::min(pos + 64, body_bytes.len());
@@ -53,7 +52,6 @@ impl SpotifyMetadata {
             }
         }
 
-        // JSON fallback
         if let Ok(json_str) = std::str::from_utf8(&body_bytes)
             && let Ok(json) = serde_json::from_str::<Value>(json_str)
             && let Some(isrc) = json

@@ -22,7 +22,7 @@ pub struct VolumeEffect {
     fade_active: bool,
     fade_curve: FadeCurve,
 
-    _limiter_threshold: f32, // 0.0 – 1.0 relative to INT16_MAX
+    _limiter_threshold: f32,
     limiter_softness: f32,
 
     threshold_value: f32,
@@ -43,7 +43,7 @@ impl VolumeEffect {
 
         let mut limiter_lut = [0.0_f32; 1024];
         for (i, val) in limiter_lut.iter_mut().enumerate() {
-            let overshoot = i as f32 / 1023.0 * 2.5; // Max overshoot factor 2.5x headroom
+            let overshoot = i as f32 / 1023.0 * 2.5;
             *val = 1.0 - (-overshoot * limiter_softness).exp();
         }
 
@@ -54,7 +54,7 @@ impl VolumeEffect {
             target_volume: volume,
             start_volume: volume,
             fade_frames_total,
-            fade_frames_elapsed: fade_frames_total, // start "done"
+            fade_frames_elapsed: fade_frames_total,
             fade_active: false,
             fade_curve: FadeCurve::Sinusoidal,
             _limiter_threshold: limiter_threshold,
@@ -110,13 +110,12 @@ impl VolumeEffect {
         }
 
         let overshoot_raw = (abs - self.threshold_value) / self.limit_headroom;
-        // Normalize overshoot to LUT range [0, 2.5]
+
         let lut_idx = (overshoot_raw * 1023.0 / 2.5) as usize;
 
         let softened = if lut_idx < 1024 {
             self.limiter_lut[lut_idx]
         } else {
-            // Beyond LUT, effectively fully softened (approaches 1.0)
             1.0 - (-overshoot_raw * self.limiter_softness).exp()
         };
 

@@ -63,10 +63,7 @@ pub async fn set_categories(
 
     let mut player = player_arc.write().await;
     player.config.sponsorblock.categories = cleaned.clone();
-    // `DELETE .../categories` clears this flag to disable skipping. Re-enable it
-    // here: the plugin REST contract is that a PUT installs a non-empty category
-    // set, and without this a client that ever cleared the list could never turn
-    // skipping back on (the operator's `enabled` default only seeds new players).
+
     player.config.sponsorblock.enabled = !cleaned.is_empty();
     (StatusCode::OK, Json(cleaned)).into_response()
 }
@@ -163,8 +160,6 @@ mod tests {
 
     #[test]
     fn collapses_duplicates_so_the_stored_set_stays_bounded() {
-        // A caller can repeat a known category as many times as the 8 MiB body
-        // allows; the stored list must not grow with it.
         let out = clean_categories(vec!["sponsor".into(); 100_000]);
         assert_eq!(out, vec!["sponsor".to_string()]);
     }

@@ -41,7 +41,7 @@ impl YouTubeCipherManager {
         }
 
         let mut cache = self.cached_player_script.write().await;
-        // Check again after acquiring write lock
+
         if let Some(script) = &*cache
             && Instant::now() < script.expire_timestamp_ms
         {
@@ -66,7 +66,6 @@ impl YouTubeCipherManager {
         let mut script_url = if let Some(caps) = re.captures(&text) {
             caps[1].to_string()
         } else {
-            // Fallback to watch page
             let res = self
                 .client
                 .get("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -81,7 +80,6 @@ impl YouTubeCipherManager {
             }
         };
 
-        // Apply locale replacement like  does
         let locale_re = regex::Regex::new(r"/([a-z]{2}_[A-Z]{2})/")?;
         script_url = locale_re.replace(&script_url, "/en_US/").to_string();
 
@@ -128,11 +126,9 @@ impl YouTubeCipherManager {
             }
         }
 
-        // Local extraction (fallback or default)
         let res = self.client.get(source_url).send().await?;
         let text = crate::common::http::read_text_capped(res).await?;
 
-        // Regex to find sts or signatureTimestamp
         let re = regex::Regex::new(r#"(?:signatureTimestamp|sts):(\d+)"#)?;
         if let Some(caps) = re.captures(&text) {
             Ok(caps[1].to_string())
@@ -152,7 +148,7 @@ impl YouTubeCipherManager {
     pub async fn resolve_url(
         &self,
         stream_url: &str,
-        player_url: &str, // Kept to satisfy caller signatures
+        player_url: &str,
         n_param: Option<&str>,
         sig: Option<&str>,
     ) -> AnyResult<String> {

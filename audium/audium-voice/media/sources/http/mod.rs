@@ -184,8 +184,6 @@ impl HttpSource {
 
         let mut hint = Hint::new();
 
-        // Hint the container from the URL path so symphonia does not have to
-        // guess (and so `.mod`/`.xm`/... are not mistaken for something else).
         let path_ext = url
             .split(['?', '#'])
             .next()
@@ -231,9 +229,6 @@ impl HttpSource {
 
         let mut mss = MediaSourceStream::new(source, Default::default());
 
-        // Tracker modules are not a symphonia container, so a probe would fail
-        // (and consume the stream). Detect them up front from the URL extension
-        // or the module magic bytes, then hand the stream to the tracker reader.
         if sniff_tracker(&mut mss, hinted_format)? {
             let reader = TrackerFormatReader::open(Box::new(mss))
                 .map_err(|e| ProbeError::Format(e.to_string()))?;
@@ -404,12 +399,7 @@ impl SourcePlugin for HttpSource {
 
         match probe_result {
             Ok(Ok(info)) => LoadResult::Track(Track::new(info)),
-            // Distinguish "the bytes are not a recognised media format" (a genuine
-            // no-match that stays `empty`) from a failed fetch. Reporting a refused
-            // SSRF target, a DNS failure, or an HTTP error as `empty` shows the user
-            // "no matches" and hides the real cause, exactly the bug fixed for
-            // SoundCloud. This mirrors `YoutubeTrack::start_decoding`, which routes
-            // every open failure to its `TrackException` path.
+
             Ok(Err(e)) if e.is_no_match() => {
                 warn!("Probing produced no recognised format for {identifier}: {e}");
                 LoadResult::Empty {}
@@ -482,16 +472,11 @@ impl PlayableTrack for HttpTrack {
         tokio::task::spawn_blocking(move || {
             let _guard = handle.enter();
 
-            // HLS manifests need the playlist reader; everything else streams
-            // directly. The m3u8 body itself is not a decodable container.
             let is_hls = url
                 .split(['?', '#'])
                 .next()
                 .is_some_and(|p| p.to_ascii_lowercase().ends_with(".m3u8"));
             let mut reader: Box<dyn symphonia::core::io::MediaSource> = if is_hls {
-                // Resolve and validate the manifest host the same way the direct
-                // stream path does, then reuse that pinned client so the
-                // manifest and every segment stay inside the SSRF boundary.
                 let (host, _port, addresses) = match resolve_and_validate_public_url(&url) {
                     Ok(v) => v,
                     Err(e) => {
@@ -513,8 +498,7 @@ impl PlayableTrack for HttpTrack {
                         return;
                     }
                 };
-                // The client already carries any per-track headers, so the
-                // manifest and every segment request inherit them.
+
                 match crate::media::sources::youtube::hls::HlsReader::with_client(
                     &url, client, None, None,
                 ) {
@@ -573,18 +557,12 @@ mod tests {
 
     #[test]
     fn format_failures_are_no_match_not_error() {
-        // Bytes that are not a supported container/codec are a genuine "no
-        // match": they must stay `empty`, not `error`.
         assert!(ProbeError::Format("unsupported feature: codec".to_owned()).is_no_match());
         assert!(ProbeError::Format("no audio track found".to_owned()).is_no_match());
 
-        // A failed fetch (refused SSRF target, DNS failure, HTTP error) is NOT a
-        // no-match; it must surface as `error`.
         assert!(!ProbeError::Fetch("HTTP 403 for https://x/y".to_owned()).is_no_match());
         assert!(!ProbeError::Fetch("host resolves to a private address".to_owned()).is_no_match());
 
-        // The symphonia classifier maps an unsupported feature to a format
-        // failure and everything else (I/O, seek, limit) to a fetch failure.
         use symphonia::core::errors::Error;
         assert!(is_unrecognized_format_error(&Error::Unsupported("codec")));
         assert!(is_unrecognized_format_error(&Error::DecodeError(
@@ -628,14 +606,11 @@ mod tests {
     #[test]
     fn can_handle_is_syntax_only_and_never_resolves_dns() {
         use crate::media::sources::SourcePlugin;
-        // SEC-003: `can_handle` runs on the async runtime while iterating sources,
-        // so it must not block on DNS. A syntactically valid URL whose host is
-        // guaranteed not to resolve (RFC 2606 `.invalid`) is accepted instantly.
+
         let source = crate::media::sources::http::HttpSource::new();
         let start = std::time::Instant::now();
         assert!(source.can_handle("http://nonexistent-host.invalid:8080/audio.mp3"));
-        // Resolution of a real (public) host would add latency; syntax-only parsing
-        // is sub-millisecond. This bounds the async runtime stall.
+
         assert!(
             start.elapsed() < std::time::Duration::from_millis(50),
             "can_handle must not resolve DNS on the async runtime (SEC-003)"
@@ -645,8 +620,7 @@ mod tests {
     #[tokio::test]
     async fn can_handle_does_not_stall_the_async_runtime() {
         use crate::media::sources::SourcePlugin;
-        // The same guard observed from within a Tokio worker: a non-resolving host
-        // must not make `can_handle` yield or block.
+
         let source = crate::media::sources::http::HttpSource::new();
         let accepted = tokio::task::spawn(async move {
             source.can_handle("http://nonexistent-host.invalid/audio.mp3")
@@ -677,8 +651,7 @@ mod loopback_integration_tests {
             "[::ffff:127.0.0.1]",
         ] {
             let url = format!("http://{host}:{port}/fixture");
-            // can_handle is deliberately syntax-only; DNS/IP validation occurs
-            // at the actual reader before its first network request.
+
             assert!(source.can_handle(&url));
             assert!(reader::HttpReader::new(&url, None, None).is_err());
         }
@@ -687,8 +660,6 @@ mod loopback_integration_tests {
 
     #[tokio::test]
     async fn ssrf_blocked_source_loads_as_error_not_empty() {
-        // A refused target must be diagnosable as `error`, not silently reported
-        // as "no matches". Regression: this used to return `LoadResult::Empty`.
         let source = HttpSource::new();
         let result = source.load("http://127.0.0.1:9/song.mp3", None).await;
         match result {

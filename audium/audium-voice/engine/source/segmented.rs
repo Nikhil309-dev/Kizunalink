@@ -58,8 +58,6 @@ impl SegmentedSource {
                 .send(),
         )?;
 
-        // This source requires real byte-range support. A 200 probe or a
-        // mismatched 206 must never be used to infer the file length.
         super::range::validate_content_range(&probe, 0, Some(1))?;
         let len = probe
             .headers()
@@ -212,8 +210,7 @@ impl Drop for SegmentedSource {
         let mut state = lock.lock();
         state.is_terminated = true;
         cvar.notify_all();
-        // Tokio abort cancels in-flight HTTP requests and idle timers. A
-        // detached worker used to retain the client/URL after the source died.
+
         for worker in &self.workers {
             worker.abort();
         }
@@ -236,8 +233,6 @@ pub(crate) async fn fetch_chunk(
 
     let status = res.status();
     if status == reqwest::StatusCode::OK {
-        // The server ignored the Range header and is about to stream the whole
-        // resource from byte 0. Appending it would corrupt chunk `offset`.
         return Err(format!(
             "fetch_chunk: server ignored Range request (200 OK) for offset {offset}"
         )
@@ -248,8 +243,6 @@ pub(crate) async fn fetch_chunk(
     }
     super::range::validate_content_range(&res, offset, Some(size))?;
 
-    // Never materialize more than the requested chunk, even if the response
-    // claims/streams a larger body.
     if let Some(len) = res.content_length()
         && len > size
     {
@@ -432,8 +425,6 @@ mod lifecycle_tests {
 
     #[tokio::test]
     async fn dropping_source_cancels_owned_workers_on_repeated_cycles() {
-        // A parked task models a fetch stalled inside reqwest; no external
-        // provider or network timeout is needed to test ownership/cancellation.
         for _ in 0..3 {
             let shared = Arc::new((
                 Mutex::new(ReaderState {

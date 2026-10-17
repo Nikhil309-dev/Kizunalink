@@ -68,8 +68,7 @@ impl Default for ServerConfig {
         Self {
             address: default_address(),
             port: default_port(),
-            // No default secret: an empty value must fail validation rather than
-            // start the node with a guessable credential.
+
             authorization: String::new(),
             player_update_interval: default_player_update_interval(),
             stats_interval: default_stats_interval(),

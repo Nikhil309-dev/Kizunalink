@@ -141,13 +141,11 @@ impl YouTubeClient for AndroidClient {
             .and_then(|c| c.as_array())
         {
             for section in sections {
-                // Try itemSectionRenderer first
                 let items_opt = section
                     .get("itemSectionRenderer")
                     .and_then(|i| i.get("contents"))
                     .and_then(|c| c.as_array());
 
-                // Also try shelfRenderer / richShelfRenderer
                 let shelf_items_opt = items_opt
                     .is_none()
                     .then(|| {
@@ -172,7 +170,6 @@ impl YouTubeClient for AndroidClient {
 
                 if let Some(items) = items {
                     for item in items {
-                        // Unwrap richItemRenderer wrapper if present
                         let inner = item
                             .get("richItemRenderer")
                             .and_then(|r| r.get("content"))

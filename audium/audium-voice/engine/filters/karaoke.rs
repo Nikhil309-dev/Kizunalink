@@ -19,7 +19,7 @@ pub struct KaraokeFilter {
     filter_width: f32,
     lp_coeffs: BiquadCoeffs,
     hp_coeffs: BiquadCoeffs,
-    // Per-channel LP/HP states: [left, right]
+
     lp_states: [BiquadState; 2],
     hp_states: [BiquadState; 2],
     prev_gain: f64,

@@ -117,16 +117,13 @@ impl PlayableTrack for YoutubeTrack {
 
             let mut current_seek_ms = 0u64;
             let mut current_client_index = 0;
-            // Number of whole-client-list retries already performed for a purely
-            // transient failure. Definitive/BotCheck failures never consume this.
+
             let mut transient_retries = 0u32;
 
             'playback_loop: loop {
-                // Resolve a playback URL using any available client.
                 let mut resolved_url: Option<(String, String)> = None;
                 let mut failures: Vec<String> = Vec::new();
-                // True if every client failed for a reason that another attempt or
-                // another client might plausibly overcome.
+
                 let mut all_transient = true;
                 let mut first_definitive: Option<YoutubeFailure> = None;
 
@@ -170,13 +167,10 @@ impl PlayableTrack for YoutubeTrack {
                             );
                             match failure.class {
                                 FailureClass::Definitive => {
-                                    // No client on any IP can play this; stop now.
                                     first_definitive.get_or_insert(failure.clone());
                                     all_transient = false;
                                 }
                                 FailureClass::BotCheck => {
-                                    // Another client may have laxer requirements, but a
-                                    // blind retry of the same request will not help.
                                     all_transient = false;
                                 }
                                 FailureClass::Transient | FailureClass::Unknown => {}
@@ -197,12 +191,6 @@ impl PlayableTrack for YoutubeTrack {
 
                         match action {
                             FailureAction::StopDefinitive => {
-                                // Private/removed/region-locked: more clients or a
-                                // retry cannot fix it, so preserve the real reason.
-                                // `decide_after_all_clients_failed` only returns this
-                                // when a definitive failure was recorded, but bind it
-                                // explicitly so a future refactor can't turn this into
-                                // a panic.
                                 let def = match first_definitive {
                                     Some(def) => def,
                                     None => YoutubeFailure::new(
@@ -381,9 +369,8 @@ impl PlayableTrack for YoutubeTrack {
                                         identifier_async, clients_async[current_client_index].name(),
                                         failure.class, failure.reason
                                     );
-                                    // A definitive stream error (the CDN says this
-                                    // media will never play, e.g. a hard 404/410) is
-                                    // not worth replaying on every other client.
+
+
                                     if failure.class == FailureClass::Definitive {
                                         let msg = format!(
                                             "YoutubeTrack: playback failed for '{}': {}",
@@ -465,7 +452,7 @@ mod tests {
             decide_after_all_clients_failed(true, false, 0),
             FailureAction::StopDefinitive
         );
-        // Even when a peer's failure was transient, a definitive failure wins.
+
         assert_eq!(
             decide_after_all_clients_failed(true, true, 0),
             FailureAction::StopDefinitive
@@ -482,7 +469,7 @@ mod tests {
             decide_after_all_clients_failed(false, true, 1),
             FailureAction::RetryTransient
         );
-        // Budget exhausted.
+
         assert_eq!(
             decide_after_all_clients_failed(false, true, 2),
             FailureAction::GiveUp
@@ -491,7 +478,6 @@ mod tests {
 
     #[test]
     fn bot_check_does_not_retry() {
-        // all_transient is false whenever a bot check was seen, so no retry.
         assert_eq!(
             decide_after_all_clients_failed(false, false, 0),
             FailureAction::GiveUp

@@ -106,15 +106,10 @@ impl RssSource {
     }
 
     async fn fetch_feed(&self, url: &str) -> Option<String> {
-        // A feed URL is fully user-supplied, so resolve and validate its host
-        // through the same SSRF gate as the `http` source first; a bare pooled
-        // client would happily fetch loopback/private hosts.
         let (host, _port, addresses) = super::http::resolve_and_validate_public_url(url)
             .map_err(|e| debug!("RSS feed rejected: {e}"))
             .ok()?;
-        // Without a proxy, pin the validated addresses to also defeat DNS
-        // rebinding. A forwarding proxy (operator-configured) resolves itself,
-        // so the pre-request host validation above is the gate in that case.
+
         let pinned = self.proxy.is_none().then_some(addresses);
         let client = crate::engine::source::create_client_with_pinning(
             USER_AGENT.to_owned(),
@@ -141,7 +136,7 @@ impl RssSource {
             debug!("RSS feed returned HTTP {}", response.status());
             return None;
         }
-        // Feeds are text; cap the read so a gigantic body cannot exhaust memory.
+
         let bytes = response.bytes().await.ok()?;
         const MAX_FEED_BYTES: usize = 8 * 1024 * 1024;
         if bytes.len() > MAX_FEED_BYTES {
@@ -152,7 +147,6 @@ impl RssSource {
     }
 
     fn feed_title(&self, xml: &str) -> String {
-        // The channel/feed title is the first <title> that is not inside an item.
         let without_items = item_pattern().replace_all(xml, "");
         let without_entries = entry_pattern().replace_all(&without_items, "");
         self.extract_tag_text(&without_entries, "title")
@@ -197,13 +191,11 @@ impl RssSource {
     }
 
     fn build_track(&self, item: &str, index: usize) -> Option<Track> {
-        // Prefer an explicit enclosure; fall back to an Atom <link rel="enclosure">.
         let (media_url, media_type) = match self.extract_enclosure(item) {
             Some((url, ty)) => (url, ty),
             None => (self.extract_atom_link(item)?, None),
         };
 
-        // Only audio/video enclosures are playable; skip images (cover art).
         if let Some(ty) = &media_type
             && !ty.starts_with("audio/")
             && !ty.starts_with("video/")
@@ -275,7 +267,7 @@ fn unescape_xml(input: &str) -> String {
                 continue;
             }
         }
-        // Not a recognised entity — emit the '&' literally and keep scanning.
+
         out.push('&');
         rest = &after[1..];
     }
@@ -332,8 +324,6 @@ impl SourcePlugin for RssSource {
         _identifier: &str,
         _routeplanner: Option<Arc<dyn crate::lavalink::routeplanner::RoutePlanner>>,
     ) -> Option<BoxedTrack> {
-        // Individual episodes carry their enclosure as `uri` and resolve through
-        // the `http` source; the feed URL itself is not directly playable.
         None
     }
 }
@@ -374,7 +364,7 @@ mod tests {
         assert!(s.can_handle("https://example.com/feed"));
         assert!(s.can_handle("https://example.com/podcast/rss"));
         assert!(s.can_handle("https://example.com/feed.xml"));
-        // A plain audio URL must not be claimed by the RSS source.
+
         assert!(!s.can_handle("https://example.com/song.mp3"));
         assert!(!s.can_handle("https://example.com/watch?v=abc"));
     }
@@ -398,7 +388,6 @@ mod tests {
             Some("https://img.example.com/ep1.png")
         );
 
-        // The third item is an image enclosure and must be skipped.
         assert!(s.build_track(&items[2], 2).is_none());
     }
 
@@ -411,7 +400,7 @@ mod tests {
     #[test]
     fn unescapes_entities() {
         assert_eq!(unescape_xml("A &amp; B &lt;x&gt; &#65;"), "A & B <x> A");
-        // Unknown entity is preserved literally.
+
         assert_eq!(unescape_xml("a &nbsp; b"), "a &nbsp; b");
     }
 }

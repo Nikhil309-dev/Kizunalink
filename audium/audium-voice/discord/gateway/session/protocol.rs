@@ -31,7 +31,7 @@ pub enum OpCode {
     Codecs = 14,
     MediaSinkWants = 15,
     VoiceBackendVersion = 16,
-    UserFlags = 18, // Undocumented but sent by Discord
+    UserFlags = 18,
     VoicePlatform = 20,
     DavePrepareTransition = 21,
     DaveExecuteTransition = 22,
@@ -102,7 +102,7 @@ pub mod builders {
                 "user_id": user_id,
                 "session_id": session_id,
                 "token": token,
-                // Audio-only node: we never send video or negotiate video codecs.
+
                 "video": false,
                 "max_dave_protocol_version": dave_version,
             }),

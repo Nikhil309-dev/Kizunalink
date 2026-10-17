@@ -68,10 +68,8 @@ pub fn register_all(
     Option<Arc<YouTubeCipherManager>>,
     Option<Arc<YoutubeStreamContext>>,
 ) {
-    // Process core sources
     let yt_ctx = register_core_sources(sources, config, http_pool);
 
-    // Process extra sources (TTS, Local)
     register_extra_sources(sources, config);
 
     yt_ctx
@@ -129,7 +127,6 @@ fn register_core_sources(
         };
     }
 
-    // YouTube handled explicitly
     if config.sources.youtube.as_ref().is_some_and(|c| c.enabled) {
         let yt_proxy = config
             .sources
@@ -149,7 +146,6 @@ fn register_core_sources(
         tracing::info!("Loaded source: YouTube");
     }
 
-    // SoundCloud
     let soundcloud_proxy = config
         .sources
         .soundcloud
@@ -169,7 +165,6 @@ fn register_core_sources(
         )
     );
 
-    // Spotify
     register!(
         config.sources.spotify.as_ref().is_some_and(|c| c.enabled),
         "Spotify",
@@ -177,7 +172,6 @@ fn register_core_sources(
         SpotifySource::new(config.sources.spotify.clone(), http_pool.get(None))
     );
 
-    // JioSaavn
     let jiosaavn_proxy = config
         .sources
         .jiosaavn
@@ -193,10 +187,8 @@ fn register_core_sources(
         )
     );
 
-    // Deezer
     register_deezer(sources, config, http_pool);
 
-    // Apple Music
     let apple_proxy = config
         .sources
         .applemusic
@@ -216,7 +208,6 @@ fn register_core_sources(
         )
     );
 
-    // Gaana
     let gaana_proxy = config.sources.gaana.as_ref().and_then(|c| c.proxy.clone());
     register!(
         config.sources.gaana.as_ref().is_some_and(|c| c.enabled),
@@ -228,7 +219,6 @@ fn register_core_sources(
         )
     );
 
-    // Tidal
     let tidal_proxy = config.sources.tidal.as_ref().and_then(|c| c.proxy.clone());
     register!(
         config.sources.tidal.as_ref().is_some_and(|c| c.enabled),
@@ -240,7 +230,6 @@ fn register_core_sources(
         )
     );
 
-    // Audiomack
     let audiomack_proxy = config
         .sources
         .audiomack
@@ -256,7 +245,6 @@ fn register_core_sources(
         )
     );
 
-    // Pandora
     let pandora_proxy = config
         .sources
         .pandora
@@ -272,7 +260,6 @@ fn register_core_sources(
         )
     );
 
-    // Qobuz
     let qobuz_proxy = config.sources.qobuz.as_ref().and_then(|c| c.proxy.clone());
     if config.sources.qobuz.as_ref().is_some_and(|c| c.enabled) {
         let token_provided = config
@@ -294,7 +281,6 @@ fn register_core_sources(
         );
     }
 
-    // Anghami
     let anghami_proxy = config
         .sources
         .anghami
@@ -307,7 +293,6 @@ fn register_core_sources(
         AnghamiSource::new(config, http_pool.get(anghami_proxy.clone()))
     );
 
-    // Shazam
     let shazam_proxy = config.sources.shazam.as_ref().and_then(|c| c.proxy.clone());
     register!(
         config.sources.shazam.as_ref().is_some_and(|c| c.enabled),
@@ -316,7 +301,6 @@ fn register_core_sources(
         ShazamSource::new(config, http_pool.get(shazam_proxy.clone()))
     );
 
-    // Mixcloud
     let mixcloud_proxy = config
         .sources
         .mixcloud
@@ -332,7 +316,6 @@ fn register_core_sources(
         )
     );
 
-    // Bandcamp
     let bandcamp_proxy = config
         .sources
         .bandcamp
@@ -348,7 +331,6 @@ fn register_core_sources(
         )
     );
 
-    // Reddit
     let reddit_proxy = config.sources.reddit.as_ref().and_then(|c| c.proxy.clone());
     register!(
         config.sources.reddit.as_ref().is_some_and(|c| c.enabled),
@@ -360,7 +342,6 @@ fn register_core_sources(
         )
     );
 
-    // Last.fm
     register!(
         config.sources.lastfm.as_ref().is_some_and(|c| c.enabled),
         "Last.fm",
@@ -368,7 +349,6 @@ fn register_core_sources(
         LastFMSource::new(config.sources.lastfm.clone(), http_pool.get(None))
     );
 
-    // Audius
     let audius_proxy = config.sources.audius.as_ref().and_then(|c| c.proxy.clone());
     register!(
         config.sources.audius.as_ref().is_some_and(|c| c.enabled),
@@ -386,7 +366,6 @@ fn register_core_sources(
     register_twitch(sources, config, http_pool);
     register_amazonmusic(sources, config, http_pool);
 
-    // RSS must be registered before the HTTP catch-all, which claims any URL.
     if let Some(c) = config.sources.rss.as_ref()
         && c.enabled
     {
@@ -400,7 +379,6 @@ fn register_core_sources(
         }
     }
 
-    // iHeartRadio likewise handles specific iheart.com/live/<id> URLs only.
     if let Some(c) = config.sources.iheartradio.as_ref()
         && c.enabled
     {
@@ -414,7 +392,6 @@ fn register_core_sources(
         }
     }
 
-    // Simple page-scraping sources (each claims only its own URL shape).
     register_simple!(config.sources.tumblr, "Tumblr", TumblrSource::new);
     register_simple!(
         config.sources.newgrounds,
@@ -424,7 +401,6 @@ fn register_core_sources(
     register_simple!(config.sources.kwai, "Kwai", KwaiSource::new);
     register_simple!(config.sources.telegram, "Telegram", TelegramSource::new);
 
-    // Sources ported from the DuncteBot plugin's extra source managers.
     register_simple!(config.sources.ocremix, "OCReMix", OcremixSource::new);
     register_simple!(config.sources.clypit, "Clypit", ClypitSource::new);
     register_simple!(config.sources.getyarn, "Getyarn", GetyarnSource::new);
@@ -446,11 +422,10 @@ fn register_core_sources(
         GoogleDriveSource::new
     );
     register_simple!(config.sources.lazypytts, "LazyPy TTS", LazypyttsSource::new);
-    // Songlink is a cross-platform resolver: it never serves media itself.
+
     register_simple!(config.sources.songlink, "Songlink", SonglinkSource::new);
     register_simple!(config.sources.vimeo, "Vimeo", VimeoSource::new);
 
-    // TikTok handles tiktok.com / vm.tiktok.com video URLs only.
     if let Some(c) = config.sources.tiktok.as_ref()
         && c.enabled
     {
@@ -464,7 +439,6 @@ fn register_core_sources(
         }
     }
 
-    // Bluesky handles bsky.app post URLs only.
     if let Some(c) = config.sources.bluesky.as_ref()
         && c.enabled
     {
@@ -478,7 +452,6 @@ fn register_core_sources(
         }
     }
 
-    // HTTP Source
     if config.sources.http.as_ref().is_some_and(|c| c.enabled) {
         tracing::info!("Loaded source: http");
         sources.push(Box::new(HttpSource::new()));
@@ -662,7 +635,6 @@ fn register_amazonmusic(
 }
 
 fn register_extra_sources(sources: &mut Vec<BoxedSource>, config: &crate::config::AppConfig) {
-    // Google TTS
     if let Some(c) = config.sources.google_tts.as_ref()
         && c.enabled
     {
@@ -670,7 +642,6 @@ fn register_extra_sources(sources: &mut Vec<BoxedSource>, config: &crate::config
         sources.push(Box::new(GoogleTtsSource::new(c.clone())));
     }
 
-    // Flowery TTS
     if let Some(c) = config.sources.flowery.as_ref()
         && c.enabled
     {
@@ -678,7 +649,6 @@ fn register_extra_sources(sources: &mut Vec<BoxedSource>, config: &crate::config
         sources.push(Box::new(FlowerySource::new(c.clone())));
     }
 
-    // Local Source: never expose an unscoped filesystem through the API.
     if let Some(c) = config.sources.local.as_ref()
         && c.enabled
     {

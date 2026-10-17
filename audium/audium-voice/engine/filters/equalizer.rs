@@ -181,11 +181,6 @@ impl AudioFilter for EqualizerFilter {
             for (b, coeffs) in COEFFICIENTS_48000.iter().enumerate() {
                 let gain = self.gains[b];
                 if gain.abs() < f32::EPSILON {
-                    // B04 (intentional): a zero-gain band's output is summed with weight 0, so we
-                    // skip mixing — but we still *advance* its filter state with the current sample.
-                    // This keeps each band's memory in sync with the signal, so enabling a band
-                    // later (Lavalink `filters` updates arrive at runtime) starts from the live
-                    // signal instead of a stale state, which would produce an audible zipper click.
                     self.states[b][0].process(left_f, coeffs);
                     self.states[b][1].process(right_f, coeffs);
                     continue;
@@ -225,7 +220,6 @@ mod tests {
 
     #[test]
     fn no_boost_makes_up_exactly_the_quarter_scale() {
-        // With every band at 0 gain, makeup must be 1 / 0.25 = 4.0 (legacy behavior).
         let eq = EqualizerFilter::new(&[]);
         assert_eq!(eq.makeup_gain, DEFAULT_MAKEUP_GAIN);
 
@@ -236,11 +230,11 @@ mod tests {
     #[test]
     fn boost_shrinks_makeup_gain() {
         let mut gains = [0.0f32; BAND_COUNT];
-        gains[0] = 1.0; // one band at maximum boost
-        // Worst-case peak is 0.25 + 1.0 = 1.25 -> scale to fit unity.
+        gains[0] = 1.0;
+
         assert!((EqualizerFilter::compute_makeup_gain(&gains) - 0.8).abs() < 1e-6);
 
-        gains = [1.0; BAND_COUNT]; // every band fully boosted
+        gains = [1.0; BAND_COUNT];
         let g = EqualizerFilter::compute_makeup_gain(&gains);
         assert!((g - 1.0 / 15.25).abs() < 1e-6);
         assert!(g <= DEFAULT_MAKEUP_GAIN);
@@ -258,7 +252,6 @@ mod tests {
 
     #[test]
     fn flat_eq_is_transparent_on_dc() {
-        // No bands configured: output should track the input within one LSB.
         let mut eq = EqualizerFilter::new(&[]);
         let original = [12345i16; 64];
         let mut samples = original;

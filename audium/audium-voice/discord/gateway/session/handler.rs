@@ -61,7 +61,7 @@ fn parse_u16_field(payload: &Value, field: &str) -> Option<u16> {
 
 fn parse_dave_protocol_version(payload: &Value) -> Result<u16, u64> {
     match payload.get("dave_protocol_version") {
-        None => Ok(0), // legacy gateway: only allowed before DAVE was negotiated
+        None => Ok(0),
         Some(value) => {
             let value = value.as_u64().ok_or(u64::MAX)?;
             u16::try_from(value).map_err(|_| value)
@@ -219,36 +219,29 @@ impl<'a> SessionState<'a> {
         );
 
         match op {
-            25 => {
-                // MlsExternalSender
-                match dave.process_external_sender(data) {
-                    Ok(responses) => {
-                        for response in responses {
-                            self.send_binary(28, &response);
-                        }
-                    }
-                    Err(e) => {
-                        warn!(
-                            "[{}] DAVE external sender failed: {e}",
-                            self.gateway.guild_id
-                        );
-                        self.reset_dave_locked(&mut dave, 0).await;
+            25 => match dave.process_external_sender(data) {
+                Ok(responses) => {
+                    for response in responses {
+                        self.send_binary(28, &response);
                     }
                 }
-            }
-            27 => {
-                // MlsProposals
-                match dave.process_proposals(data) {
-                    Ok(Some(cw)) => self.send_binary(28, &cw),
-                    Err(e) => {
-                        warn!("[{}] DAVE proposals failed: {e}", self.gateway.guild_id);
-                        self.reset_dave_locked(&mut dave, 0).await;
-                    }
-                    _ => {}
+                Err(e) => {
+                    warn!(
+                        "[{}] DAVE external sender failed: {e}",
+                        self.gateway.guild_id
+                    );
+                    self.reset_dave_locked(&mut dave, 0).await;
                 }
-            }
+            },
+            27 => match dave.process_proposals(data) {
+                Ok(Some(cw)) => self.send_binary(28, &cw),
+                Err(e) => {
+                    warn!("[{}] DAVE proposals failed: {e}", self.gateway.guild_id);
+                    self.reset_dave_locked(&mut dave, 0).await;
+                }
+                _ => {}
+            },
             29 | 30 => {
-                // Commit / Welcome
                 let res = if op == 30 {
                     dave.process_welcome(data)
                 } else {
@@ -338,11 +331,6 @@ impl<'a> SessionState<'a> {
         }
 
         if let Some(modes) = d["modes"].as_array() {
-            // Discord now *requires* `aead_xchacha20_poly1305_rtpsize` and prefers
-            // `aead_aes256_gcm_rtpsize`; the old `xsalsa20_poly1305*` modes were
-            // discontinued. Only offer modes `CryptoBackend::from_mode` can actually
-            // encrypt — picking a mode the transport rejects would fail the voice
-            // session right after negotiation — and never pick one the server omitted.
             let offered = |mode: &str| modes.iter().any(|m| m.as_str() == Some(mode));
             match ["aead_aes256_gcm_rtpsize", "aead_xchacha20_poly1305_rtpsize"]
                 .into_iter()
@@ -452,10 +440,6 @@ impl<'a> SessionState<'a> {
             state.selected_mode = Some(self.selected_mode.clone());
         }
 
-        // DAVE must be set up *before* the RTP send loop starts: the send loop
-        // encrypts every outgoing packet from the shared DAVE handler, so
-        // starting it first would emit unencrypted (and therefore rejected)
-        // packets until the session becomes ready, producing startup gaps.
         if self.gateway.channel_id.0 > 0 {
             let protocol_version = match parse_dave_protocol_version(&d) {
                 Ok(version) => version,
@@ -493,7 +477,6 @@ impl<'a> SessionState<'a> {
                     }
                 }
             } else {
-                // Only a negotiated v0 (not an MLS error) permits plaintext.
                 if let Err(e) = dave.setup_session(0) {
                     error!("[{}] Failed to disable DAVE: {e}", self.gateway.guild_id);
                     return Some(SessionOutcome::Identify);
@@ -658,8 +641,7 @@ impl<'a> SessionState<'a> {
             );
             return None;
         };
-        // Opcode 24 always names the transition it belongs to; the initial transition
-        // is 0 when the field is absent.
+
         let transition_id = parse_u16_field(&d, "transition_id").unwrap_or(0);
         debug!(
             "[{}] DAVE Prepare Epoch: epoch={}, version={}, tid={}",
@@ -668,10 +650,8 @@ impl<'a> SessionState<'a> {
 
         let outcome = self.dave.lock().await.prepare_epoch(epoch, ver);
         match outcome {
-            // epoch == 1: send the freshly generated key package.
             EpochOutcome::KeyPackage(kp) => self.send_binary(26, &kp),
-            // epoch > 1: the MLS group is retained, so report readiness so the
-            // gateway can execute the transition instead of timing out.
+
             EpochOutcome::Ready => {
                 self.send_json(23, serde_json::json!({ "transition_id": transition_id }));
             }
@@ -714,7 +694,7 @@ impl<'a> SessionState<'a> {
                 .is_err()
             {
                 self.conn_token.cancel();
-                return; // never overlap old and new voice loops
+                return;
             }
         }
 
@@ -753,9 +733,7 @@ impl<'a> SessionState<'a> {
             "[{guild_id}] Voice session established: ssrc={} addr={addr} mode={}",
             self.ssrc, self.selected_mode
         );
-        // Only from this point can audio actually reach Discord, so this — not
-        // "a voice token arrived" — is what `playerUpdate.state.connected` reports.
-        // The loop marks readiness only after its DAVE gate has opened.
+
         voice_ready.store(false, Ordering::Release);
         self.speak_task = Some(tokio::spawn(async move {
             if let Err(e) = speak_loop(config).await {
@@ -804,9 +782,6 @@ impl<'a> SessionState<'a> {
     }
 
     fn send_json(&self, op: u8, d: Value) {
-        // Serialization of scheduled payloads is statically known-good (fixed
-        // op + object). On the impossible-but-real failure path, cancel the
-        // connection rather than panic the gateway task.
         let Ok(text) = serde_json::to_string(&GatewayPayload { op, seq: None, d }) else {
             self.conn_token.cancel();
             return;

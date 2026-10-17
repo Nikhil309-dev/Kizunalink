@@ -92,7 +92,6 @@ impl YouTubeClient for IosClient {
         USER_AGENT
     }
 
-    // IOS client delegates search to Web .
     async fn search(
         &self,
         query: &str,
@@ -178,7 +177,6 @@ impl YouTubeClient for IosClient {
         Ok(extract_from_player(&body, "youtube"))
     }
 
-    // IOS doesn't handle playlists natively .
     async fn get_playlist(
         &self,
         _playlist_id: &str,
@@ -210,7 +208,6 @@ impl YouTubeClient for IosClient {
             .and_then(|v| v.as_str())
             .or_else(|| context.get("visitorData").and_then(|v| v.as_str()));
 
-        // IOS does NOT require a player script for cipher – URLs come pre-signed.
         let body = self
             .player_request(track_id, visitor_data, None, &oauth)
             .await?;
@@ -225,7 +222,6 @@ impl YouTubeClient for IosClient {
             }
         };
 
-        // HLS path (for live streams)
         if let Some(hls) = streaming_data
             .get("hlsManifestUrl")
             .and_then(|v| v.as_str())

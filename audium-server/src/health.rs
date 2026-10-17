@@ -94,7 +94,7 @@ mod tests {
     fn wrong_or_missing_secret_is_rejected() {
         assert!(!header_matches_secret(&headers_with("s3cret"), "s3cret!"));
         assert!(!header_matches_secret(&HeaderMap::new(), "s3cret"));
-        // A prefix must not pass (guards against a length-insensitive compare).
+
         assert!(!header_matches_secret(&headers_with("s3"), "s3cret"));
     }
 

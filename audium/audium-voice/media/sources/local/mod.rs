@@ -81,7 +81,6 @@ impl LocalSource {
             .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
             .ok_or("no audio track found")?;
 
-        // Duration calculation
         let duration = track
             .codec_params
             .n_frames
@@ -93,7 +92,6 @@ impl LocalSource {
             })
             .unwrap_or(0);
 
-        // Metadata extraction
         let mut title = String::new();
         let mut author = String::new();
 
@@ -111,7 +109,6 @@ impl LocalSource {
             }
         }
 
-        // Fallback: use filename if metadata is missing
         if title.is_empty() {
             title = path_obj
                 .file_stem()
@@ -323,13 +320,11 @@ mod pipeline_test {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn local_wav_resolves_decodes_mixes_encodes_and_sends_rtp_to_loopback() {
-        // Real generated PCM/WAV and application decoder/encoder/transport,
-        // but NOT Discord/DAVE or a remote HTTP source.
         let dir = std::env::temp_dir().join(format!("audium-pipeline-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&dir).expect("create fixture directory");
         let _cleanup = Fixture(dir.clone());
         let path = dir.join("tone.wav");
-        let samples = 48_000u32 / 5; // 200 ms stereo, 10 Opus frame periods
+        let samples = 48_000u32 / 5;
         let data_len = samples * 4;
         let mut wav = Vec::with_capacity(44 + data_len as usize);
         wav.extend_from_slice(b"RIFF");

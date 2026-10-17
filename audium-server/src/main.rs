@@ -22,17 +22,10 @@ use tracing::info;
 /// word into child threads — every tokio worker and every audio thread spawned from this
 /// main thread then inherits the denormal-free setting for free.
 fn main() -> AnyResult<()> {
-    // Reject unknown CLI arguments before doing anything else. Audium is
-    // configured entirely through files/env; silently ignoring an argument such
-    // as `--config <path>` would run the node on the wrong configuration.
     audium::config::AppConfig::reject_unknown_args(std::env::args())?;
 
-    // Installed before the runtime exists so no spawned task can start a TLS handshake
-    // without a provider selected (see `audium::common::tls`).
     audium::common::tls::install_crypto_provider();
 
-    // Surface panics on stderr so Pterodactyl's console shows the crash and its
-    // location instead of the process vanishing silently.
     std::panic::set_hook(Box::new(|info| {
         let msg = format!("panic: {info}");
         if tracing::dispatcher::has_been_set() {
@@ -122,8 +115,6 @@ async fn run() -> AnyResult<()> {
     audium_server::monitoring::prometheus::init(shared_state.clone());
 
     let mut app = Router::new()
-        // Unguarded health probe for orchestrators (k8s/Docker). Kept outside
-        // the auth-wrapped `/v4` surface so probes don't need the secret.
         .route("/health", get(audium_server::health::health_check))
         .route("/v4/websocket", get(ws::websocket_handler))
         .with_state(shared_state.clone())
@@ -134,23 +125,16 @@ async fn run() -> AnyResult<()> {
             shared_state.clone(),
             audium_server::api::rate_limit::rate_limit,
         ))
-        // Admission control: cap concurrent connections before handler work.
         .layer(axum::middleware::from_fn_with_state(
             shared_state.clone(),
             audium_server::api::conn_limit::connection_limit,
         ))
-        // detailedStats: outermost so every request/error (including 429/503
-        // rejections) is counted. Cheap atomic bumps only.
         .layer(axum::middleware::from_fn_with_state(
             shared_state.clone(),
             audium_server::monitoring::prometheus::count_requests,
         ));
 
     if config.metrics.prometheus.enabled {
-        // Metrics must sit behind the same auth + rate limiting as `/v4`.
-        // Routes merged after the top-level layers above do *not* inherit them
-        // (axum layers only wrap routes registered before them), so the auth
-        // and rate-limit middlewares are applied explicitly here.
         let metrics_router = Router::new()
             .route(
                 &config.metrics.prometheus.endpoint,
@@ -167,8 +151,6 @@ async fn run() -> AnyResult<()> {
             .with_state(shared_state.clone());
         app = app.merge(metrics_router);
 
-        // P10: per-request latency histogram, labeled by method + status only —
-        // paths carry unbounded session ids, so they stay out of the label set.
         app = app.layer(axum::middleware::from_fn(
             audium_server::monitoring::prometheus::observe_request_latency,
         ));
@@ -177,7 +159,6 @@ async fn run() -> AnyResult<()> {
     if !shared_state.rate_limiter.disabled() {
         let limiter = shared_state.rate_limiter.clone();
         tokio::spawn(async move {
-            // Bound memory under IP churn: drop buckets idle for 10+ minutes.
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(300)).await;
                 limiter.cleanup(
@@ -210,8 +191,7 @@ async fn run() -> AnyResult<()> {
         )?;
 
         let listener = tokio::net::TcpListener::bind(address).await?;
-        // Wrap in `TapIo` so axum's generic `Connected<IncomingStream<TapIo<L>>>`
-        // impl provides `ConnectInfo<SocketAddr>` for the rate limiter.
+
         let tls_listener = audium_server::tls::TlsListener::new(listener, acceptor)
             .tap_io(|_tls: &mut tokio_rustls::server::TlsStream<tokio::net::TcpStream>| {});
         info!("Audium Server listening on https://{} (TLS)", address);
@@ -254,9 +234,6 @@ async fn run() -> AnyResult<()> {
         .await?;
     }
 
-    // Graceful shutdown above only waits for in-flight HTTP work; explicitly
-    // drain every active/resumable session so their gateway, track and voice
-    // tasks are aborted instead of being dropped mid-frame when the process exits.
     let sessions: Vec<_> = shared_state
         .sessions
         .iter()

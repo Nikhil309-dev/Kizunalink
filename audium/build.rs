@@ -32,7 +32,6 @@ fn main() {
     let target_env = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
     let is_static = static_pref(&target_os, &target_env);
 
-    // 1. Explicit user-provided library directory wins over everything else.
     if let Some(dir) = env::var_os("LIBOPUS_LIB_DIR").or_else(|| env::var_os("OPUS_LIB_DIR")) {
         let dir = dir.to_string_lossy().to_string();
         println!("cargo:info=Linking opus from user-provided dir: {dir}");
@@ -40,16 +39,6 @@ fn main() {
         return;
     }
 
-    // 2. pkg-config probe (system opus) on non-Windows targets.
-    //
-    // The `pkg-config` crate only emits `static=` when opus's `.pc` file
-    // contains an explicit `-L` pointing at the archive. Debian/Ubuntu `.pc`
-    // files omit `-L` for the default `/usr/lib/<triple>` dir, so a plain probe
-    // silently links the *shared* library even under `LIBOPUS_STATIC`. That is
-    // how the Docker runtime image ended up missing `libopus.so.0`. When static
-    // linking is requested, resolve `libdir` ourselves and only accept it if
-    // `libopus.a` is actually present; otherwise fall through to the vendored
-    // static build (which honours the `LIBOPUS_STATIC` contract).
     if target_os != "windows"
         && env::var_os("LIBOPUS_NO_PKG").is_none()
         && env::var_os("OPUS_NO_PKG").is_none()
@@ -75,7 +64,6 @@ fn main() {
         }
     }
 
-    // 3. Vendored static CMake build (Windows, containers, musl, missing system opus).
     println!("cargo:info=Building vendored opus (native/opus) via CMake.");
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set by cargo");
     let opus_src = Path::new(&manifest_dir).join("native").join("opus");

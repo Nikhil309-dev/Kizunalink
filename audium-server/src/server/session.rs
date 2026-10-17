@@ -72,7 +72,7 @@ impl Session {
             resume_generation: AtomicU64::new(0),
             event_queue: Mutex::new(VecDeque::new()),
             max_queue_size,
-            // ~64 KiB per queued event, clamped to a sane 64 KiB..64 MiB budget.
+
             max_queue_bytes: max_queue_size
                 .saturating_mul(64 * 1024)
                 .clamp(64 * 1024, 64 * 1024 * 1024),
@@ -91,9 +91,7 @@ impl Session {
     /// The handle is aborted during session shutdown without needing the player lock.
     pub fn register_task(&self, handle: AbortHandle) {
         let mut handles = self.task_handles.lock();
-        // Prune finished tasks so handles do not accumulate for the whole session
-        // lifetime (they are aborted wholesale on shutdown, so finished ones are
-        // just dead weight).
+
         handles.retain(|h| !h.is_finished());
         handles.push(handle);
     }
@@ -147,7 +145,6 @@ impl Session {
 
             let mut queue = self.event_queue.lock();
 
-            // Count cap: drop oldest events until there is room.
             while queue.len() >= self.max_queue_size {
                 match queue.pop_front() {
                     Some(dropped) => {
@@ -157,7 +154,6 @@ impl Session {
                 }
             }
 
-            // Byte cap: keep dropping oldest events until the new one fits.
             while self.queue_bytes.load(Ordering::Relaxed) + json.len() > self.max_queue_bytes {
                 match queue.pop_front() {
                     Some(dropped) => {
@@ -171,8 +167,7 @@ impl Session {
             queue.push_back(json);
         } else {
             let msg = Message::Text(json.into());
-            // B07: don't silently drop frames — log when the WebSocket sink is
-            // gone (e.g. the session disconnected before a detached task ran).
+
             if let Err(e) = self.sender.read().try_send(msg) {
                 match e {
                     flume::TrySendError::Full(_) => tracing::warn!(
@@ -230,8 +225,6 @@ impl Drop for Session {
     }
 }
 
-// Implement the library's SessionContext trait so the player manager
-// can push events back through the WebSocket without depending on audium-server.
 impl audium::common::server_hooks::SessionContext for Session {
     fn send_message(&self, msg: &audium::lavalink::protocol::OutgoingMessage) {
         Session::send_message(self, msg);

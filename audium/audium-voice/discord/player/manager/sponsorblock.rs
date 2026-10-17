@@ -37,7 +37,6 @@ pub async fn load_segments(
     track: &Track,
     session: &dyn crate::common::server_hooks::SessionContext,
 ) {
-    // Only YouTube videos have sponsor segments.
     let Some(video_id) = extract_youtube_video_id(track) else {
         return;
     };
@@ -87,8 +86,7 @@ pub async fn check_for_skip(
     session: &dyn crate::common::server_hooks::SessionContext,
 ) -> Option<u64> {
     let segments = state.segments.read().await.clone();
-    // Avoid re-seeking right after we already moved (the monitor position may
-    // still read the pre-seek value for one tick).
+
     let last_seek = state
         .last_skip_ms
         .load(std::sync::atomic::Ordering::Relaxed);
@@ -129,7 +127,6 @@ pub fn extract_youtube_video_id(track: &Track) -> Option<String> {
     .flatten();
 
     for s in haystack {
-        // youtube.com/watch?v=ID  | youtu.be/ID  | shorts/ID
         if let Some(idx) = s.find("v=") {
             let id_candidate = &s[idx + 2..];
             let id = id_candidate
@@ -204,7 +201,7 @@ mod tests {
 
     #[test]
     fn no_id_for_raw_search_identifier() {
-        let t = track_with_uri(None); // no uri
+        let t = track_with_uri(None);
         assert_eq!(extract_youtube_video_id(&t), None);
     }
 }

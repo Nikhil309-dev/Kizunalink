@@ -26,8 +26,6 @@ pub struct Decoder {
     channels: Channels,
 }
 
-// Safety: An Opus decoder state can be safely transferred across threads
-// when not actively in concurrent use.
 unsafe impl Send for Decoder {}
 
 impl Decoder {

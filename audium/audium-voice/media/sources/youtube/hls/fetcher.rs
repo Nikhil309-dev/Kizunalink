@@ -19,9 +19,6 @@ enum BodyReadError {
 impl BodyReadError {
     fn is_transient(&self) -> bool {
         match self {
-            // reqwest may label an incomplete HTTP body as Decode rather than
-            // Body. Inspect its error chain for an actual I/O interruption;
-            // malformed compression/data errors are not retryable.
             Self::Transport(e) => {
                 if e.is_timeout() || e.is_connect() {
                     return true;
@@ -50,8 +47,6 @@ impl BodyReadError {
 }
 
 async fn retry_pause(attempt: usize) {
-    // Dropping the fetch future cancels this wait as well as any in-flight
-    // reqwest request. The retry budget covers the whole request, not each phase.
     tokio::time::sleep(std::time::Duration::from_millis(100 << attempt)).await;
 }
 
@@ -75,8 +70,6 @@ pub async fn fetch_segment_into(
     }
 
     for attempt in 0..=MAX_TRANSIENT_RETRIES {
-        // Each attempt creates a new request/response and a fresh temporary
-        // body. Never resume from, or append, a partially read response.
         let mut req = client
             .get(&resource.url)
             .header("Accept", "*/*")
@@ -99,19 +92,15 @@ pub async fn fetch_segment_into(
             continue;
         }
 
-        // Validate status and byte interval BEFORE any body is read. expected
-        // length is checked after streaming, including for chunked responses.
         let (cap, expected_len, slice) = if let Some(r) = range {
             if status == reqwest::StatusCode::PARTIAL_CONTENT {
                 validate_content_range(&res, r.offset, Some(r.length))?;
                 (r.length as usize, Some(r.length), None)
             } else if status == reqwest::StatusCode::OK {
-                // An ignored Range is safe only when the complete resource is
-                // declared, fits the cap, and contains the requested interval.
                 let full_len = res
                     .content_length()
                     .ok_or("HLS fetch: ignored Range without Content-Length")?;
-                let requested_end = r.offset + r.length - 1; // checked above
+                let requested_end = r.offset + r.length - 1;
                 if full_len > MAX_HLS_SEGMENT_BYTES as u64 || full_len <= requested_end {
                     return Err("HLS fetch: unsafe full-body Range fallback".into());
                 }
@@ -130,10 +119,6 @@ pub async fn fetch_segment_into(
             (MAX_HLS_SEGMENT_BYTES, res.content_length(), None)
         };
 
-        // All body bytes remain local to this attempt until fully verified.
-        // Only a transport interruption or a short response gets a bounded
-        // whole-request retry. Too-large bodies, malformed headers and status
-        // errors are terminal, never accepted as a successful segment.
         let bytes = match read_body_capped(res, cap).await {
             Ok(bytes) => bytes,
             Err(e) if attempt < MAX_TRANSIENT_RETRIES && e.is_transient() => {

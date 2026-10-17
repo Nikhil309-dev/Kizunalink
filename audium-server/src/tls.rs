@@ -49,16 +49,12 @@ impl AxumListener for TlsListener {
             let (tcp, addr) = match self.inner.accept().await {
                 Ok(tup) => tup,
                 Err(e) => {
-                    // Flatten transient accept errors into a small retry delay,
-                    // matching `axum::serve`'s behavior for `TcpListener`.
                     warn!("TLS listener accept error: {e}");
                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     continue;
                 }
             };
-            // Drive the handshake to completion so a client that connects and
-            // never speaks is not held forever by hyper. The returned `TlsStream`
-            // then wraps the stream for hyper to use.
+
             let tls = match tokio::time::timeout(TLS_HANDSHAKE_TIMEOUT, self.acceptor.accept(tcp))
                 .await
             {
@@ -68,8 +64,6 @@ impl AxumListener for TlsListener {
                     continue;
                 }
                 Err(_) => {
-                    // A client that connects and then stalls must not hold the
-                    // accept loop hostage; drop it and accept the next one.
                     tracing::debug!(
                         "TLS handshake timed out after {}s; dropping connection",
                         TLS_HANDSHAKE_TIMEOUT.as_secs()
@@ -95,10 +89,6 @@ pub fn load_acceptor(cert_path: &Path, key_path: &Path) -> Result<TlsAcceptor, S
     let certs = load_certs(cert_path).map_err(|e| format!("failed to load TLS cert: {e}"))?;
     let key = load_key(key_path).map_err(|e| format!("failed to load TLS key: {e}"))?;
 
-    // Pin the provider before building any config; rustls refuses to choose one
-    // implicitly when both `ring` and `aws-lc-rs` are compiled in. The binary already
-    // installs it at startup (see `audium::common::tls`) — repeated here so this
-    // helper is correct when reached on its own.
     audium::common::tls::install_crypto_provider();
 
     let config = rustls::ServerConfig::builder()
@@ -110,8 +100,6 @@ pub fn load_acceptor(cert_path: &Path, key_path: &Path) -> Result<TlsAcceptor, S
 }
 
 fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, String> {
-    // `PemObject` (rustls-pki-types >= 1.9) replaces the archived
-    // `rustls-pemfile` crate (RUSTSEC-2025-0134).
     let certs = CertificateDer::pem_file_iter(path)
         .map_err(|e| format!("parse certs from {}: {e}", path.display()))?
         .collect::<Result<Vec<_>, _>>()
@@ -150,7 +138,6 @@ mod tests {
         let cert_path = dir.join("cert.pem");
         let key_path = dir.join("key.pem");
 
-        // A well-formed but bogus PEM body must be rejected (no silent fallback).
         std::fs::File::create(&cert_path)
             .unwrap()
             .write_all(b"-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n")

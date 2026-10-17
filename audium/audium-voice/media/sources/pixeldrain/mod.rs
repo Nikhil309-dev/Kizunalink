@@ -107,7 +107,7 @@ impl PixeldrainSource {
         };
         match Self::parse_page(&html, id) {
             Some((title, true)) => LoadResult::Track(Self::build_track(id, title, identifier)),
-            // A well-formed but non-audio page is a "no match", not an error.
+
             Some((_, false)) => LoadResult::Empty {},
             None => LoadResult::Empty {},
         }

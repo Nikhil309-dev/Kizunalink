@@ -17,9 +17,6 @@ pub use writer::CircularFileWriter;
 
 pub(crate) static GLOBAL_FILE_WRITER: OnceLock<CircularFileWriter> = OnceLock::new();
 
-// N05: printing to the console is the whole point of these two macros
-// (interactive output that is *also* mirrored into the log file). The tokens below
-// span into this definition, so the allow lives here as well as at call sites.
 #[allow(clippy::print_stdout)]
 #[macro_export]
 macro_rules! log_print {
@@ -30,9 +27,6 @@ macro_rules! log_print {
     }};
 }
 
-// N05: printing to the console is the whole point of these two macros
-// (interactive output that is *also* mirrored into the log file). The tokens below
-// span into this definition, so the allow lives here as well as at call sites.
 #[allow(clippy::print_stdout)]
 #[macro_export]
 macro_rules! log_println {
@@ -78,9 +72,6 @@ pub fn init(config: &LoggingConfig) {
 
     let ansi = crate::common::utils::colors_enabled();
 
-    // `tracing::Level` orders by severity with ERROR as the *smallest*:
-    // ERROR < WARN < INFO < DEBUG < TRACE. So INFO/DEBUG/TRACE go to stdout and
-    // WARN/ERROR to stderr. See `console_target` / its tests for the split.
     let stdout_layer = fmt::layer()
         .event_format(CustomFormatter::new(true))
         .with_ansi(ansi)
@@ -114,8 +105,6 @@ pub fn init(config: &LoggingConfig) {
             .with_ansi(false)
     });
 
-    // `try_init` (not `init`) so a second call — e.g. in tests — is a no-op
-    // instead of a panic, and a genuine failure is surfaced rather than swallowed.
     match tracing_subscriber::registry()
         .with(env_filter)
         .with(stdout_layer)

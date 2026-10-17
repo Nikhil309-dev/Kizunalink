@@ -34,49 +34,36 @@ pub(crate) fn is_blocked_ip(ip: &IpAddr) -> bool {
                 || ip.is_unspecified()
                 || ip.is_broadcast()
                 || ip.is_documentation()
-                // "This network" 0.0.0.0/8 and IETF protocol assignments 192.0.0.0/24.
                 || o[0] == 0
                 || (o[0] == 192 && o[1] == 0 && o[2] == 0)
-                // Deprecated 6to4 relay anycast 192.88.99.0/24.
                 || (o[0] == 192 && o[1] == 88 && o[2] == 99)
-                // Shared address space / CGNAT 100.64.0.0/10.
                 || (o[0] == 100 && (o[1] & 0xc0) == 64)
-                // Benchmarking 198.18.0.0/15.
                 || (o[0] == 198 && (o[1] & 0xfe) == 18)
-                // Reserved for future use 240.0.0.0/4 (0xF0 ..= 0xFF) incl. broadcast.
                 || o[0] >= 0xf0
         }
         IpAddr::V6(ip) => {
-            // IPv4-mapped (::ffff:a.b.c.d) embeds a v4 address; unmap and apply
-            // the v4 policy so `::ffff:127.0.0.1` cannot slip past the v6 checks.
             if let Some(mapped_v4) = ip.to_ipv4_mapped() {
                 return is_blocked_ip(&IpAddr::V4(mapped_v4));
             }
             let seg = ip.segments();
             let first = seg[0];
-            // Allowlist: only global unicast 2000::/3 may be contacted. Everything
-            // outside it — loopback, unspecified, multicast, ULA, link-local,
-            // IPv4-compatible `::a.b.c.d`, NAT64 `64:ff9b::/96`, discard-only
-            // `100::/64`, segment-routing `5f00::/16`, ... — is refused. New
-            // reservations therefore default to blocked.
+
             if (first & 0xe000) != 0x2000 {
                 return true;
             }
-            // Special-purpose ranges *inside* 2000::/3.
-            // 2001::/23 (Teredo 2001::/32, benchmarking 2001:2::/48, ORCHID
-            // 2001:10::/28, ORCHIDv2 2001:20::/28, ...).
+
             if first == 0x2001 && seg[1] < 0x0200 {
                 return true;
             }
-            // Documentation 2001:db8::/32.
+
             if first == 0x2001 && seg[1] == 0x0db8 {
                 return true;
             }
-            // 6to4 2002::/16 (reaches the embedded v4).
+
             if first == 0x2002 {
                 return true;
             }
-            // Documentation 3fff::/20.
+
             if first == 0x3fff && seg[1] < 0x1000 {
                 return true;
             }
@@ -152,7 +139,6 @@ fn make_redirect_policy() -> reqwest::redirect::Policy {
             return attempt.stop();
         };
         if attempt.previous().len() > 10 || !validate_redirect_url(from, attempt.url()) {
-            // Redirect URLs may contain signed tokens in their query strings.
             warn!("SSRF: rejecting unsafe or excessive redirect");
             attempt.stop()
         } else {
@@ -178,10 +164,6 @@ pub fn create_client_with_pinning(
     pinned_host: Option<String>,
     pinned_ips: Option<Vec<SocketAddr>>,
 ) -> AnyResult<Client> {
-    // A forwarding proxy resolves the destination itself: reqwest's DNS
-    // validator and address pins cannot constrain that connection. Refuse
-    // this combination for user-supplied HTTP sources rather than silently
-    // bypassing the SSRF boundary. Trusted provider clients may still proxy.
     if pinned_host.is_some() && proxy.as_ref().and_then(|p| p.url.as_ref()).is_some() {
         return Err("pinned HTTP source cannot use a forwarding proxy".into());
     }
@@ -196,8 +178,6 @@ pub fn create_client_with_pinning(
         .tcp_keepalive(Duration::from_secs(25))
         .pool_max_idle_per_host(64)
         .pool_idle_timeout(Duration::from_secs(70))
-        // Don't inherit environment proxy settings: the proxy could resolve
-        // names outside this process's address validation policy.
         .no_proxy()
         .dns_resolver(std::sync::Arc::new(PublicDnsResolver));
 
@@ -223,14 +203,12 @@ pub fn create_client_with_pinning(
         }
     }
 
-    // Pin resolved IPs to prevent DNS rebinding (SEC-001).
     if let (Some(host), Some(ips)) = (pinned_host, pinned_ips) {
         for addr in &ips {
             builder = builder.resolve(&host, *addr);
         }
     }
 
-    // Custom redirect policy: validate every redirect hop (SEC-001).
     builder = builder.redirect(make_redirect_policy());
 
     Ok(builder.build()?)
@@ -270,9 +248,6 @@ mod tests {
 
     #[test]
     fn redirect_policy_rejects_local_and_internal_hostnames_before_dns() {
-        // The redirect hop is checked by name, before any DNS lookup, so a
-        // redirect into the local network is stopped even though `can_handle`
-        // style syntax checks cannot see where the name resolves.
         let from = url("https://media.example/track");
         for target in [
             "http://localhost/audio",
@@ -286,15 +261,12 @@ mod tests {
                 "local/internal name should be rejected: {target}"
             );
         }
-        // Ordinary public names still pass the name check (connect-time address
-        // validation is the authoritative layer for those).
+
         assert!(validate_redirect_url(&from, &url("https://cdn.example/a")));
     }
 
     #[test]
     fn rejects_public_hostname_that_resolves_to_private_address() {
-        // The resolver validates the exact socket addresses it passes to
-        // Hyper, so a public-looking hostname cannot rebind to a private IP.
         let private = [SocketAddr::from((Ipv4Addr::new(10, 20, 30, 40), 0))];
         assert!(validate_resolved_addresses(&private).is_err());
         let mapped = [SocketAddr::from((
@@ -334,25 +306,24 @@ mod tests {
     #[test]
     fn blocks_all_non_global_ipv4_ranges() {
         use Ipv4Addr as V4;
-        // Only global unicast is allowed; everything reserved/non-public is
-        // refused so a new RFC reservation defaults to blocked.
+
         for ip in [
-            V4::new(0, 0, 0, 0),         // "this network" 0.0.0.0/8
-            V4::new(0, 1, 2, 3),         // 0.0.0.0/8
-            V4::new(127, 0, 0, 1),       // loopback
-            V4::new(10, 0, 0, 1),        // private
-            V4::new(172, 16, 0, 1),      // private
-            V4::new(192, 168, 1, 1),     // private
-            V4::new(169, 254, 169, 254), // link-local / cloud metadata
-            V4::new(100, 64, 0, 1),      // CGNAT 100.64/10
-            V4::new(100, 127, 255, 255), // CGNAT upper bound
-            V4::new(192, 0, 0, 1),       // IETF protocol assignments 192.0.0.0/24
-            V4::new(192, 0, 2, 1),       // TEST-NET-1 192.0.2.0/24
-            V4::new(198, 18, 0, 1),      // benchmarking 198.18.0.0/15
-            V4::new(198, 19, 255, 255),  // benchmarking upper bound
-            V4::new(224, 0, 0, 1),       // multicast
-            V4::new(240, 0, 0, 1),       // reserved 240.0.0.0/4
-            V4::new(255, 255, 255, 255), // broadcast
+            V4::new(0, 0, 0, 0),
+            V4::new(0, 1, 2, 3),
+            V4::new(127, 0, 0, 1),
+            V4::new(10, 0, 0, 1),
+            V4::new(172, 16, 0, 1),
+            V4::new(192, 168, 1, 1),
+            V4::new(169, 254, 169, 254),
+            V4::new(100, 64, 0, 1),
+            V4::new(100, 127, 255, 255),
+            V4::new(192, 0, 0, 1),
+            V4::new(192, 0, 2, 1),
+            V4::new(198, 18, 0, 1),
+            V4::new(198, 19, 255, 255),
+            V4::new(224, 0, 0, 1),
+            V4::new(240, 0, 0, 1),
+            V4::new(255, 255, 255, 255),
         ] {
             assert!(is_blocked_ip(&IpAddr::V4(ip)), "{ip} must be blocked");
         }
@@ -361,12 +332,12 @@ mod tests {
             V4::new(8, 8, 8, 8),
             V4::new(1, 1, 1, 1),
             V4::new(93, 184, 216, 34),
-            V4::new(100, 63, 255, 255), // just below CGNAT
-            V4::new(100, 128, 0, 0),    // just above CGNAT
-            V4::new(198, 17, 255, 255), // just below benchmarking
-            V4::new(198, 20, 0, 0),     // just above benchmarking
-            V4::new(192, 88, 98, 255),  // below 6to4-relay 192.88.99.0/24
-            V4::new(192, 88, 100, 0),   // above 6to4-relay 192.88.99.0/24
+            V4::new(100, 63, 255, 255),
+            V4::new(100, 128, 0, 0),
+            V4::new(198, 17, 255, 255),
+            V4::new(198, 20, 0, 0),
+            V4::new(192, 88, 98, 255),
+            V4::new(192, 88, 100, 0),
         ] {
             assert!(!is_blocked_ip(&IpAddr::V4(ip)), "{ip} must be allowed");
         }
@@ -376,7 +347,7 @@ mod tests {
     fn blocks_iana_special_ranges_found_by_oracle_diff() {
         use Ipv4Addr as V4;
         use Ipv6Addr as V6;
-        // These were missed before an independent oracle diff caught them.
+
         assert!(is_blocked_ip(&IpAddr::V4(V4::new(192, 88, 99, 1))));
         for ip in [
             "100::1",
@@ -391,7 +362,7 @@ mod tests {
                 "{ip} must be blocked"
             );
         }
-        // Global unicast just outside the special sub-ranges stays reachable.
+
         for ip in ["2001:4860:4860::8888", "2400:cb00::1", "2a00:1450:4001::1"] {
             assert!(
                 !is_blocked_ip(&IpAddr::V6(V6::from_str(ip).unwrap())),
@@ -405,21 +376,21 @@ mod tests {
         use Ipv6Addr as V6;
         let parse = |s: &str| V6::from_str(s).unwrap();
         for ip in [
-            "::1",                    // loopback
-            "::",                     // unspecified
-            "fe80::1",                // link-local
-            "fc00::1",                // ULA
-            "fdff::1",                // ULA upper
-            "ff02::1",                // multicast
-            "2001:db8::1",            // documentation
-            "::ffff:127.0.0.1",       // v4-mapped loopback
-            "::ffff:169.254.169.254", // v4-mapped metadata
-            "::ffff:10.0.0.1",        // v4-mapped private
-            "::127.0.0.1",            // IPv4-compatible loopback
-            "64:ff9b::7f00:1",        // NAT64 → 127.0.0.1
-            "64:ff9b::a9fe:a9fe",     // NAT64 → 169.254.169.254
-            "2002:7f00:1::",          // 6to4 → 127.0.0.1
-            "2001::1",                // Teredo
+            "::1",
+            "::",
+            "fe80::1",
+            "fc00::1",
+            "fdff::1",
+            "ff02::1",
+            "2001:db8::1",
+            "::ffff:127.0.0.1",
+            "::ffff:169.254.169.254",
+            "::ffff:10.0.0.1",
+            "::127.0.0.1",
+            "64:ff9b::7f00:1",
+            "64:ff9b::a9fe:a9fe",
+            "2002:7f00:1::",
+            "2001::1",
         ] {
             let addr = parse(ip);
             assert!(is_blocked_ip(&IpAddr::V6(addr)), "{ip} must be blocked");
@@ -539,8 +510,6 @@ mod ssrf_regression_tests {
 
     #[tokio::test]
     async fn hostname_resolving_to_private_is_refused_at_connect() {
-        // `localhost` genuinely resolves to 127.0.0.1; the connect-time resolver
-        // must refuse it, so the fixture is never contacted.
         let server = fixture(&ok_body());
         let client = create_client("test".into(), None, None, None).unwrap();
         let result = client
@@ -558,9 +527,6 @@ mod ssrf_regression_tests {
 
     #[tokio::test]
     async fn dns_rebinding_cannot_reach_loopback() {
-        // Simulate rebinding: the URL host resolves to loopback, but validation
-        // pinned a *public* address. The connector must use the pinned address
-        // (unreachable here) and must NOT fall back to the rebinding lookup.
         let server = fixture(&ok_body());
         let pinned_public = SocketAddr::from((Ipv4Addr::new(93, 184, 216, 34), server.port));
         let client = create_client_with_pinning(
@@ -590,9 +556,6 @@ mod ssrf_regression_tests {
 
     #[tokio::test]
     async fn redirect_to_private_is_not_followed() {
-        // First hop is a public-looking redirect that points at a private target.
-        // The custom redirect policy must leave the 302 un-followed, so the
-        // private fixture records zero hits.
         let private = fixture(&ok_body());
         let first = fixture(&redirect_body(&format!(
             "http://127.0.0.1:{}/secret",
@@ -619,7 +582,6 @@ mod ssrf_regression_tests {
 
     #[tokio::test]
     async fn redirect_to_metadata_ip_is_not_followed() {
-        // A 302 to a link-local metadata address must be left un-followed.
         let first = fixture(&redirect_body("http://169.254.169.254/latest/meta-data/"));
         let client = Client::builder()
             .redirect(make_redirect_policy())
@@ -641,11 +603,6 @@ mod ssrf_regression_tests {
 
     #[tokio::test]
     async fn pinning_uses_pinned_ip_but_keeps_hostname_for_host_and_sni() {
-        // TLS SNI and the HTTP `Host` header come from the URL hostname, never
-        // from the pinned address: `ClientBuilder::resolve` only changes the dialed
-        // IP. Pin a public hostname to an unroutable public IP and assert (a) the
-        // connector dials the pinned IP rather than a fresh lookup, and (b) the
-        // request URL — the source of Host/SNI — still carries the hostname.
         let pinned = SocketAddr::from((Ipv4Addr::new(93, 184, 216, 34), 443));
         let client = create_client_with_pinning(
             "test".into(),

@@ -54,7 +54,7 @@ impl AppleMusicTokenTracker {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        token.expiry_ms > now + 10_000 // 10 second buffer
+        token.expiry_ms > now + 10_000
     }
 
     async fn refresh_token(&self) -> Option<String> {

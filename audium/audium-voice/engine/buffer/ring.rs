@@ -37,7 +37,7 @@ impl RingBuffer {
         self.size - self.length
     }
 
-    /// Write `chunk` into the buffer.  
+    /// Write `chunk` into the buffer.
     /// If the buffer is full, the **oldest** data is overwritten.
     pub fn write(&mut self, chunk: &[u8]) {
         if self.size == 0 || chunk.is_empty() {
@@ -174,7 +174,7 @@ mod tests {
         let mut rb = RingBuffer::new(10);
         rb.write(b"0123456789");
         rb.skip(5);
-        rb.write(b"abcde"); // Wraps around
+        rb.write(b"abcde");
 
         let data = rb.read(10).unwrap();
         assert_eq!(data, b"56789abcde");
@@ -184,7 +184,7 @@ mod tests {
     fn test_ring_buffer_overwrite() {
         let mut rb = RingBuffer::new(5);
         rb.write(b"12345");
-        rb.write(b"67"); // Overwrites "12"
+        rb.write(b"67");
 
         let data = rb.read(5).unwrap();
         assert_eq!(data, b"34567");
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn test_ring_buffer_large_write() {
         let mut rb = RingBuffer::new(5);
-        rb.write(b"12345678"); // Writes more than capacity
+        rb.write(b"12345678");
 
         let data = rb.read(5).unwrap();
         assert_eq!(data, b"45678");

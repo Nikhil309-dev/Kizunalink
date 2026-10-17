@@ -245,7 +245,6 @@ impl NicovideoSource {
             .await
             .ok()?;
 
-        // The endpoint answers 201 Created with the session cookie in headers.
         if response.status().as_u16() != 201 {
             debug!(
                 "NicoVideo access-rights returned HTTP {}",
@@ -259,7 +258,6 @@ impl NicovideoSource {
             .ok()?;
         let content_url = body.get("data")?.get("contentUrl")?.as_str()?.to_string();
 
-        // The master playlist lists the audio-only rendition.
         let master = self
             .http
             .get(&content_url)

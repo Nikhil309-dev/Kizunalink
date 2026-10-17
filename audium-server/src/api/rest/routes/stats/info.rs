@@ -37,7 +37,6 @@ pub async fn get_info(State(state): State<Arc<AppState>>) -> Json<protocol::Info
     })
 }
 
-// A malformed build-time label must never make /v4/info emit invalid SemVer.
 fn valid_pre_release(label: &str) -> Option<&str> {
     if label.split('.').all(|part| {
         !part.is_empty()
@@ -106,9 +105,7 @@ pub async fn get_stats(State(state): State<Arc<AppState>>) -> Json<protocol::Sta
 
     if state.config.metrics.detailed_stats {
         let counters = &state.detailed_counters;
-        // The registry only holds sources that are both compiled-in and
-        // config-enabled, so `loaded == enabled`; `top` needs a per-source
-        // resolve counter the engine does not track yet.
+
         let loaded = state.source_manager.sources.len();
         let detailed = counters.snapshot(loaded, loaded, None, stats.cpu.cores.max(0) as usize);
         stats.detailed_stats = Some(protocol::DetailedStats {

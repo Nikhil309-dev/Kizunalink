@@ -38,9 +38,6 @@ struct NodeMetrics {
 static REGISTRY: LazyLock<Registry> = LazyLock::new(Registry::new);
 
 static METRICS: LazyLock<NodeMetrics> = LazyLock::new(|| {
-    // These `expect`s are intentionally loud: a metric whose name collides with
-    // an existing registration means a naming bug, and silently ignoring it
-    // would corrupt the exposition. The error message names the metric.
     macro_rules! gauge {
         ($name:expr, $help:expr) => {
             Gauge::with_opts(Opts::new($name, $help).namespace(NAMESPACE))
@@ -97,7 +94,6 @@ pub fn init(state: Arc<AppState>) {
 
     info!("Initializing Prometheus metrics at {}", config.endpoint);
 
-    // Ensure metrics are initialized
     LazyLock::force(&METRICS);
 
     tokio::spawn(async move {

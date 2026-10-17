@@ -94,7 +94,6 @@ pub struct Chapter {
 pub fn skip_position_if_in_segment(segments: &[Segment], pos_ms: u64) -> Option<u64> {
     for s in segments {
         if pos_ms >= s.start_ms() && pos_ms < s.end_ms() {
-            // Merge any segments that overlap or abut this one.
             let mut end = s.end_ms();
             for o in segments {
                 if o.start_ms() <= end && o.end_ms() > end {
@@ -129,7 +128,6 @@ pub async fn fetch_segments(
         .await?;
 
     match resp.status() {
-        // 200: segments found.
         rs if rs.is_success() => {
             let body: Value =
                 crate::common::http::read_json_capped::<serde_json::Value>(resp).await?;
@@ -142,7 +140,7 @@ pub async fn fetch_segments(
             }
             Ok(out)
         }
-        // 404: no segments for this video (normal — most videos have none).
+
         reqwest::StatusCode::NOT_FOUND => Ok(Vec::new()),
         other => Err(format!("SponsorBlock API returned {} for video {}", other, video_id).into()),
     }
@@ -193,15 +191,14 @@ mod tests {
             &cats(),
             None,
         );
-        // Entering at 6s skips the entire merged span 0..20s → seek to 20s.
+
         assert_eq!(skip_position_if_in_segment(&segments, 6_000), Some(20_000));
     }
 
     #[test]
     fn clamps_to_duration() {
         let segments = filter_segments(vec![seg(0.0, 100.0, "sponsor")], &cats(), Some(30_000));
-        // Segment ends past duration → still returned (end clamped at play side);
-        // skip target is the segment end.
+
         assert_eq!(skip_position_if_in_segment(&segments, 1_000), Some(100_000));
     }
 

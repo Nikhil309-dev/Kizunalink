@@ -104,7 +104,6 @@ pub enum AudiumEvent {
         by_remote: bool,
     },
 
-    // ---- SponsorBlock events (wire-compatible with SponsorBlock-Plugin) ----
     #[serde(rename = "SegmentsLoaded")]
     SegmentsLoaded {
         #[serde(rename = "guildId")]

@@ -32,8 +32,7 @@ pub(crate) fn validate_content_range(
     let (start, end) = span.split_once('-').ok_or_else(invalid)?;
     let start = start.parse::<u64>().map_err(|_| invalid())?;
     let end = end.parse::<u64>().map_err(|_| invalid())?;
-    // RFC 9110 permits an unknown complete length (`bytes 2-3/*`).
-    // SegmentedSource separately requires a numeric total for its probe.
+
     let total = if total == "*" {
         None
     } else {

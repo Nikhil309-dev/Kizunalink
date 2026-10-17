@@ -101,10 +101,7 @@ pub struct YouTubePotProvider {
 impl YouTubePotProvider {
     pub fn new(http: Arc<reqwest::Client>, base_url: String, bypass_cache: bool) -> Self {
         let base_url = base_url.trim_end_matches('/').to_string();
-        // A co-located provider (loopback URL) must be reached directly: the
-        // shared client carries the YouTube egress proxy, which lives on another
-        // network and cannot see 127.0.0.1. A remote provider keeps the shared
-        // (proxy-aware) client.
+
         let http = if host_is_loopback(&base_url) {
             Arc::new(
                 reqwest::Client::builder()
@@ -207,7 +204,6 @@ impl YouTubePotProvider {
     /// well-formed. Used once at startup so misconfiguration surfaces loudly
     /// instead of as an HTTP 403 during playback.
     pub async fn probe(&self) -> Result<(), PotError> {
-        // A dedicated binding keeps the probe out of the real token cache.
         self.fetch_typed("audium-pot-probe").await.map(|_| ())
     }
 
@@ -244,7 +240,6 @@ fn host_is_loopback(url: &str) -> bool {
         .or_else(|| url.strip_prefix("https://"))
         .unwrap_or(url);
     let host = if let Some(rest) = rest.strip_prefix('[') {
-        // bracketed IPv6 literal, e.g. [::1]:4416
         rest.split(']').next().unwrap_or("")
     } else {
         rest.split(['/', ':', '?']).next().unwrap_or("")
@@ -426,7 +421,7 @@ mod tests {
         })
         .await;
         let p = provider_for(base);
-        // Same binding twice -> one network call; a different binding -> two.
+
         let _ = p.fetch_typed("a").await.unwrap();
         let _ = p.fetch_typed("a").await.unwrap();
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
@@ -482,7 +477,6 @@ mod tests {
 
     #[tokio::test]
     async fn probe_fails_when_provider_down() {
-        // Nothing is listening on this port.
         let p = provider_for("http://127.0.0.1:1".into());
         assert!(matches!(p.probe().await, Err(PotError::Unreachable(_))));
     }

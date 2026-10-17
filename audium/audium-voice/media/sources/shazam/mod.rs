@@ -350,17 +350,17 @@ impl ShazamSource {
             return false;
         }
         let b = s.as_bytes();
-        // 2 upper
+
         if !b[0].is_ascii_uppercase() || !b[1].is_ascii_uppercase() {
             return false;
         }
-        // 3 upper or digit
+
         for &c in &b[2..5] {
             if !c.is_ascii_uppercase() && !c.is_ascii_digit() {
                 return false;
             }
         }
-        // 7 digit
+
         for &c in &b[5..12] {
             if !c.is_ascii_digit() {
                 return false;

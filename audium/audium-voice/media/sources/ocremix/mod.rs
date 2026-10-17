@@ -215,7 +215,6 @@ mod tests {
 
     #[test]
     fn parses_remix_element_and_remixers() {
-        // Trimmed real payload from ocremix.org/remix/OCR04499?view=xml.
         let xml = r#"<?xml version="1.0"?>
 <view><metadata id="708"/>
 <remix id="OCR04499" name="Blue Magic" postdate="2023-11-02"

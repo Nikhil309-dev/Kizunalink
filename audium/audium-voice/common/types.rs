@@ -127,8 +127,7 @@ impl AudioFormat {
             Self::Ogg => "ogg",
             Self::Flac => "flac",
             Self::Wav => "wav",
-            // Modules carry no single canonical extension; the tracker reader
-            // is selected by this variant, not by a probe hint.
+
             Self::Tracker => "mod",
             Self::Unknown => "",
         }
@@ -144,7 +143,7 @@ impl AudioFormat {
             "ogg" => Self::Ogg,
             "flac" => Self::Flac,
             "wav" => Self::Wav,
-            // Only the tracker formats the bundled replayer imports.
+
             "mod" | "xm" | "s3m" | "it" => Self::Tracker,
             _ => Self::Unknown,
         }
@@ -156,7 +155,6 @@ impl AudioFormat {
             return Self::Aac;
         }
 
-        // Handle YouTube itag hint
         if let Some(itag) = extract_youtube_itag(url) {
             match itag {
                 249..=251 => return Self::Webm,
@@ -184,7 +182,6 @@ impl AudioFormat {
             return from_path;
         }
 
-        // Final fallback: look for extensions anywhere in the URL (Tidal etc sometimes use it)
         if url.contains(".mp4") || url.contains(".m4a") {
             return Self::Mp4;
         }
@@ -250,12 +247,11 @@ mod tests {
 
     #[test]
     fn audio_format_youtube_itag() {
-        // itag 251 = webm opus
         assert_eq!(
             AudioFormat::from_url("https://googlevideo.com/videoplayback?itag=251"),
             AudioFormat::Webm
         );
-        // itag 140 = mp4 aac
+
         assert_eq!(
             AudioFormat::from_url("https://googlevideo.com/videoplayback?itag=140"),
             AudioFormat::Mp4

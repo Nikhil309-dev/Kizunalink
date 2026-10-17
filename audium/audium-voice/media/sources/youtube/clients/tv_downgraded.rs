@@ -275,8 +275,6 @@ mod tests {
 
     #[test]
     fn tv_downgraded_uses_distinct_client_id_from_tv_cast() {
-        // TVHTML5 and TVHTML5_CAST share a client name but must not share the
-        // numeric id, otherwise YouTube cannot tell the two apart.
         assert_eq!(CLIENT_ID, "85");
     }
 }

@@ -39,8 +39,5 @@ pub async fn send_load_failed(
         }),
     });
 
-    // Resolution failed after start_playback installed the new metadata.
-    // Clear it so player updates cannot expose a track with no decoder,
-    // handle, or monitor task behind it.
     player.stop_track();
 }

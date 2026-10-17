@@ -55,7 +55,6 @@ impl<T> PoolInner<T> {
 
         let byte_size = key * size_of::<T>();
 
-        // Only pool buffers in the 1 KB – 10 MB range.
         if !(1024..=10 * 1024 * 1024).contains(&byte_size) {
             return;
         }
@@ -81,7 +80,6 @@ impl<T> PoolInner<T> {
             return;
         }
 
-        // Rate-limit cleanup checks to every 30 seconds.
         if self.last_cleanup.elapsed() < Duration::from_secs(30) {
             return;
         }
@@ -195,11 +193,11 @@ mod tests {
     #[test]
     fn release_small_buffer_not_pooled() {
         let pool = BufferPool::<u8>::new();
-        // Acquire a tiny buffer (will get 1024-aligned)
+
         let buf = pool.acquire(10);
         pool.release(buf);
         let stats = pool.stats();
-        // 1024 is in range, so it should be pooled
+
         assert_eq!(stats.entries, 1);
     }
 

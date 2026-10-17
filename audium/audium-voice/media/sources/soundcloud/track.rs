@@ -168,7 +168,7 @@ impl PlayableTrack for SoundCloudTrack {
                             return;
                         }
                     };
-                    // Hint as "aac" so symphonia knows what to expect from ADTS stream.
+
                     run_processor(
                         reader,
                         Some(crate::common::types::AudioFormat::Aac),

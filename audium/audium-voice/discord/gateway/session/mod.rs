@@ -189,14 +189,11 @@ impl VoiceGateway {
 
         let url = format!("wss://{}/?v={}", endpoint, VOICE_GATEWAY_VERSION);
         let mut config = WebSocketConfig::default();
-        // Voice control payloads are small; leave room for MLS/DAVE messages without
-        // allowing a remote gateway to force unbounded allocations.
+
         const MAX_VOICE_GATEWAY_PAYLOAD: usize = 1024 * 1024;
         config.max_message_size = Some(MAX_VOICE_GATEWAY_PAYLOAD);
         config.max_frame_size = Some(MAX_VOICE_GATEWAY_PAYLOAD);
 
-        // The voice socket is the first TLS client to run. Ensure a provider is
-        // installed even if the embedding binary forgot to (see `common::tls`).
         crate::common::tls::install_crypto_provider();
 
         let (ws_stream, _) =
@@ -232,7 +229,6 @@ impl VoiceGateway {
             conn_token.cancel();
         })?;
 
-        // Wait for Op 8 HELLO
         let outcome = match read.next().await {
             Some(Ok(m)) => self.handle_message(&mut state, m).await,
             _ => Some(SessionOutcome::Reconnect),
@@ -295,8 +291,8 @@ impl VoiceGateway {
                 biased;
                 _ = self.outer_token.cancelled() => break SessionOutcome::Shutdown,
                 _ = conn_token.cancelled() => break if state.voice_failed() {
-                    // A failed encoder/encryptor/transport must not resume with
-                    // the same persistent voice key or broken MLS state.
+
+
                     SessionOutcome::Identify
                 } else {
                     SessionOutcome::Reconnect
@@ -381,8 +377,6 @@ impl VoiceGateway {
 
     fn emit_close(&self, code: u16, reason: String) {
         if let Some(tx) = &self.event_tx {
-            // Bounded sender: drop the event under backpressure rather than
-            // growing the queue without bound.
             let _ = tx.try_send(AudiumEvent::WebSocketClosed {
                 guild_id: self.guild_id.clone(),
                 code,

@@ -36,7 +36,6 @@ pub async fn fetch_stream_url(client: &Arc<reqwest::Client>, identifier: &str) -
         .as_secs()
         .to_string();
 
-    // Strategy 1: POST /music/{id}/play
     let post_url = format!("https://api.audiomack.com/v1/music/{identifier}/play");
     let mut body = BTreeMap::new();
     body.insert("environment".to_owned(), "desktop-web".to_owned());
@@ -55,7 +54,6 @@ pub async fn fetch_stream_url(client: &Arc<reqwest::Client>, identifier: &str) -
         return Some(url);
     }
 
-    // Strategy 2: GET /music/play/{id} (fallback)
     let get_url = format!("https://api.audiomack.com/v1/music/play/{identifier}");
     let mut query = BTreeMap::new();
     query.insert("environment".to_owned(), "desktop-web".to_owned());
@@ -83,7 +81,6 @@ async fn parse_response(resp: reqwest::Response) -> Option<String> {
 
     let text = crate::common::http::read_text_capped(resp).await.ok()?;
 
-    // Helper to determine if a URL is likely a direct audio stream
     let is_stream = |url: &str| {
         url.contains("music.audiomack.com")
             || url.ends_with(".m4a")

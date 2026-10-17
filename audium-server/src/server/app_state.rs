@@ -36,5 +36,4 @@ pub struct AppState {
     pub detailed_counters: Arc<crate::monitoring::detailed::DetailedCounters>,
 }
 
-// Implement the library's ServerContext marker trait for AppState.
 impl audium::common::server_hooks::ServerContext for AppState {}

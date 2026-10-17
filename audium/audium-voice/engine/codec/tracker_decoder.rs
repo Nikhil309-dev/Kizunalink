@@ -38,7 +38,6 @@ pub fn seconds_to_ts(seconds: f64) -> u64 {
     (seconds.max(0.0) * TARGET_SAMPLE_RATE as f64).round() as u64
 }
 
-// The player borrows the module it replays; store both together without unsafe.
 self_cell::self_cell!(
     struct ModulePlayer {
         owner: Module,
@@ -63,12 +62,12 @@ pub fn module_duration_frames(bytes: &[u8]) -> std::result::Result<u64, String> 
 #[cfg(test)]
 pub fn tiny_mod_for_tests() -> Vec<u8> {
     let mut m = vec![0u8; 20];
-    m.extend(vec![0u8; 31 * 30]); // 31 sample headers
-    m.push(1); // song length (orders)
-    m.push(127); // restart position
-    m.extend(vec![0u8; 128]); // order table
-    m.extend(b"M.K."); // 31-instrument MOD signature
-    m.extend(vec![0u8; 1024]); // one 64-row pattern, 4 channels
+    m.extend(vec![0u8; 31 * 30]);
+    m.push(1);
+    m.push(127);
+    m.extend(vec![0u8; 128]);
+    m.extend(b"M.K.");
+    m.extend(vec![0u8; 1024]);
     m
 }
 
@@ -77,26 +76,22 @@ pub fn tiny_mod_for_tests() -> Vec<u8> {
 /// Proves the decoder renders real audio rather than silence.
 #[cfg(test)]
 pub fn mod_with_note_for_tests() -> Vec<u8> {
-    let mut m = vec![0u8; 20]; // title
+    let mut m = vec![0u8; 20];
 
-    // Sample 1: 64 words (128 bytes), volume 64, one-word loop.
     let mut sample = vec![0u8; 30];
-    sample[22..24].copy_from_slice(&64u16.to_be_bytes()); // length in words
-    sample[25] = 64; // volume
-    sample[28..30].copy_from_slice(&1u16.to_be_bytes()); // loop length in words
+    sample[22..24].copy_from_slice(&64u16.to_be_bytes());
+    sample[25] = 64;
+    sample[28..30].copy_from_slice(&1u16.to_be_bytes());
     m.extend(&sample);
-    m.extend(vec![0u8; 30 * 30]); // samples 2..=31 are empty
+    m.extend(vec![0u8; 30 * 30]);
 
-    m.push(1); // song length
-    m.push(127); // restart position
+    m.push(1);
+    m.push(127);
     let mut orders = vec![0u8; 128];
     orders[0] = 0;
     m.extend(orders);
     m.extend(b"M.K.");
 
-    // Pattern 0, row 0, channel 0: C-2 (period 428) with sample 1.
-    // MOD slot layout: b0 = sample-num hi nibble | period hi nibble,
-    // b1 = period low byte, b2 = sample-num lo nibble << 4 | effect, b3 = param.
     let mut pattern = vec![0u8; 1024];
     const PERIOD: u16 = 428;
     pattern[0] = (PERIOD >> 8) as u8 & 0x0F;
@@ -104,7 +99,6 @@ pub fn mod_with_note_for_tests() -> Vec<u8> {
     pattern[2] = 1 << 4;
     m.extend(&pattern);
 
-    // Saw sample data so the render is clearly non-silent.
     m.extend((0..128u32).map(|i| (i * 2) as u8));
     m
 }
@@ -120,10 +114,6 @@ pub struct TrackerCodecDecoder {
     rendered_until: u64,
 }
 
-// `XmrsPlayer` is `Send` but not `Sync` (its optional observer lists hold
-// `Box<dyn … + Send>`). Every mutation goes through `&mut self`, so shared
-// access cannot observe it concurrently — the same justification as
-// `OpusCodecDecoder`'s `unsafe impl Sync`.
 unsafe impl Sync for TrackerCodecDecoder {}
 
 impl TrackerCodecDecoder {
@@ -149,7 +139,7 @@ impl TrackerCodecDecoder {
                 .map_err(|_: Infallible| {
                     Error::IoError(std::io::Error::other("tracker player init failed"))
                 })?;
-        // Play the module through exactly once; looping forever would never end.
+
         cell.with_dependent_mut(|_m, player| player.set_max_loop_count(1));
         self.cell = Some(cell);
         self.rendered_until = 0;
@@ -181,10 +171,7 @@ impl Decoder for TrackerCodecDecoder {
         }]
     }
 
-    fn reset(&mut self) {
-        // The module and its player are retained across seeks; the next packet's
-        // timestamp re-points the player at the requested position.
-    }
+    fn reset(&mut self) {}
 
     fn codec_params(&self) -> &CodecParameters {
         &self.params
@@ -192,9 +179,6 @@ impl Decoder for TrackerCodecDecoder {
 
     fn decode(&mut self, packet: &Packet) -> Result<AudioBufferRef<'_>> {
         let Some(cell) = self.cell.as_mut() else {
-            // The module normally arrives via `with_module`. Falling back to the
-            // first packet keeps the registry constructor usable, but a stream
-            // that never supplied one must fail loudly rather than emit silence.
             if packet.data.is_empty() {
                 return Err(Error::IoError(std::io::Error::other(
                     "tracker decoder was given no module",
@@ -233,7 +217,6 @@ impl Decoder for TrackerCodecDecoder {
             }
         });
 
-        // Pad the tail with silence when the module ended mid-chunk.
         for sample in &mut pcm[frames * 2..CHUNK_FRAMES * 2] {
             *sample = 0;
         }
@@ -337,8 +320,6 @@ mod tests {
 
     #[test]
     fn decodes_after_a_seek_issued_before_the_first_packet() {
-        // The processor checks for a pending seek before reading any packet, so a
-        // decoder built without the module in hand must still render after one.
         let bytes = mod_with_note_for_tests();
         let src = Box::new(BytesSource(std::io::Cursor::new(bytes)));
         let mut reader = TrackerFormatReader::open(src).expect("open");

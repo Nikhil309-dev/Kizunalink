@@ -31,8 +31,6 @@ impl HttpReader {
         proxy: Option<crate::config::sources::HttpProxyConfig>,
         headers: Option<reqwest::header::HeaderMap>,
     ) -> AnyResult<Self> {
-        // Validate URL and resolve DNS to prevent SSRF (SEC-001) and avoid blocking workers (PERF-001)
-        // This runs inside spawn_blocking, so blocking DNS resolution is acceptable here.
         let (host, _port, addresses) = super::resolve_and_validate_public_url(url)?;
 
         let user_agent = crate::common::utils::default_user_agent();
@@ -69,8 +67,6 @@ impl MediaSource for HttpReader {
     fn byte_len(&self) -> Option<u64> {
         self.inner.byte_len()
     }
-
-    // Explicitly delegate content_type if needed for probing
 }
 
 impl HttpReader {

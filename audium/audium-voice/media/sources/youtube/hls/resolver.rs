@@ -92,7 +92,6 @@ fn resolve_playlist_inner<'a>(
 
                 match best {
                     Some(v) => {
-                        // If the variant has an audio group, try to find a rendition URI.
                         if let Some(group_id) = &v.audio_group
                             && let Some(group) = audio_groups.get(group_id)
                         {

@@ -205,7 +205,6 @@ impl AppleMusicSource {
             None => return Vec::new(),
         };
 
-        // If offset is in the URL, we can parallelize
         if initial_next.contains("offset=") {
             let base_url = initial_next
                 .split("offset=")
@@ -222,7 +221,7 @@ impl AppleMusicSource {
             let mut all_items = Vec::new();
             let mut current_offset = offset;
             let mut limit_reached = false;
-            let mut pages_fetched = 1; // Initial page is already loaded
+            let mut pages_fetched = 1;
 
             while !limit_reached {
                 let mut futs = Vec::new();
@@ -276,7 +275,6 @@ impl AppleMusicSource {
             return all_items;
         }
 
-        // Fallback to sequential if offset not found
         let mut next = Some(initial_next);
         let mut all_items = Vec::new();
         let mut pages_fetched = 1;

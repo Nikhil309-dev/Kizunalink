@@ -33,8 +33,8 @@ impl From<u8> for PlaybackState {
 #[derive(Clone)]
 pub struct TrackHandle {
     state: Arc<AtomicU8>,
-    volume: Arc<AtomicU32>,   // f32 bits
-    position: Arc<AtomicU64>, // position in samples
+    volume: Arc<AtomicU32>,
+    position: Arc<AtomicU64>,
     command_tx: flume::Sender<DecoderCommand>,
     tape_stop_enabled: Arc<AtomicBool>,
     is_buffering: Arc<AtomicBool>,
@@ -91,8 +91,6 @@ impl TrackHandle {
     }
 
     pub fn stop(&self) {
-        // SeqCst matches the ordering used by stop_signal in start_playback,
-        // ensuring the stopped state is visible to all threads immediately.
         self.state
             .store(PlaybackState::Stopped as u8, Ordering::SeqCst);
     }
@@ -122,10 +120,6 @@ impl TrackHandle {
     }
 
     pub fn seek(&self, position_ms: u64) {
-        // `position_ms` is client-supplied; saturate so a hostile or buggy value
-        // cannot wrap the sample count (or the later `get_position`) into a
-        // nonsense timestamp. `position_ms` and `samples` share the same inner
-        // representation, so they always report a consistent time.
         let samples = position_ms.saturating_mul(OPUS_SAMPLE_RATE) / 1000;
         self.position.store(samples, Ordering::Release);
         let _ = self.command_tx.send(DecoderCommand::Seek(position_ms));
@@ -157,8 +151,7 @@ mod tests {
         let (h, _rx) = handle();
         h.seek(u64::MAX);
         let pos = h.get_position();
-        // A wrapping multiply would land on a tiny value; saturation keeps it huge
-        // and, crucially, the same inner sample count means seek/get_position agree.
+
         assert!(
             pos > 1_000_000_000_000,
             "seek(u64::MAX) wrapped to {pos} ms"

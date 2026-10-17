@@ -96,17 +96,13 @@ mod tests {
 
     #[test]
     fn test_sinc_function() {
-        // Test sinc(0) = 1
         assert!((SincResampler::sinc(0.0) - 1.0).abs() < 1e-6);
 
-        // Test sinc at very small values
         assert!((SincResampler::sinc(1e-7) - 1.0).abs() < 1e-6);
 
-        // Test sinc at other values
         let val = SincResampler::sinc(1.0);
-        assert!(val.abs() < 0.01); // sinc(1) ≈ 0
+        assert!(val.abs() < 0.01);
 
-        // Test sinc symmetry
         assert!((SincResampler::sinc(2.0) - SincResampler::sinc(-2.0)).abs() < 1e-6);
     }
 
@@ -139,7 +135,6 @@ mod tests {
     fn test_resampler_reset() {
         let mut resampler = SincResampler::new(48000, 44100, 2);
 
-        // Simulate some processing
         resampler.index = 0.5;
         for ch in &mut resampler.buffer {
             for x in ch.iter_mut() {
@@ -147,7 +142,6 @@ mod tests {
             }
         }
 
-        // Reset
         resampler.reset();
 
         assert_eq!(resampler.index, 0.0);
@@ -171,12 +165,11 @@ mod tests {
     #[test]
     fn test_resampler_process_silence() {
         let mut resampler = SincResampler::new(48000, 48000, 2);
-        let input = vec![0i16; 20]; // 10 stereo frames
+        let input = vec![0i16; 20];
         let mut output = Vec::new();
 
         resampler.process(&input, &mut output);
 
-        // With passthrough ratio, output should be roughly same size
         assert!(!output.is_empty());
         for &sample in &output {
             assert_eq!(sample, 0);
@@ -186,7 +179,7 @@ mod tests {
     #[test]
     fn test_resampler_process_mono() {
         let mut resampler = SincResampler::new(48000, 48000, 1);
-        let input = vec![1000i16; 10]; // 10 mono frames
+        let input = vec![1000i16; 10];
         let mut output = Vec::new();
 
         resampler.process(&input, &mut output);
@@ -196,13 +189,12 @@ mod tests {
     #[test]
     fn test_resampler_process_clamp() {
         let mut resampler = SincResampler::new(48000, 48000, 1);
-        // Fill buffer to test clamping
+
         let input = vec![i16::MAX; 100];
         let mut output = Vec::new();
 
         resampler.process(&input, &mut output);
 
-        // Output should be clamped to i16 range
         for &sample in &output {
             assert!((i16::MIN..=i16::MAX).contains(&sample));
         }
@@ -224,10 +216,8 @@ mod tests {
     fn test_resampler_table_generation() {
         let resampler = SincResampler::new(48000, 44100, 2);
 
-        // Table should have 32 entries
         assert_eq!(resampler.table.len(), 32);
 
-        // Table values should be finite
         for &val in &resampler.table {
             assert!(val.is_finite());
         }

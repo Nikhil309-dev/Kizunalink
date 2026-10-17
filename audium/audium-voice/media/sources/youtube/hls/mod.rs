@@ -37,9 +37,7 @@ const PREFETCH_SEGMENTS: usize = 4;
 /// Low-water mark: when the active buffer has fewer bytes than this, wake
 /// the background thread to start prefetching the next segment early.
 /// Set to 512 KiB to ensure the next segment is always ready before we run out.
-const LOW_WATER_BYTES: usize = 512 * 1024; // 512 KiB
-
-// ──────────────────── Shared state between reader & prefetcher ────────────────
+const LOW_WATER_BYTES: usize = 512 * 1024;
 
 /// Commands sent from the reader thread to the prefetch thread.
 enum PrefetchCommand {
@@ -72,8 +70,6 @@ struct SharedState {
     error: Option<String>,
 }
 
-// ──────────────────── HlsReader ──────────────────────────────────────────────
-
 pub struct HlsReader {
     /// Active buffer being consumed by `read()`.
     buf: Vec<u8>,
@@ -98,7 +94,6 @@ pub struct HlsReader {
 
 impl Drop for HlsReader {
     fn drop(&mut self) {
-        // Signal the background thread to stop.
         self.abort_flag.store(true, Ordering::Relaxed);
         {
             let (lock, cvar) = &*self.shared;
@@ -165,7 +160,6 @@ impl HlsReader {
             return Err("HLS playlist contained no segments".into());
         }
 
-        // Extract durations for seeking support.
         let segment_durations: Vec<f64> = segment_urls
             .iter()
             .map(|r| r.duration.unwrap_or(0.0))
@@ -174,7 +168,6 @@ impl HlsReader {
 
         let all_segments = segment_urls.clone();
 
-        // ── Bootstrap: fetch init segment + first batch synchronously ──
         let mut initial_buf = Vec::with_capacity(512 * 1024);
         let mut cached_map_data = None;
 
@@ -186,20 +179,9 @@ impl HlsReader {
             cached_map_data = Some(map_data);
         }
 
-        // Bootstrap: fetch exactly ONE segment synchronously so decoding can start
-        // immediately. The background thread fills the rest concurrently.
-        // Fetching more here (e.g. 3) would block the decode thread for 3× network RTT.
         let first_batch_count = 1_usize.min(segment_urls.len());
         let mut pending = segment_urls;
         let first_batch: Vec<Resource> = pending.drain(..first_batch_count).collect();
-
-        /*
-        tracing::debug!(
-            "HLS: bootstrap fetching {} segments (0 → {})",
-            first_batch.len(),
-            first_batch.len()
-        );
-        */
 
         for res in &first_batch {
             let resolved = resolve_resource_static(res, &cipher_manager, &player_url)?;
@@ -208,10 +190,9 @@ impl HlsReader {
 
         let current_segment_index = first_batch.len();
 
-        // ── Set up shared state and spawn background thread ──
         let shared_state = SharedState {
             next_buf: Vec::with_capacity(512 * 1024),
-            need_data: true, // start filling immediately
+            need_data: true,
             pending,
             current_segment_index,
             command: PrefetchCommand::Continue,
@@ -223,7 +204,6 @@ impl HlsReader {
         let shared = Arc::new((Mutex::new(shared_state), Condvar::new()));
         let shared_bg = Arc::clone(&shared);
 
-        // Clone what the background thread needs.
         let bg_client = client;
         let bg_cipher = cipher_manager;
         let bg_player_url = player_url;
@@ -303,14 +283,12 @@ impl HlsReader {
             elapsed
         );
 
-        // Clear active buffer.
         self.buf.clear();
         self.pos = 0;
 
-        // Tell background thread to seek.
         {
             let (lock, cvar) = &*self.shared;
-            // Set abort flag first so the thread's between-segment check bails immediately.
+
             self.abort_flag.store(true, Ordering::Relaxed);
             let mut state = lock.lock();
             state.command = PrefetchCommand::Seek(target_index);
@@ -318,15 +296,13 @@ impl HlsReader {
             state.seek_done = false;
             cvar.notify_one();
 
-            // Wait for the background thread to confirm seek is complete.
             while !state.seek_done {
                 cvar.wait(&mut state);
             }
             state.seek_done = false;
-            // Clear the flag — background thread is now fetching for the new position.
+
             self.abort_flag.store(false, Ordering::Relaxed);
 
-            // Swap in whatever the background thread prepared.
             std::mem::swap(&mut self.buf, &mut state.next_buf);
             state.next_buf.clear();
             state.need_data = true;
@@ -342,9 +318,8 @@ impl Read for HlsReader {
         if out.is_empty() {
             return Ok(0);
         }
-        // If we have data in the active buffer, serve it immediately.
+
         if self.pos < self.buf.len() {
-            // If we're running low, wake the background thread early.
             let remaining = self.buf.len() - self.pos;
             if remaining <= LOW_WATER_BYTES {
                 let (lock, cvar) = &*self.shared;
@@ -363,7 +338,6 @@ impl Read for HlsReader {
             return Ok(n);
         }
 
-        // Active buffer exhausted — swap with the pre-filled next buffer.
         let (lock, cvar) = &*self.shared;
         let mut state = lock.lock();
 
@@ -371,30 +345,27 @@ impl Read for HlsReader {
             if !state.next_buf.is_empty() {
                 break;
             }
-            // Surface a background fetch failure before any premature EOS.
+
             if let Some(err) = state.error.as_ref() {
                 return Err(io::Error::other(err.clone()));
             }
             if state.eos {
-                return Ok(0); // End of stream
+                return Ok(0);
             }
             state.need_data = true;
             cvar.notify_one();
             cvar.wait(&mut state);
         }
 
-        // Instant swap: move pre-filled buffer into active position.
         self.buf.clear();
         self.pos = 0;
         std::mem::swap(&mut self.buf, &mut state.next_buf);
         state.next_buf.clear();
 
-        // Signal background thread to start filling the next buffer.
         state.need_data = true;
         cvar.notify_one();
         drop(state);
 
-        // Now serve from the freshly-swapped buffer.
         let available = &self.buf[self.pos..];
         let n = out.len().min(available.len());
         out[..n].copy_from_slice(&available[..n]);
@@ -438,36 +409,29 @@ fn prefetch_loop(
     let (lock, cvar) = &*shared;
 
     loop {
-        // Wait until the reader signals it needs data.
         let mut state = lock.lock();
         while !state.need_data {
             cvar.wait(&mut state);
         }
 
-        // Check for commands.
         match std::mem::replace(&mut state.command, PrefetchCommand::Continue) {
             PrefetchCommand::Stop => {
                 return;
             }
 
             PrefetchCommand::Seek(target_index) => {
-                // Reset for seek.
                 state.next_buf.clear();
                 state.eos = false;
                 state.current_segment_index = target_index;
                 state.pending = all_segments[target_index..].to_vec();
 
-                // Re-use cached map data if available.
                 if let Some(map_data) = &cached_map_data {
                     state.next_buf.extend_from_slice(map_data);
                 }
 
-                // Fetch JUST ONE segment to start playback ASAP (minimal latency).
-                // The remaining segments will be fetched in the next loop iteration.
                 let count = if !state.pending.is_empty() { 1 } else { 0 };
                 let batch: Vec<Resource> = state.pending.drain(..count).collect();
 
-                // Drop the lock while fetching (network I/O).
                 drop(state);
 
                 let mut tmp_buf = Vec::with_capacity(256 * 1024);
@@ -491,13 +455,10 @@ fn prefetch_loop(
                     }
                 }
 
-                // Re-acquire lock and store data.
                 let mut state = lock.lock();
                 if let Some(e) = fetch_error {
                     tracing::warn!("HLS prefetch: segment fetch error during seek: {}", e);
-                    // Keep whatever was decoded before the failure, then fail the
-                    // stream. `seek_done` must still be set or the seeking reader
-                    // would block forever.
+
                     state.next_buf.extend_from_slice(&tmp_buf);
                     state.error = Some(e);
                     state.seek_done = true;
@@ -515,9 +476,7 @@ fn prefetch_loop(
                 continue;
             }
 
-            PrefetchCommand::Continue => {
-                // Normal prefetch path below.
-            }
+            PrefetchCommand::Continue => {}
         }
 
         if state.pending.is_empty() {
@@ -527,29 +486,15 @@ fn prefetch_loop(
             continue;
         }
 
-        // Fetch the next batch of segments.
         let count = PREFETCH_SEGMENTS.min(state.pending.len());
         let batch: Vec<Resource> = state.pending.drain(..count).collect();
         let seg_idx = state.current_segment_index;
 
-        // Drop lock while doing network I/O.
         drop(state);
-
-        /*
-        tracing::debug!(
-            "HLS prefetch: fetching {} segments (index {} → {})",
-            batch.len(),
-            seg_idx,
-            seg_idx + batch.len()
-        );
-        */
 
         let mut tmp_buf = Vec::with_capacity(256 * 1024);
         let mut fetch_error: Option<String> = None;
         for res in &batch {
-            // Fast abort check between segments — no mutex, just an atomic load.
-            // The full command (Stop/Seek) will be handled in the outer loop's
-            // mutex wait after this inner loop breaks.
             if abort_flag.load(Ordering::Relaxed) {
                 break;
             }
@@ -572,17 +517,12 @@ fn prefetch_loop(
             }
         }
 
-        // Re-acquire lock and store the fetched data.
         let mut state = lock.lock();
         if !matches!(state.command, PrefetchCommand::Continue) {
-            // Re-enter the loop to immediately handle the new command (e.g. Seek)
-            // without resetting need_data to false, which would cause a deadlock
             continue;
         }
 
         if let Some(e) = fetch_error {
-            // Preserve segments decoded before the failure, then fail the stream
-            // so the caller sees a real error rather than premature EOS.
             state.next_buf.extend_from_slice(&tmp_buf);
             state.error = Some(e);
             state.eos = true;
@@ -623,7 +563,6 @@ async fn fetch_and_demux_into(
     if is_ts {
         let adts = extract_adts_from_ts(&raw);
         if !adts.is_empty() {
-            // tracing::debug!("HLS: demuxed {} TS bytes → {} ADTS bytes", raw.len(), adts.len());
             out.extend_from_slice(&adts);
         } else {
             return Err("HLS: MPEG-TS demux produced no audio".into());

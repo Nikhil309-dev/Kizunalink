@@ -53,7 +53,7 @@ impl SpotifyTokenTracker {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_millis() as u64;
-                // Keep 5-second margin before expiry to account for request time
+
                 if token.expiry_ms > now + 5_000 {
                     return Some(token.access_token.clone());
                 }

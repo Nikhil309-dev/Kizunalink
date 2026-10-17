@@ -208,9 +208,6 @@ mod tests {
 
     #[test]
     fn search_result_from_tracks_fills_only_tracks() {
-        // The `load_search` fallback lifts a `load` result into a SearchResult;
-        // every non-track collection must be an empty array (not null) so the
-        // JSON shape matches a native search response.
         let track = Track {
             encoded: String::new(),
             info: TrackInfo {
@@ -240,11 +237,6 @@ mod tests {
 
     #[test]
     fn search_result_wire_shape_is_pinned() {
-        // `/v4/loadsearch` is an Audium-only extension (upstream Lavalink has no
-        // such route and NodeLink does not implement one), so its contract is
-        // ours to define and must not drift silently. Pin the six top-level keys
-        // and their camelCase names; `from_tracks_fills_only_tracks` covers the
-        // empty-array requirement for the collections.
         let empty = SearchResult::from_tracks(Vec::new());
         let v = serde_json::to_value(&empty).unwrap();
         let obj = v.as_object().expect("SearchResult serializes as an object");
@@ -271,8 +263,6 @@ mod tests {
 
     #[test]
     fn load_error_serializes_with_error_load_type() {
-        // Per the Lavalink v4 REST spec the error load result is
-        // `{"loadType":"error","data":{...}}` — `loadFailed` is not a load type.
         let json = serde_json::to_value(LoadResult::Error(LoadError {
             message: Some("HTTP 403".into()),
             severity: crate::common::Severity::Common,

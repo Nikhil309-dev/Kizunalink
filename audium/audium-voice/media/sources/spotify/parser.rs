@@ -10,7 +10,6 @@ pub struct SpotifyParser;
 
 impl SpotifyParser {
     pub fn parse_track_inner(track_val: &Value, artwork_url: Option<String>) -> Option<TrackInfo> {
-        // Support both flat and nested track structures
         let track = if track_val.get("uri").is_some() {
             track_val
         } else if let Some(inner) = track_val.get("track") {
@@ -32,7 +31,6 @@ impl SpotifyParser {
 
         let title = track.get("name").and_then(|v| v.as_str())?.to_owned();
 
-        // Artist name resolution — handles multiple API response shapes
         let author = Self::extract_author(track);
 
         let length = track
@@ -86,7 +84,6 @@ impl SpotifyParser {
     }
 
     pub fn extract_author(track: &Value) -> String {
-        // Shape 1: artists.items[].profile.name  (partner API search / getTrack)
         if let Some(artists) = track
             .get("artists")
             .and_then(|a| a.get("items"))
@@ -106,7 +103,6 @@ impl SpotifyParser {
             }
         }
 
-        // Shape 2: firstArtist / otherArtists split
         if let Some(first_artist) = track
             .get("firstArtist")
             .and_then(|a| a.get("items"))
@@ -140,7 +136,6 @@ impl SpotifyParser {
             return all_artists.join(", ");
         }
 
-        // Shape 3: artists[] flat array (official API)
         if let Some(artists) = track.get("artists").and_then(|a| a.as_array()) {
             let names: Vec<_> = artists
                 .iter()
@@ -155,7 +150,6 @@ impl SpotifyParser {
             }
         }
 
-        // Fallback
         track
             .get("artist")
             .and_then(|a| a.get("name"))
@@ -169,7 +163,6 @@ impl SpotifyParser {
             .get("externalIds")
             .or_else(|| track.get("external_ids"))
             .and_then(|ids| {
-                // Direct property (common in search results)
                 if let Some(isrc) = ids
                     .get("isrc")
                     .and_then(|v| v.as_str())
@@ -177,7 +170,7 @@ impl SpotifyParser {
                 {
                     return Some(isrc.to_owned());
                 }
-                // Items list (common in fetchTrack)
+
                 ids.get("items")
                     .and_then(|items| items.as_array())
                     .and_then(|items| {

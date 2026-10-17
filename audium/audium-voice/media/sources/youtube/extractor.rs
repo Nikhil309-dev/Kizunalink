@@ -104,7 +104,6 @@ pub fn extract_from_next(body: &Value, source_name: &str) -> Option<(Vec<Track>,
         return None;
     }
 
-    // Attempt to extract title
     let title = contents_root
         .get("tabbedRenderer")
         .and_then(|t| t.get("watchNextTabbedResultsRenderer"))
@@ -151,7 +150,6 @@ pub fn extract_from_browse(body: &Value, source_name: &str) -> Option<(Vec<Track
     if let Some(section_list) = find_section_list(body) {
         if let Some(contents) = section_list.get("contents").and_then(|c| c.as_array()) {
             for section in contents {
-                // For standard YouTube playlists
                 if let Some(list) = section
                     .get("itemSectionRenderer")
                     .and_then(|i| i.get("contents"))
@@ -167,7 +165,7 @@ pub fn extract_from_browse(body: &Value, source_name: &str) -> Option<(Vec<Track
                         }
                     }
                 }
-                // For YouTube Music shelves
+
                 if let Some(list) = section
                     .get("musicShelfRenderer")
                     .and_then(|s| s.get("contents"))
@@ -179,7 +177,7 @@ pub fn extract_from_browse(body: &Value, source_name: &str) -> Option<(Vec<Track
                         }
                     }
                 }
-                // Additional check for music playlist shelf renderer directly in section contents
+
                 if let Some(shelf) = section.get("musicPlaylistShelfRenderer")
                     && let Some(list) = shelf.get("contents").and_then(|c| c.as_array())
                 {
@@ -192,7 +190,6 @@ pub fn extract_from_browse(body: &Value, source_name: &str) -> Option<(Vec<Track
             }
         }
     } else {
-        // Fallback: check simpler structures for browse (like music playlist shelf directly)
         if let Some(contents) = body
             .get("contents")
             .and_then(|c| c.get("singleColumnBrowseResultsRenderer"))
@@ -258,7 +255,6 @@ pub fn find_section_list(value: &Value) -> Option<&Value> {
 }
 
 pub fn extract_track(item: &Value, source_name: &str) -> Option<Track> {
-    // Check for different renderer types
     let renderer = item
         .get("videoRenderer")
         .or_else(|| item.get("compactVideoRenderer"))
@@ -292,7 +288,6 @@ pub fn extract_track(item: &Value, source_name: &str) -> Option<Track> {
                 .and_then(|v| v.as_str())
         })?;
 
-    // Improved title extraction
     let title = get_text(renderer.get("title").or_else(|| {
         renderer
             .get("flexColumns")
@@ -302,7 +297,6 @@ pub fn extract_track(item: &Value, source_name: &str) -> Option<Track> {
     })?)
     .unwrap_or_else(|| "Unknown Title".to_string());
 
-    // Improved author extraction
     let author = if let Some(long_byline) = renderer.get("longBylineText") {
         get_text(long_byline)
     } else if let Some(short_byline) = renderer.get("shortBylineText") {
@@ -315,8 +309,6 @@ pub fn extract_track(item: &Value, source_name: &str) -> Option<Track> {
         .and_then(|c| c.get("musicResponsiveListItemFlexColumnRenderer"))
         .and_then(|r| r.get("text"))
     {
-        // For music responsive list items, the second column often contains "Artist • Album • ...".
-        // We take the first run as the artist.
         if let Some(runs) = flex.get("runs").and_then(|r| r.as_array()) {
             runs.first()
                 .and_then(|r| r.get("text"))
@@ -357,7 +349,6 @@ pub fn extract_track(item: &Value, source_name: &str) -> Option<Track> {
             .and_then(get_text)
             .map(|s| parse_duration(&s))
             .or_else(|| {
-                // Fallback to lengthSeconds if available (e.g. videoRenderer)
                 renderer
                     .get("lengthSeconds")
                     .and_then(|v| v.as_str())
@@ -415,7 +406,7 @@ fn get_thumbnail(renderer: &Value) -> Option<String> {
         .get("thumbnail")
         .and_then(|t| t.get("thumbnails"))
         .and_then(|arr| arr.as_array())
-        .and_then(|arr| arr.last()) // Get highest quality
+        .and_then(|arr| arr.last())
         .and_then(|thumb| thumb.get("url"))
         .and_then(|url| url.as_str())
         .map(|s| s.split('?').next().unwrap_or(s).to_string())

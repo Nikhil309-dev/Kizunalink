@@ -126,8 +126,7 @@ pub fn parse_m3u8(text: &str, base_url: &str) -> M3u8Playlist {
                     range: pending_range.take(),
                     duration: seg_duration,
                 });
-                // The lookahead already consumed any BYTERANGE tag before this
-                // segment. Parsing it again advances implicit offsets twice.
+
                 i = j;
             }
         }

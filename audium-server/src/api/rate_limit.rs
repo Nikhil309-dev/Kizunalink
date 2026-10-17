@@ -190,7 +190,6 @@ pub async fn rate_limit(State(state): State<Arc<AppState>>, req: Request, next: 
         .map(|ci| ci.0.ip());
 
     let Some(ip) = peer else {
-        // No socket info (e.g. synthetic service calls) — never block on missing data.
         return next.run(req).await;
     };
 
@@ -259,7 +258,7 @@ mod tests {
 
     #[test]
     fn burst_over_capacity_is_rejected_with_retry_after() {
-        let l = RateLimiter::new(60); // 60/min -> 1 token/s, capacity 60
+        let l = RateLimiter::new(60);
         let t0 = Instant::now();
         for _ in 0..60 {
             assert!(l.check(ip(1), t0).is_none());
@@ -267,20 +266,18 @@ mod tests {
         let over = l.check(ip(1), t0).expect("61st request must be throttled");
         assert!(!over.is_zero());
 
-        // Different IPs have independent buckets.
         assert!(l.check(ip(2), t0).is_none());
     }
 
     #[test]
     fn buckets_refill_over_time() {
-        let l = RateLimiter::new(60); // 1 token per second
+        let l = RateLimiter::new(60);
         let t0 = Instant::now();
         for _ in 0..60 {
             l.check(ip(1), t0);
         }
         assert!(l.check(ip(1), t0).is_some());
-        // After 3 seconds exactly 3 tokens (1/s refill rate) are back: three pass, the
-        // fourth is throttled again.
+
         let t3 = t0 + Duration::from_secs(3);
         assert!(l.check(ip(1), t3).is_none());
         assert!(l.check(ip(1), t3).is_none());
@@ -331,7 +328,7 @@ mod tests {
         l.check_with_status(ip(1), t0);
         assert_eq!(l.peek(ip(1), t0).1, 9, "peek sees tokens left after check");
         assert_eq!(l.peek(ip(1), t0).1, 9, "peek is idempotent");
-        // Unseen IP reports a full bucket without creating one.
+
         assert_eq!(l.peek(ip(9), t0).1, 10);
         assert_eq!(l.len(), 1);
     }

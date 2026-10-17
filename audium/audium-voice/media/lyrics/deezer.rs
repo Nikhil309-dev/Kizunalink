@@ -51,7 +51,7 @@ impl DeezerProvider {
             client: client_builder
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new()),
-            token_manager: TokenManager::new(300_000), // 5 minutes
+            token_manager: TokenManager::new(300_000),
         }
     }
 

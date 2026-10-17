@@ -89,7 +89,7 @@ impl AppConfig {
             if Path::new(&path).exists() {
                 return path;
             }
-            return path; // Let the read fail fast with a clear "No such file" error.
+            return path;
         }
 
         if Path::new("config.toml").exists() {
@@ -101,7 +101,7 @@ impl AppConfig {
             );
             "config.example.toml".to_string()
         } else {
-            "config.toml".to_string() // Produces a clear read error naming the path.
+            "config.toml".to_string()
         }
     }
 
@@ -126,9 +126,7 @@ impl AppConfig {
             let cs: ConfigServerConfig = cs_val.clone().try_into()?;
             let remote_toml = fetch_remote_config(&cs).await?;
             let mut config: Self = toml::from_str(&remote_toml)?;
-            // AUDIUM_* overrides must win regardless of where the TOML came from, so
-            // secrets injected through the environment still take effect with a remote
-            // config server (where embedding them in the TOML is least safe).
+
             config.apply_env_overrides()?;
             config.validate()?;
             return Ok(config);
@@ -136,12 +134,8 @@ impl AppConfig {
 
         let mut config: Self = toml::from_str(&raw)?;
 
-        // 12-factor overrides: AUDIUM_* env vars win over the TOML file. This is the
-        // supported way to inject secrets (e.g. `AUDIUM_AUTHORIZATION` from a Docker
-        // secret or k8s Secret) without embedding them in a config file.
         config.apply_env_overrides()?;
 
-        // P06: Validate configuration at startup so bad values fail fast.
         config.validate()?;
 
         Ok(config)
@@ -178,8 +172,6 @@ impl AppConfig {
             self.server.address = v;
         }
         if let Some(v) = non_empty_env("AUDIUM_PORT")? {
-            // Malformed values must fail startup with a configuration error, not
-            // panic from a background task.
             self.server.port = v
                 .parse()
                 .map_err(|e| format!("AUDIUM_PORT must be a number, got {v:?}: {e}"))?;
@@ -217,7 +209,6 @@ impl AppConfig {
 
     /// Validate configuration values. Called at startup to catch errors early.
     fn validate(&self) -> AnyResult<()> {
-        // Validate opus encoding quality range
         if self.player.opus_encoding_quality == 0 || self.player.opus_encoding_quality > 10 {
             return Err(format!(
                 "player.opus_encoding_quality must be 1-10, got {}",
@@ -226,19 +217,14 @@ impl AppConfig {
             .into());
         }
 
-        // Validate port is not zero
         if self.server.port == 0 {
             return Err("server.port must be non-zero".into());
         }
 
-        // N02: a zero-second update interval would flood clients with events.
         if self.server.player_update_interval.is_zero() {
             return Err("server.player_update_interval must be > 0 seconds".into());
         }
 
-        // A zero-second stats/ping interval makes `tokio::time::interval(Duration::ZERO)`
-        // panic inside the WebSocket handler task, which kills the connection and
-        // prevents clients from reconnecting reliably. Reject it at startup.
         if self.server.stats_interval == 0 {
             return Err("server.stats_interval must be > 0 seconds".into());
         }
@@ -246,8 +232,6 @@ impl AppConfig {
             return Err("server.websocket_ping_interval must be > 0 seconds".into());
         }
 
-        // Bound the resumable event queue count so a paused session cannot grow
-        // without limit. (The queue also enforces a byte budget at runtime.)
         if self.server.max_event_queue_size > 10_000 {
             return Err(format!(
                 "server.max_event_queue_size must be <= 10000, got {}",
@@ -256,7 +240,6 @@ impl AppConfig {
             .into());
         }
 
-        // A zero body cap would reject every POST; require a sane floor/ceiling.
         if self.server.max_body_bytes == 0 {
             return Err("server.max_body_bytes must be > 0".into());
         }
@@ -268,7 +251,6 @@ impl AppConfig {
             .into());
         }
 
-        // TLS must have a cert + key when enabled.
         if self.server.tls.enabled
             && (self.server.tls.cert_path.is_none() || self.server.tls.key_path.is_none())
         {
@@ -286,10 +268,6 @@ impl AppConfig {
             );
         }
 
-        // Reject well-known placeholders on *every* bind address. A guessable
-        // secret is no better on loopback than on a public interface: any local
-        // process, a misconfigured reverse proxy, or a container port-forward
-        // can still reach it. There is no safe bind for a known default.
         if is_insecure_placeholder(&self.server.authorization) {
             return Err(format!(
                 "server.authorization is set to the known insecure placeholder {}. \
@@ -408,12 +386,12 @@ fn blank_is_unset_env(name: &str) -> AnyResult<Option<String>> {
 /// secret. Comparison is case-insensitive after trimming, so copies such as
 /// `YoushallNotPass` cannot slip through.
 const INSECURE_PLACEHOLDERS: &[&str] = &[
-    "youshallnotpass", // Lavalink's historical default
+    "youshallnotpass",
     "password",
     "changeme",
     "change-me",
-    "replace-with-your-strong-secret", // shipped in this repo's README/example
-    "replace-with-your-own-long-random-secret", // shipped in this repo's README
+    "replace-with-your-strong-secret",
+    "replace-with-your-own-long-random-secret",
     "your-password",
     "yourpassword",
     "secret",
@@ -445,8 +423,6 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
-    // `apply_env_overrides` reads process-global env vars; serialize tests that
-    // mutate them to avoid cross-test interference.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     /// A minimal, *valid* config. `authorization` is explicit because it no
@@ -544,8 +520,6 @@ mod tests {
 
     #[test]
     fn logging_file_section_defaults_enabled_true() {
-        // A pre-existing `[logging.file]` section (no `enabled` key) must keep
-        // writing its file — backward compatible.
         let cfg = cfg_from_toml(
             "server.address='127.0.0.1'\nserver.port=28453\n\
              server.authorization='base-valid-secret'\n\
@@ -576,7 +550,6 @@ mod tests {
 
     #[test]
     fn load_applies_env_overrides_and_validation() {
-        // Env-provided TLS should pass validation with cert+key …
         let cfg = cfg_with_envs(&[
             ("AUDIUM_TLS_ENABLED", "true"),
             ("AUDIUM_TLS_CERT", "/certs/c.pem"),
@@ -585,7 +558,6 @@ mod tests {
         cfg.validate()
             .expect("TLS env override with cert+key validates");
 
-        // … and fail when only `enabled` is set.
         let bad = cfg_with_envs(&[("AUDIUM_TLS_ENABLED", "true")]);
         let err = bad.validate().unwrap_err().to_string();
         assert!(
@@ -596,8 +568,6 @@ mod tests {
 
     #[test]
     fn missing_authorization_is_rejected() {
-        // No `authorization` key at all: the field defaults to empty (there is
-        // deliberately no serde default secret) and validation must refuse it.
         let cfg = cfg_from_toml("[server]\naddress='127.0.0.1'\n");
         assert_eq!(cfg.server.authorization, "");
         let err = cfg.validate().unwrap_err().to_string();
@@ -609,7 +579,6 @@ mod tests {
 
     #[test]
     fn empty_authorization_is_rejected() {
-        // Empty / whitespace-only supplied through TOML.
         for raw in ["", "   "] {
             let cfg = cfg_from_toml(&format!("[server]\nauthorization={raw:?}\n"));
             let err = cfg.validate().unwrap_err().to_string();
@@ -619,8 +588,6 @@ mod tests {
             );
         }
 
-        // Empty / whitespace-only supplied through the environment fails even
-        // earlier, in `apply_env_overrides`.
         for value in ["", "   "] {
             let err = try_cfg_with_envs(&[("AUDIUM_AUTHORIZATION", value)])
                 .expect_err("empty AUDIUM_AUTHORIZATION must be rejected")
@@ -634,9 +601,6 @@ mod tests {
 
     #[test]
     fn empty_env_value_is_a_named_misconfiguration_for_every_var() {
-        // A set-but-empty variable must be reported by name for every override,
-        // so a blank `AUDIUM_ADDRESS` cannot surface later as a cryptic
-        // `AddrParseError(Ip)` and a blank scalar cannot silently clear a field.
         for name in [
             "AUDIUM_ADDRESS",
             "AUDIUM_PORT",
@@ -660,10 +624,6 @@ mod tests {
 
     #[test]
     fn blank_optional_tls_paths_are_treated_as_unset() {
-        // Pterodactyl (and Compose/Kubernetes) export *every* declared variable,
-        // so a TLS path the operator left blank arrives as an empty string. That
-        // must mean "no override", not a fatal misconfiguration, or the server
-        // can never boot from the panel.
         for name in ["AUDIUM_TLS_CERT", "AUDIUM_TLS_KEY"] {
             for value in ["", "   "] {
                 let cfg = cfg_with_envs(&[(name, value)]);
@@ -678,12 +638,10 @@ mod tests {
             }
         }
 
-        // A blank pair must still validate while TLS is disabled …
         let cfg = cfg_with_envs(&[("AUDIUM_TLS_CERT", ""), ("AUDIUM_TLS_KEY", "")]);
         cfg.validate()
             .expect("blank TLS paths with TLS off must validate");
 
-        // … but blank paths must NOT silently satisfy TLS enabled.
         let cfg = cfg_with_envs(&[
             ("AUDIUM_TLS_ENABLED", "true"),
             ("AUDIUM_TLS_CERT", ""),
@@ -692,14 +650,12 @@ mod tests {
         cfg.validate()
             .expect_err("blank TLS paths with TLS on must fail validation");
 
-        // … and a non-blank value must still be honoured.
         let cfg = cfg_with_envs(&[("AUDIUM_TLS_CERT", "/certs/c.pem")]);
         assert_eq!(cfg.server.tls.cert_path.as_deref(), Some("/certs/c.pem"));
     }
 
     #[test]
     fn unsetting_or_setting_a_real_env_value_behaves_as_before() {
-        // Unset variables keep the TOML value; non-blank overrides still apply.
         let cfg = cfg_with_envs(&[]);
         assert_eq!(cfg.server.address, "127.0.0.1");
 
@@ -710,8 +666,6 @@ mod tests {
 
     #[test]
     fn default_placeholder_authorization_rejected_on_every_bind() {
-        // The historical default must be refused on loopback *and* public binds:
-        // there is no safe interface for a known credential.
         for address in ["127.0.0.1", "0.0.0.0", "::1"] {
             let cfg = cfg_from_toml(&format!(
                 "[server]\naddress={address:?}\nauthorization='youshallnotpass'\n"
@@ -723,11 +677,9 @@ mod tests {
             );
         }
 
-        // Case and surrounding whitespace must not smuggle it through.
         let cfg = cfg_from_toml("[server]\nauthorization='  YouShallNotPass  '\n");
         assert!(cfg.validate().is_err());
 
-        // And via the environment on a loopback bind.
         let err = cfg_with_envs(&[
             ("AUDIUM_ADDRESS", "127.0.0.1"),
             ("AUDIUM_AUTHORIZATION", "youshallnotpass"),
@@ -767,24 +719,17 @@ mod tests {
                 .unwrap_or_else(|e| panic!("valid secret on {address} must pass: {e}"));
         }
 
-        // A short-but-not-placeholder secret is still accepted (we do not
-        // invent length policy; the contract is only "not missing, not known").
         let cfg = cfg_with_envs(&[("AUDIUM_AUTHORIZATION", "s3cr3t!")]);
         cfg.validate().expect("non-placeholder secret passes");
     }
 
     #[test]
     fn validation_error_never_contains_the_secret() {
-        // Rejecting a placeholder must not echo an unrelated secret value. The
-        // error text for a placeholder is a fixed label; the operator's own
-        // secret is never interpolated into any validation message.
         let cfg = cfg_from_toml("[server]\nauthorization='youshallnotpass'\n");
         let err = cfg.validate().unwrap_err().to_string();
-        // The forbidden placeholder is named (a public constant), which is safe…
+
         assert!(err.contains("youshallnotpass"));
 
-        // …but a real, rejected-for-emptiness config must not leak its trimmed
-        // content anywhere.
         let cfg = cfg_from_toml("[server]\nauthorization='   '\n");
         let err = cfg.validate().unwrap_err().to_string();
         assert!(!err.contains("   "));
@@ -792,16 +737,12 @@ mod tests {
 
     #[test]
     fn no_cli_args_is_accepted() {
-        // argv[0] only (the normal case), plus the empty-argv case for a spawn
-        // that provides no program path.
         AppConfig::reject_unknown_args(["audium-server".to_string()]).unwrap();
         AppConfig::reject_unknown_args(Vec::<String>::new()).unwrap();
     }
 
     #[test]
     fn unknown_cli_arg_is_rejected() {
-        // A `--config` style flag must not be silently ignored: the error names
-        // the offending argument and points at the supported configuration path.
         let err = AppConfig::reject_unknown_args([
             "audium-server".to_string(),
             "--config".to_string(),
@@ -827,8 +768,7 @@ mod tests {
         unsafe {
             std::env::set_var("AUDIUM_CONFIG_PATH", "/tmp/audium-does-not-exist.toml");
         }
-        // The override is returned verbatim (so the subsequent read fails fast with a
-        // clear path instead of silently falling back to a different file).
+
         assert_eq!(
             AppConfig::resolve_config_path(),
             "/tmp/audium-does-not-exist.toml"
@@ -861,9 +801,6 @@ mod tests {
             "the example must keep a rejected placeholder so an unchanged copy cannot start"
         );
 
-        // Validate the file as a *fresh copy* would be validated at startup:
-        // with no ambient `AUDIUM_*` overrides in play, so a documented live-node
-        // shell cannot make the assertion pass by accident.
         let _guard = ENV_LOCK.lock().unwrap();
         let ambient: Vec<(String, String)> = std::env::vars()
             .filter(|(k, _)| k.starts_with("AUDIUM_"))
@@ -899,7 +836,6 @@ mod tests {
 
         let example = cfg_from_toml(&raw);
 
-        // Field names declared in `SourcesConfig`, via serde's own view of it.
         let sources = serde_json::to_value(&example.sources)
             .expect("SourcesConfig serializes")
             .as_object()
@@ -912,8 +848,6 @@ mod tests {
             .lines()
             .filter_map(|l| l.trim().strip_prefix("[sources."))
             .filter_map(|l| l.strip_suffix(']'))
-            // `[sources.youtube.cipher]` is a nested sub-table of `youtube`,
-            // not a source of its own, so only the first segment names a source.
             .filter_map(|l| l.split('.').next())
             .map(str::to_owned)
             .collect::<std::collections::BTreeSet<_>>();

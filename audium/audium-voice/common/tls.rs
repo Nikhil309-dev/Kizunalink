@@ -33,8 +33,6 @@ static INSTALLED: OnceLock<()> = OnceLock::new();
 /// `rustls` features, so it is always compiled in.
 pub fn install_crypto_provider() {
     INSTALLED.get_or_init(|| {
-        // A provider may already be installed by another component; that is a
-        // success, not an error, so the result is deliberately discarded.
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
 }

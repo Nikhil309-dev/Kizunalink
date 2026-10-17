@@ -18,7 +18,6 @@ pub fn encode_track(
 ) -> Result<String, CodecError> {
     let mut blob = BinaryBuffer::with_capacity(128);
 
-    // Force version 3 for modern compatibility
     blob.write_u8(V3)?;
     blob.write_string(&metadata.title)?;
     blob.write_string(&metadata.author)?;
@@ -33,7 +32,6 @@ pub fn encode_track(
     blob.write_string(&metadata.source_name)?;
     blob.write_u64::<BigEndian>(metadata.position)?;
 
-    // Append userData if it's not null and not empty
     if let Some(obj) = user_data.as_object() {
         if !obj.is_empty() {
             blob.write_json(user_data)?;

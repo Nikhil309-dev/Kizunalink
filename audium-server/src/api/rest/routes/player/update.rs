@@ -100,10 +100,7 @@ pub async fn update_player(
         } else {
             None
         };
-        // A track-bearing update bypasses the `handle_player_state` pause path
-        // (which only runs when `!loading_new_track`). Keep the actual track
-        // handle's pause state in sync instead of flipping the bare flag —
-        // `set_paused` also pauses/resumes the underlying frames.
+
         if let Some(paused) = body.paused {
             player.set_paused(paused);
         }
@@ -275,9 +272,6 @@ async fn handle_voice(
     session: &Arc<Session>,
     _player_arc: &Arc<tokio::sync::RwLock<PlayerContext>>,
 ) -> Result<(), (StatusCode, Json<audium::common::AudiumError>)> {
-    // Discord/Lavalink signals "leave voice" as a state with a null channel.
-    // Handle it as an explicit disconnect rather than rejecting it as a partial
-    // update (which left the gateway task running with stale credentials).
     if voice.channel_id.is_none() {
         if let Some(task) = player.gateway_task.take() {
             task.abort();
@@ -319,7 +313,7 @@ async fn handle_voice(
         player
             .voice_ready
             .store(false, std::sync::atomic::Ordering::Release);
-        // Bounded so a stalled WebSocket consumer cannot grow this queue without bound.
+
         let (event_tx, mut event_rx) = tokio::sync::mpsc::channel(256);
         let session_clone = session.clone();
         tokio::spawn(async move {
@@ -347,9 +341,6 @@ async fn handle_voice(
         session.register_task(handle.abort_handle());
         player.gateway_task = Some(handle);
     } else {
-        // Without a user id we cannot run DAVE key exchange or build a voice
-        // session, so this update would otherwise be dropped in total silence
-        // while the node still looked healthy.
         tracing::warn!(
             "[{}] Dropping voice update: session has no user id (missing or unparseable User-Id header)",
             player.guild_id
@@ -496,8 +487,6 @@ async fn apply_track_update(
         )
         .await;
     } else if let Some(user_data) = track_update.user_data {
-        // A userData-only update applies to the currently playing track and must
-        // be visible in the echoed Track object (Lavalink: `player.track?.userData = it`).
         player.user_data = user_data.clone();
         if let Some(info) = player.track_info.as_mut() {
             info.user_data = user_data;
@@ -506,8 +495,6 @@ async fn apply_track_update(
 }
 
 async fn stop_player(player: &mut PlayerContext, session: &Arc<Session>) {
-    // B08: capture the real track info *before* mutating player state so the
-    // TrackEnd event carries the actual track rather than a default stub.
     let track_data = player.track.clone();
     let track_info = player.track_info.clone();
     if let Some(handle) = &player.track_handle {
@@ -556,7 +543,6 @@ async fn start_playback(
         _ => None,
     };
 
-    // P10: track-load latency histogram (resolution + arm).
     let load_start = std::time::Instant::now();
     audium::discord::player::start_playback(
         player,
@@ -609,9 +595,6 @@ pub async fn update_session(
             .store(resuming, std::sync::atomic::Ordering::Relaxed);
     }
     if let Some(timeout) = body.timeout {
-        // Clamp like the `configureResuming` opcode does: an unclamped client
-        // value would let one session retain its players/mixer/decoder tasks for
-        // an arbitrarily long window after disconnect.
         store_resume_timeout(&session, timeout);
     }
 

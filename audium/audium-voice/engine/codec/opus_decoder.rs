@@ -36,8 +36,6 @@ pub struct OpusCodecDecoder {
     pcm: Vec<i16>,
 }
 
-// libopus decoder states are not Sync; we only touch the state via
-// `&mut self`, so Sync is safe.
 unsafe impl Sync for OpusCodecDecoder {}
 
 impl Decoder for OpusCodecDecoder {
@@ -91,10 +89,7 @@ impl Decoder for OpusCodecDecoder {
         } else {
             Channels::Stereo
         };
-        // Recreate the decoder at the stream's *own* rate. Forcing 48 kHz here
-        // silently corrupted every seek on non-48-kHz Opus media (distorted or
-        // incorrectly timed audio), because libopus was told to decode a stream
-        // at a rate it was not encoded for.
+
         let rate = opus_sample_rate(self.params.sample_rate.unwrap_or(48_000));
         if let Ok(dec) = OpusDecoder::new(rate, channels) {
             self.decoder = dec;

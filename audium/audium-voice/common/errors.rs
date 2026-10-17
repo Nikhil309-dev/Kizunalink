@@ -91,7 +91,6 @@ mod tests {
 
     #[test]
     fn severity_variants_serialize() {
-        // Ensure serde works
         let json = serde_json::to_string(&Severity::Common).unwrap();
         assert_eq!(json, "\"common\"");
         let json = serde_json::to_string(&Severity::Fault).unwrap();

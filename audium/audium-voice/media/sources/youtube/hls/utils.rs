@@ -9,7 +9,7 @@ pub fn extract_attr_u64(line: &str, key: &str) -> Option<u64> {
 
 pub fn extract_attr_str(line: &str, key: &str) -> Option<String> {
     let key_eq = format!("{}=", key);
-    // Attributes follow #TAG: or a comma
+
     let pos = line
         .find(&format!(":{}", key_eq))
         .map(|p| p + 1)
@@ -31,12 +31,9 @@ pub fn resolve_url(base: &str, maybe_relative: &str) -> String {
         return maybe_relative.to_string();
     }
 
-    // Strip query string and fragment from base before resolving.
-    // This prevents auth tokens (e.g. ?hdnts=...) from being embedded in the path.
     let base_clean = base.split('?').next().unwrap_or(base);
     let base_clean = base_clean.split('#').next().unwrap_or(base_clean);
 
-    // Absolute path → replace host + path.
     if maybe_relative.starts_with('/')
         && let Some(scheme_end) = base_clean.find("://")
     {
@@ -48,7 +45,6 @@ pub fn resolve_url(base: &str, maybe_relative: &str) -> String {
         return format!("{}{}", &base_clean[..host_end], maybe_relative);
     }
 
-    // Relative path → strip last path component from base and append.
     let base_dir = base_clean
         .rfind('/')
         .map(|i| &base_clean[..=i])

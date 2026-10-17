@@ -65,12 +65,8 @@ impl PlayableTrack for TransparentFallbackTrack {
         let (c_tx, c_rx) = flume::bounded::<DecoderCommand>(8);
         let (e_tx, e_rx) = flume::bounded::<String>(1);
 
-        // True once the primary has produced its first audio frame. A failure
-        // after that is a genuine mid-stream error and must *not* trigger a swap
-        // (the mirror would restart the song from the beginning).
         let got_audio = Arc::new(AtomicBool::new(false));
 
-        // Frames from whichever decoder is currently live.
         let f_tx_primary = f_tx.clone();
         let got_audio_for_frames = got_audio.clone();
         tokio::spawn(async move {
@@ -82,17 +78,12 @@ impl PlayableTrack for TransparentFallbackTrack {
             }
         });
 
-        // Route client commands (seek/stop) to the live decoder. The target is
-        // swapped to the mirror's command channel when a fallback happens.
         let cmd_target = Arc::new(Mutex::new(p_cmd));
         let cmd_target_for_router = cmd_target.clone();
         tokio::spawn(async move {
             while let Ok(cmd) = c_rx.recv_async().await {
-                // Hold no lock across a send that could block a swap.
                 let tx = cmd_target_for_router.lock().clone();
-                if tx.send_async(cmd).await.is_err() {
-                    // Live decoder is gone; keep draining until the player stops.
-                }
+                if tx.send_async(cmd).await.is_err() {}
             }
         });
 
@@ -106,26 +97,22 @@ impl PlayableTrack for TransparentFallbackTrack {
 
         tokio::spawn(async move {
             if got_audio_for_err.load(Ordering::Acquire) {
-                // Primary already delivered audio; wait for its terminal error
-                // and forward it without swapping.
                 if let Ok(msg) = p_err.recv_async().await {
                     let _ = e_tx_fb.send(msg);
                 }
                 return;
             }
 
-            // Race the primary's first error against the arrival of its first
-            // frame: whichever happens first decides the outcome.
             tokio::select! {
                 biased;
                 _ = async {
-                    // Wait until audio has been seen (frame task sets the flag).
+
                     while !got_audio_for_err.load(Ordering::Acquire) {
                         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
                     }
                 } => {
-                    // Primary started producing audio — let it run; forward the
-                    // eventual terminal error if one comes.
+
+
                     if let Ok(msg) = p_err.recv_async().await {
                         let _ = e_tx_fb.send(msg);
                     }
@@ -136,7 +123,7 @@ impl PlayableTrack for TransparentFallbackTrack {
                         Err(_) => return,
                     };
                     if got_audio_for_err.load(Ordering::Acquire) {
-                        // Audio slipped through just before the error.
+
                         let _ = e_tx_fb.send(msg);
                         return;
                     }
@@ -156,7 +143,7 @@ impl PlayableTrack for TransparentFallbackTrack {
                                 "Transparent fallback: '{}' now streaming from a mirror",
                                 info.title
                             );
-                            // Forward mirror frames until it ends.
+
                             let f_tx_inner = f_tx_fb.clone();
                             tokio::spawn(async move {
                                 while let Ok(frame) = m_frames.recv_async().await {

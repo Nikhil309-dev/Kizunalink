@@ -33,7 +33,6 @@
 /// On non-x86 targets this is a documented no-op: AArch64 needs `FPCR.FZ` via `mrs/msr`,
 /// which we currently only ship to x86 where the slow-path penalty is measured.
 pub fn disable_denormals() {
-    // MXCSR: Flush-To-Zero (bit 15) | Denormals-Are-Zero (bit 6).
     #[cfg(target_arch = "x86_64")]
     unsafe {
         let mut csr: u32 = 0;
@@ -71,7 +70,7 @@ pub mod codec;
 pub mod constants;
 pub mod demux;
 pub mod effects;
-// The public `engine::engine` path predates the lint and is part of the crate API.
+
 #[allow(clippy::module_inception)]
 pub mod engine;
 pub mod error;

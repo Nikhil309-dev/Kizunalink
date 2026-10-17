@@ -38,18 +38,7 @@ pub struct PlaybackStartConfig {
 pub async fn start_playback(player: &mut PlayerContext, config: PlaybackStartConfig) {
     stop_current_track(player, config.session.as_ref()).await;
 
-    // A client must send an encoded track string produced by `/v4/loadtracks`. If
-    // it does not decode there is no metadata to resolve and nothing to play, so
-    // fail loudly with `TrackException` + `TrackEnd: LoadFailed`. Previously the
-    // node substituted placeholder "Unknown" metadata, ran that through the
-    // mirror-search filler (which can match an arbitrary, unrelated track), then
-    // silently returned once it failed to build the track response — leaving the
-    // client with no event and a half-started player.
     let Some(decoded) = crate::lavalink::protocol::tracks::Track::decode(&config.track) else {
-        // Build a minimal stub so the failure event still carries the offending
-        // encoded string. No metadata is resolved — the old code substituted
-        // placeholder "Unknown" metadata and ran it through the mirror-search
-        // filler, matching an arbitrary unrelated track.
         player.track_info = Some(crate::lavalink::protocol::tracks::Track {
             encoded: config.track.clone(),
             info: crate::lavalink::protocol::tracks::TrackInfo::default(),
@@ -75,9 +64,7 @@ pub async fn start_playback(player: &mut PlayerContext, config: PlaybackStartCon
     player.track = Some(config.track.clone());
     player.position = 0;
     player.end_time = config.end_time;
-    // A `userData` supplied by the client overrides the value decoded from the
-    // track token; both the player's copy and the echoed Track object must
-    // reflect it (Lavalink sets `newTrack.userData` and returns it).
+
     let user_data = config.user_data.unwrap_or_else(|| {
         player
             .track_info
@@ -202,12 +189,6 @@ pub async fn start_playback(player: &mut PlayerContext, config: PlaybackStartCon
         });
     }
 
-    // `update_every_n` counts `monitor_loop` ticks, and each tick is
-    // `MONITOR_TICK` (500 ms) — not the 20 ms mixer period this previously
-    // assumed. Dividing by 20 made the default 5 s interval fire every
-    // 250 * 500 ms = 125 s, so clients saw `playerUpdate` roughly every two
-    // minutes and treated the progress bar as frozen. Round up so sub-second
-    // intervals still produce at least one tick.
     let interval_ms = config.update_interval.as_millis().max(20);
     let tick_ms = super::monitor::MONITOR_TICK.as_millis().max(1);
     let update_every_n = interval_ms.div_ceil(tick_ms) as u64;
@@ -288,8 +269,7 @@ async fn stop_current_track_with_reason(
 
     if let Some(handle) = player.track_handle.take() {
         handle.stop();
-        // Remove only this track from the mixer — `stop_all` would also kill any
-        // other mixer tracks and active sound-effect layers.
+
         let engine = player.engine.lock().await;
         engine.mixer.lock().await.stop_track(&handle.state_arc());
     }
@@ -396,8 +376,7 @@ mod tests {
     fn dummy_handle() -> TrackHandle {
         let (tx, rx) = flume::unbounded::<DecoderCommand>();
         let handle = TrackHandle::new(tx, Arc::new(std::sync::atomic::AtomicBool::new(false))).0;
-        // `get_state()` reports `Stopped` once the decoder receiver is dropped,
-        // so leak the receiver to model a live decoder for the test's lifetime.
+
         std::mem::forget(rx);
         handle
     }
@@ -514,8 +493,6 @@ mod tests {
         )
         .await;
 
-        // The node must fail loudly instead of silently hanging a half-started
-        // player: `TrackException` followed by `TrackEnd: loadFailed`.
         let events = session.events();
         let types: Vec<&str> = events.iter().map(|e| e["type"].as_str().unwrap()).collect();
         assert_eq!(
@@ -524,7 +501,7 @@ mod tests {
             "{events:?}"
         );
         assert_eq!(events[1]["reason"], "loadFailed");
-        // No metadata resolution, so no bogus track start.
+
         assert!(player.track_handle.is_none());
         assert!(player.track.is_none());
     }

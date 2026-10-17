@@ -71,7 +71,6 @@ pub fn parse_lrc(lrc: &str) -> Vec<LyricsLine> {
             let seconds: u64 = cap[2].parse().unwrap_or(0);
             let ms_str = cap.get(3).map_or("0", |m| m.as_str());
 
-            // Pad or truncate ms to 3 digits
             let ms: u64 = if ms_str.len() == 2 {
                 ms_str.parse::<u64>().unwrap_or(0) * 10
             } else if ms_str.len() > 3 {
@@ -103,7 +102,6 @@ pub fn parse_lrc(lrc: &str) -> Vec<LyricsLine> {
 
     lines.sort_by_key(|l| l.timestamp);
 
-    // Calculate durations
     for i in 0..lines.len().saturating_sub(1) {
         let next_ts = lines[i + 1].timestamp;
         lines[i].duration = next_ts.saturating_sub(lines[i].timestamp);
@@ -145,7 +143,7 @@ impl TokenManager {
         }
 
         let mut lock = self.token.write().await;
-        // Double check
+
         if let Some((token, expiry)) = &*lock
             && now < *expiry
         {
@@ -163,6 +161,6 @@ impl TokenManager {
 
 impl Default for TokenManager {
     fn default() -> Self {
-        Self::new(3600 * 1000) // Default 1 hour TTL
+        Self::new(3600 * 1000)
     }
 }
