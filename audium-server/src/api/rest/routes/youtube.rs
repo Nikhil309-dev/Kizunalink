@@ -6,13 +6,13 @@ use std::sync::Arc;
 use axum::{
     Json,
     body::Body,
-    extract::State,
+    extract::{OriginalUri, State},
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
 use serde::Deserialize;
 
-use crate::api::rest::json::{ApiPath, ApiQuery};
+use crate::api::rest::json::{self, ApiPath, ApiQuery};
 use crate::{
     server::AppState,
     sources::youtube::clients::common::{resolve_format_url, select_best_audio_format},
@@ -106,11 +106,13 @@ fn is_valid_video_id(video_id: &str) -> bool {
 }
 
 pub async fn youtube_stream(
+    OriginalUri(uri): OriginalUri,
     ApiPath(video_id): ApiPath<String>,
     ApiQuery(params): ApiQuery<StreamQuery>,
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    let path = json::path_of(&uri);
     tracing::info!(
         "GET /youtube/stream/{} itag={:?} withClient={:?} Range={:?}",
         video_id,
@@ -390,7 +392,7 @@ pub async fn youtube_stream(
     };
 
     tracing::warn!("GET /youtube/stream/{}: {}", video_id, error_msg);
-    (status, Json(serde_json::json!({ "error": error_msg }))).into_response()
+    json::error_response(status, error_msg, &path)
 }
 
 type ClientFilterResult = Result<

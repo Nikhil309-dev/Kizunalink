@@ -3,9 +3,14 @@
 
 use std::sync::Arc;
 
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{OriginalUri, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 
-use crate::api::rest::json::{ApiJson, ApiPath};
+use crate::api::rest::json::{self, ApiJson, ApiPath};
 use crate::server::AppState;
 
 /// GET /v4/sessions/{sessionId}/players/{guildId}/sponsorblock/categories
@@ -13,25 +18,19 @@ use crate::server::AppState;
 /// Mirror of the `SponsorBlock-Plugin` endpoint. Returns the set of categories
 /// the player currently skips.
 pub async fn get_categories(
+    OriginalUri(uri): OriginalUri,
     ApiPath((session_id, guild_id)): ApiPath<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let session_id = audium::common::types::SessionId(session_id);
     let guild_id = audium::common::types::GuildId(guild_id);
+    let path = json::path_of(&uri);
 
     let Some(session) = state.sessions.get(&session_id) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Session not found" })),
-        )
-            .into_response();
+        return json::not_found(format!("Session not found: {session_id}"), &path);
     };
     let Some(player_arc) = session.players.get(&guild_id).map(|kv| kv.value().clone()) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Player not found" })),
-        )
-            .into_response();
+        return json::not_found(format!("Player not found for guild: {guild_id}"), &path);
     };
 
     let player = player_arc.read().await;
@@ -44,26 +43,20 @@ pub async fn get_categories(
 /// Replaces the set of categories the player skips. Must be a subset of the
 /// categories the SponsorBlock API knows.
 pub async fn set_categories(
+    OriginalUri(uri): OriginalUri,
     ApiPath((session_id, guild_id)): ApiPath<(String, String)>,
     State(state): State<Arc<AppState>>,
     ApiJson(body): ApiJson<Vec<String>>,
 ) -> impl IntoResponse {
     let session_id = audium::common::types::SessionId(session_id);
     let guild_id = audium::common::types::GuildId(guild_id);
+    let path = json::path_of(&uri);
 
     let Some(session) = state.sessions.get(&session_id) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Session not found" })),
-        )
-            .into_response();
+        return json::not_found(format!("Session not found: {session_id}"), &path);
     };
     let Some(player_arc) = session.players.get(&guild_id).map(|kv| kv.value().clone()) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Player not found" })),
-        )
-            .into_response();
+        return json::not_found(format!("Player not found for guild: {guild_id}"), &path);
     };
 
     let cleaned = clean_categories(body);
@@ -99,25 +92,19 @@ fn clean_categories(body: Vec<String>) -> Vec<String> {
 ///
 /// Disables SponsorBlock for this player by clearing all categories.
 pub async fn delete_categories(
+    OriginalUri(uri): OriginalUri,
     ApiPath((session_id, guild_id)): ApiPath<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let session_id = audium::common::types::SessionId(session_id);
     let guild_id = audium::common::types::GuildId(guild_id);
+    let path = json::path_of(&uri);
 
     let Some(session) = state.sessions.get(&session_id) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Session not found" })),
-        )
-            .into_response();
+        return json::not_found(format!("Session not found: {session_id}"), &path);
     };
     let Some(player_arc) = session.players.get(&guild_id).map(|kv| kv.value().clone()) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Player not found" })),
-        )
-            .into_response();
+        return json::not_found(format!("Player not found for guild: {guild_id}"), &path);
     };
 
     let mut player = player_arc.write().await;
@@ -130,25 +117,19 @@ pub async fn delete_categories(
 ///
 /// Returns the currently-cached segments for the active track (or `[]`).
 pub async fn get_segments(
+    OriginalUri(uri): OriginalUri,
     ApiPath((session_id, guild_id)): ApiPath<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
     let session_id = audium::common::types::SessionId(session_id);
     let guild_id = audium::common::types::GuildId(guild_id);
+    let path = json::path_of(&uri);
 
     let Some(session) = state.sessions.get(&session_id) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Session not found" })),
-        )
-            .into_response();
+        return json::not_found(format!("Session not found: {session_id}"), &path);
     };
     let Some(player_arc) = session.players.get(&guild_id).map(|kv| kv.value().clone()) else {
-        return (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({ "error": "Player not found" })),
-        )
-            .into_response();
+        return json::not_found(format!("Player not found for guild: {guild_id}"), &path);
     };
 
     let player = player_arc.read().await;

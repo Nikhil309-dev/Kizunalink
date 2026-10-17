@@ -3,9 +3,13 @@
 
 use std::sync::Arc;
 
-use axum::{Json, extract::State, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{OriginalUri, State},
+    response::IntoResponse,
+};
 
-use crate::api::rest::json::{ApiPath, ApiQuery};
+use crate::api::rest::json::{self, ApiPath, ApiQuery};
 use crate::{
     protocol::{
         models::{AudiumLyrics, AudiumLyricsLine, GetLyricsQuery, GetPlayerLyricsQuery},
@@ -16,10 +20,12 @@ use crate::{
 
 pub async fn subscribe_lyrics(
     State(state): State<Arc<AppState>>,
+    OriginalUri(uri): OriginalUri,
     ApiPath((session_id, guild_id)): ApiPath<(String, String)>,
-) -> axum::http::StatusCode {
+) -> axum::response::Response {
     let session_id = audium::common::types::SessionId(session_id);
     let guild_id = audium::common::types::GuildId(guild_id);
+    let path = json::path_of(&uri);
     tracing::info!(
         "POST /v4/sessions/{}/players/{}/lyrics/subscribe",
         session_id,
@@ -27,11 +33,11 @@ pub async fn subscribe_lyrics(
     );
 
     let Some(session) = state.sessions.get(&session_id) else {
-        return axum::http::StatusCode::NOT_FOUND;
+        return json::not_found(format!("Session not found: {session_id}"), &path);
     };
 
     let Some(player_arc) = session.players.get(&guild_id).map(|kv| kv.value().clone()) else {
-        return axum::http::StatusCode::NOT_FOUND;
+        return json::not_found(format!("Player not found for guild: {guild_id}"), &path);
     };
 
     let player = player_arc.write().await;
@@ -89,15 +95,17 @@ pub async fn subscribe_lyrics(
         });
     }
 
-    axum::http::StatusCode::NO_CONTENT
+    axum::http::StatusCode::NO_CONTENT.into_response()
 }
 
 pub async fn unsubscribe_lyrics(
     State(state): State<Arc<AppState>>,
+    OriginalUri(uri): OriginalUri,
     ApiPath((session_id, guild_id)): ApiPath<(String, String)>,
-) -> axum::http::StatusCode {
+) -> axum::response::Response {
     let session_id = audium::common::types::SessionId(session_id);
     let guild_id = audium::common::types::GuildId(guild_id);
+    let path = json::path_of(&uri);
     tracing::info!(
         "DELETE /v4/sessions/{}/players/{}/lyrics/unsubscribe",
         session_id,
@@ -105,22 +113,24 @@ pub async fn unsubscribe_lyrics(
     );
 
     let Some(session) = state.sessions.get(&session_id) else {
-        return axum::http::StatusCode::NOT_FOUND;
+        return json::not_found(format!("Session not found: {session_id}"), &path);
     };
 
     let Some(player_arc) = session.players.get(&guild_id).map(|kv| kv.value().clone()) else {
-        return axum::http::StatusCode::NOT_FOUND;
+        return json::not_found(format!("Player not found for guild: {guild_id}"), &path);
     };
 
     let player = player_arc.write().await;
     player.unsubscribe_lyrics();
-    axum::http::StatusCode::NO_CONTENT
+    axum::http::StatusCode::NO_CONTENT.into_response()
 }
 
 pub async fn get_lyrics(
     State(state): State<Arc<AppState>>,
+    OriginalUri(uri): OriginalUri,
     ApiQuery(query): ApiQuery<GetLyricsQuery>,
 ) -> impl IntoResponse {
+    let path = json::path_of(&uri);
     tracing::info!(
         "GET /v4/lyrics: track='{}', skipTrackSource={}",
         query.track,
@@ -129,7 +139,7 @@ pub async fn get_lyrics(
     let track = match Track::decode(&query.track) {
         Some(t) => t,
         None => {
-            return (axum::http::StatusCode::BAD_REQUEST, "Invalid encoded track").into_response();
+            return json::bad_request("Invalid encoded track", &path);
         }
     };
 
@@ -166,11 +176,13 @@ pub async fn get_lyrics(
 
 pub async fn get_player_lyrics(
     State(state): State<Arc<AppState>>,
+    OriginalUri(uri): OriginalUri,
     ApiPath((session_id, guild_id)): ApiPath<(String, String)>,
     ApiQuery(_query): ApiQuery<GetPlayerLyricsQuery>,
 ) -> impl IntoResponse {
     let session_id = audium::common::types::SessionId(session_id);
     let guild_id = audium::common::types::GuildId(guild_id);
+    let path = json::path_of(&uri);
     tracing::info!(
         "GET /v4/sessions/{}/players/{}/track/lyrics",
         session_id,
@@ -178,11 +190,11 @@ pub async fn get_player_lyrics(
     );
 
     let Some(session) = state.sessions.get(&session_id) else {
-        return axum::http::StatusCode::NOT_FOUND.into_response();
+        return json::not_found(format!("Session not found: {session_id}"), &path);
     };
 
     let Some(player_arc) = session.players.get(&guild_id).map(|kv| kv.value().clone()) else {
-        return axum::http::StatusCode::NOT_FOUND.into_response();
+        return json::not_found(format!("Player not found for guild: {guild_id}"), &path);
     };
 
     let player = player_arc.read().await;
