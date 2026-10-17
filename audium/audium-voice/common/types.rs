@@ -111,6 +111,8 @@ pub enum AudioFormat {
     Ogg,
     Flac,
     Wav,
+    /// Tracker module (MOD/XM/S3M/IT). Played natively; see `engine::demux::tracker`.
+    Tracker,
     Unknown,
 }
 
@@ -125,6 +127,9 @@ impl AudioFormat {
             Self::Ogg => "ogg",
             Self::Flac => "flac",
             Self::Wav => "wav",
+            // Modules carry no single canonical extension; the tracker reader
+            // is selected by this variant, not by a probe hint.
+            Self::Tracker => "mod",
             Self::Unknown => "",
         }
     }
@@ -139,6 +144,8 @@ impl AudioFormat {
             "ogg" => Self::Ogg,
             "flac" => Self::Flac,
             "wav" => Self::Wav,
+            // Only the tracker formats the bundled replayer imports.
+            "mod" | "xm" | "s3m" | "it" => Self::Tracker,
             _ => Self::Unknown,
         }
     }
