@@ -277,6 +277,7 @@ impl PlayableTrack for LocalTrack {
             match AudioProcessor::new(source, kind, tx, cmd_rx, Some(err_tx.clone()), config) {
                 Ok(mut processor) => {
                     let spawn_result = std::thread::Builder::new()
+                        .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                         .name(format!("local-decoder-{}", path))
                         .spawn(move || {
                             if let Err(e) = processor.run_guarded() {

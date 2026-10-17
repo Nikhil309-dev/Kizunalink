@@ -75,6 +75,7 @@ impl PlayableTrack for JioSaavnTrack {
             match AudioProcessor::new(reader, kind, tx, cmd_rx, Some(err_tx.clone()), config) {
                 Ok(mut processor) => {
                     if let Err(e) = std::thread::Builder::new()
+                        .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                         .name(format!("jiosaavn-decoder-{}", url))
                         .spawn(move || {
                             if let Err(e) = processor.run_guarded() {

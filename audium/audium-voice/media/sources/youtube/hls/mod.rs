@@ -234,6 +234,7 @@ impl HlsReader {
         let abort_flag_bg = Arc::clone(&abort_flag);
 
         let bg_thread = match std::thread::Builder::new()
+            .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
             .name("hls-prefetch".into())
             .spawn(move || {
                 prefetch_loop(

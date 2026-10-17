@@ -308,6 +308,7 @@ impl PlayableTrack for DeezerTrack {
                 let mut processor = processor;
                 let track_id_for_thread = track_id_for_log.clone();
                 let spawn_res = std::thread::Builder::new()
+                    .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                     .name(format!("deezer-decoder-{}", track_id_for_log))
                     .spawn(move || {
                         if let Err(e) = processor.run_guarded() {

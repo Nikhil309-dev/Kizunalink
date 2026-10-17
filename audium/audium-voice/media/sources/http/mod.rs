@@ -541,6 +541,7 @@ impl PlayableTrack for HttpTrack {
             match AudioProcessor::new(reader, kind, tx, cmd_rx, Some(err_tx.clone()), config) {
                 Ok(mut processor) => {
                     let spawn_result = std::thread::Builder::new()
+                        .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                         .name(format!("http-decoder-{}", url))
                         .spawn(move || {
                             if let Err(e) = processor.run_guarded() {

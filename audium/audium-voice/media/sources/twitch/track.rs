@@ -271,6 +271,7 @@ impl PlayableTrack for TwitchTrack {
                 Ok(mut processor) => {
                     let url_for_log = url_for_name.clone();
                     if let Err(e) = std::thread::Builder::new()
+                        .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                         .name(format!("twitch-decoder-{}", url_for_name))
                         .spawn(move || {
                             if let Err(e) = processor.run_guarded() {

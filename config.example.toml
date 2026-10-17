@@ -42,7 +42,6 @@ max_connections = 1024            # cap concurrent HTTP/WS connections (0 = unli
 [player]
 stuck_threshold_ms = 25000
 buffer_duration_ms = 400
-frame_buffer_duration_ms = 5000
 resampling_quality = "medium"                                                  # low | medium | high
 opus_encoding_quality = 10                                                     # 1-10
 tape = { tape_stop = true, tape_stop_duration_ms = 500, curve = "sinusoidal" } # curve: linear | exponential | sinusoidal

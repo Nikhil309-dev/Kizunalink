@@ -96,6 +96,7 @@ impl PlayableTrack for GaanaTrack {
                 match setup_res {
                     Ok(mut processor) => {
                         if let Err(e) = std::thread::Builder::new()
+                            .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                             .name(format!("gaana-decoder-{}", track_id_for_log))
                             .spawn(move || {
                                 if let Err(e) = processor.run_guarded() {
