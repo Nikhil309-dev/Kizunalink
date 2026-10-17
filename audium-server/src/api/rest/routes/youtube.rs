@@ -18,18 +18,22 @@ use crate::{
     sources::youtube::clients::common::{resolve_format_url, select_best_audio_format},
 };
 
-pub async fn get_youtube_info(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn get_youtube_info(
+    OriginalUri(uri): OriginalUri,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let path = json::path_of(&uri);
     tracing::info!("GET /youtube");
 
     let ctx = match &state.youtube {
         Some(ctx) => ctx.clone(),
         None => {
             tracing::warn!("GET /youtube: YouTube source is not enabled");
-            return (
+            return json::error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "YouTube source is not enabled"})),
-            )
-                .into_response();
+                "YouTube source is not enabled",
+                &path,
+            );
         }
     };
 
@@ -45,20 +49,22 @@ pub async fn get_youtube_info(State(state): State<Arc<AppState>>) -> impl IntoRe
 }
 
 pub async fn youtube_oauth_refresh(
+    OriginalUri(uri): OriginalUri,
     ApiPath(refresh_token): ApiPath<String>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    let path = json::path_of(&uri);
     tracing::info!("GET /youtube/oauth: refreshing configured token");
 
     let ctx = match &state.youtube {
         Some(ctx) => ctx.clone(),
         None => {
             tracing::warn!("GET /youtube/oauth: YouTube source is not enabled");
-            return (
+            return json::error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "YouTube source is not enabled"})),
-            )
-                .into_response();
+                "YouTube source is not enabled",
+                &path,
+            );
         }
     };
 
@@ -66,24 +72,18 @@ pub async fn youtube_oauth_refresh(
         Ok(body) => {
             if let Some(err) = body.get("error").and_then(|e| e.as_str()) {
                 tracing::warn!("GET /youtube/oauth: token refresh returned error: {}", err);
-                return (
+                return json::error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({
-                        "error": format!("Refreshing access token returned error: {}", err)
-                    })),
-                )
-                    .into_response();
+                    format!("Refreshing access token returned error: {err}"),
+                    &path,
+                );
             }
             tracing::debug!("GET /youtube/oauth: token refreshed successfully");
             (StatusCode::OK, Json(body)).into_response()
         }
         Err(e) => {
             tracing::error!("GET /youtube/oauth: refresh failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
+            json::error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string(), &path)
         }
     }
 }
@@ -122,19 +122,15 @@ pub async fn youtube_stream(
     );
 
     if !is_valid_video_id(&video_id) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Invalid YouTube video id"})),
-        )
-            .into_response();
+        return json::error_response(StatusCode::BAD_REQUEST, "Invalid YouTube video id", &path);
     }
 
     let Some(ctx) = &state.youtube else {
-        return (
+        return json::error_response(
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "YouTube source is not enabled"})),
-        )
-            .into_response();
+            "YouTube source is not enabled",
+            &path,
+        );
     };
 
     let clients = match get_target_clients(ctx, params.with_client.as_deref()) {
