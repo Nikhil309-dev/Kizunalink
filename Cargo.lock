@@ -96,7 +96,6 @@ dependencies = [
  "async-trait",
  "axum",
  "base64",
- "block-padding 0.4.2",
  "blowfish",
  "byteorder",
  "bytes",
@@ -115,7 +114,6 @@ dependencies = [
  "md-5",
  "parking_lot 0.12.5",
  "pkg-config",
- "prometheus",
  "rand 0.8.8",
  "regex",
  "reqwest",
@@ -147,7 +145,6 @@ version = "1.1.0"
 dependencies = [
  "audium",
  "axum",
- "base64",
  "bytes",
  "dashmap",
  "flume",
@@ -298,15 +295,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8894febbff9f758034a5b8e12d87918f56dfc64a8e1fe757d65e29041538d93"
 dependencies = [
  "generic-array",
-]
-
-[[package]]
-name = "block-padding"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "710f1dd022ef4e93f8a438b4ba958de7f64308434fa6a87104481645cc30068b"
-dependencies = [
- "hybrid-array",
 ]
 
 [[package]]
@@ -1546,7 +1534,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
- "block-padding 0.3.3",
+ "block-padding",
  "generic-array",
 ]
 

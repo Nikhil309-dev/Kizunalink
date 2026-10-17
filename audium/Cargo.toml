@@ -11,6 +11,11 @@ build = "build.rs"
 [lib]
 path = "audium-voice/lib.rs"
 
+# `md-5` is used via its lib name `md5` (e.g. `use md5::{Digest, Md5}` in
+# netease/bilibili/qobuz), which cargo-machete cannot see through.
+[package.metadata.cargo-machete]
+ignored = ["md-5"]
+
 # Build script provides libopus for the hand-rolled FFI in `audium-voice/opus/ffi.rs`:
 # pkg-config probe on Unix when available, otherwise a vendored CMake build of opus
 # (Windows, Android, and containerized builds). Replaces the unmaintained audiopus_sys
@@ -29,7 +34,6 @@ davey = "0.1.4"
 aes = "0.8"
 des = "0.8.1"
 cipher = "0.5.0"
-block-padding = "0.4.2"
 hex = "0.4.3"
 blowfish = "0.9"
 md-5 = "0.10"
@@ -85,9 +89,6 @@ workspace = true
 workspace = true
 
 [dependencies.sysinfo]
-workspace = true
-
-[dependencies.prometheus]
 workspace = true
 
 [dependencies.tracing-subscriber]

@@ -13,9 +13,6 @@ subtle = "2.6"
 [dependencies.audium]
 path = "../audium"
 
-[dependencies.base64]
-workspace = true
-
 [dependencies.bytes]
 workspace = true
 
