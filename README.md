@@ -192,6 +192,7 @@ The server takes no command-line arguments; it exits with an error if given any 
 | `AUDIUM_LOG_LEVEL` | `logging.level` |
 | `AUDIUM_TLS_ENABLED` | `server.tls.enabled` |
 | `AUDIUM_METRICS_ENABLED` | `metrics.prometheus.enabled` |
+| `AUDIUM_HTTP_BUF_BYTES` | Per-playing-track HTTP prefetch cap (default 512 KiB; 256 KiB–64 MiB) |
 
 A variable that is set but empty (for example `AUDIUM_ADDRESS=`, or a blank
 entry in a Compose `environment:` list) is rejected at startup by name rather

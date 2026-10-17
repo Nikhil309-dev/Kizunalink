@@ -159,10 +159,35 @@ variables always win:
 | `AUDIUM_LOG_LEVEL` | no | `trace`..`off`. |
 | `AUDIUM_RATE_LIMIT_PER_MINUTE` | no | `0` disables. |
 | `AUDIUM_METRICS_ENABLED` | no | Prometheus endpoint. |
+| `AUDIUM_HTTP_BUF_BYTES` | no | Per-playing-track HTTP prefetch cap, in bytes. Default `524288` (512 KiB). Clamped to `262144`–`67108864`. |
 | `AUDIUM_CONFIG_PATH` | no | Absolute path if `config.toml` is not in the working directory. |
 
 Set `AUDIUM_AUTHORIZATION` in the server's Startup variables — the panel injects
 it into the process environment at launch. It is never written to a file.
+
+### `AUDIUM_HTTP_BUF_BYTES` (memory tuning)
+
+This is the single biggest lever on memory per concurrent stream, because one
+buffer is held for **every playing track**.
+
+The value counts **compressed** HTTP body bytes, not decoded PCM. At the 512 KiB
+default and a typical 128 kbit/s stream that is roughly 30 seconds of readahead,
+which is ample for ordinary network jitter.
+
+Measured steady-state RSS at 100 concurrent players:
+
+| Value | RSS | Per player |
+|---|---|---|
+| `2097152` (2 MiB) | 482 MB | 4.52 MB |
+| `1048576` (1 MiB) | 377 MB | 3.47 MB |
+| **`524288` (512 KiB, default)** | **300 MB** | **2.70 MB** |
+| `262144` (256 KiB, minimum) | 298 MB | 2.68 MB |
+
+The curve flattens at 512 KiB — going below it saves nothing measurable, which is
+why that is the default and the minimum. Raise the value only if you serve
+unusually slow origins and see buffering; it is clamped at 64 MiB so a typo
+cannot allocate unbounded memory.
+
 
 ## 6. Missing shared libraries
 
