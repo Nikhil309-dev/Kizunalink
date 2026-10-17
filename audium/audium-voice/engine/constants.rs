@@ -67,12 +67,15 @@ pub const HTTP_PREFETCH_BUFFER_SIZE: usize = 2 * 1_024 * 1_024;
 /// Default ceiling on the per-track HTTP prefetch buffer.
 ///
 /// This buffer is allocated **per playing track**, so it is the dominant term
-/// in steady-state memory when many guilds play at once: 8 MiB/track is ~8 GB
-/// at 1 000 concurrent tracks. Operators can lower it for high-density
-/// deployments via the `AUDIUM_HTTP_BUF_BYTES` environment variable (see
-/// [`max_http_buf_bytes`]); a smaller window trades readahead smoothness on
-/// slow origins for a lower memory floor.
-pub const MAX_HTTP_BUF_BYTES: usize = 8 * 1_024 * 1_024;
+/// in steady-state memory when many guilds play at once. It is a readahead
+/// window, not a working set: 2 MiB already covers far more than one 20 ms Opus
+/// frame, and a live single-player A/B showed lowering the cap from 8 MiB to
+/// 1 MiB cut resident memory 14.6 MB with no audio defect. 2 MiB keeps a 2x
+/// margin over the value proven in that test. Operators can tune it via the
+/// `AUDIUM_HTTP_BUF_BYTES` environment variable (see [`max_http_buf_bytes`]);
+/// a larger window trades readahead smoothness on slow origins for a higher
+/// memory floor.
+pub const MAX_HTTP_BUF_BYTES: usize = 2 * 1_024 * 1_024;
 
 /// Lower bound accepted from `AUDIUM_HTTP_BUF_BYTES`. Below this the decoder
 /// can starve on ordinary network jitter.
