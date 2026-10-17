@@ -49,6 +49,7 @@ impl PlayableTrack for AudiusTrack {
                         url: stream_url,
                         local_addr,
                         proxy: None,
+                        headers: None,
                     };
                     let (inner_rx, inner_cmd_tx, inner_err_rx) =
                         http_track.start_decoding(config.clone());
@@ -110,6 +111,8 @@ pub async fn fetch_stream_url(
         return None;
     }
 
-    let body: serde_json::Value = resp.json().await.ok()?;
+    let body: serde_json::Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+        .await
+        .ok()?;
     body["data"].as_str().map(|s| s.to_owned())
 }

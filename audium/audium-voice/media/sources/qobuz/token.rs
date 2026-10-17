@@ -45,12 +45,18 @@ fn seed_regex() -> &'static Regex {
     })
 }
 
-fn info_extras_regex(timezone: &str) -> Regex {
+/// Builds the `info`/`extras` extractor for a specific timezone.
+///
+/// `timezone` is scraped from the remote `bundle.js`, so the pattern is only as
+/// trustworthy as that response. It is `regex::escape`d (so it cannot inject
+/// syntax) and the build result is returned as `Option` rather than unwrapped,
+/// so an unexpected value fails this one lookup instead of panicking the task.
+fn info_extras_regex(timezone: &str) -> Option<Regex> {
     Regex::new(&format!(
         r#"(?s)timezones:\[.*?name:.*?/{}",info:"(?P<info>.*?)",extras:"(?P<extras>.*?)""#,
         regex::escape(timezone)
     ))
-    .unwrap()
+    .ok()
 }
 
 impl QobuzTokenTracker {
@@ -109,7 +115,7 @@ impl QobuzTokenTracker {
                 Ok((id, secret)) => {
                     app_id = id;
                     app_secret = secret;
-                    info!("Successfully extracted Qobuz credentials: appId={app_id}");
+                    info!("Successfully extracted Qobuz credentials from bundle.js");
                 }
                 Err(e) => {
                     error!("Failed to extract Qobuz credentials: {e}");
@@ -192,6 +198,7 @@ impl QobuzTokenTracker {
         };
 
         let info_extras = info_extras_regex(&timezone)
+            .ok_or_else(|| format!("Failed to build info/extras regex for timezone {timezone}"))?
             .captures(&bundle_js)
             .ok_or_else(|| format!("Failed to extract info/extras for timezone {timezone}"))?;
 

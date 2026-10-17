@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 pub struct MetricsConfig {
     #[serde(default)]
     pub prometheus: PrometheusConfig,
+    /// Emit the additive `detailedStats` block on `GET /v4/stats` (NodeLink
+    /// parity). Off by default so the payload stays byte-identical to Lavalink.
+    #[serde(default)]
+    pub detailed_stats: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

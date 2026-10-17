@@ -9,9 +9,16 @@ use crate::lavalink::protocol::{
     tracks::TrackInfo,
 };
 
-#[derive(Default)]
 pub struct LrcLibProvider {
     client: reqwest::Client,
+}
+
+impl Default for LrcLibProvider {
+    fn default() -> Self {
+        Self {
+            client: utils::build_http_client(),
+        }
+    }
 }
 
 impl LrcLibProvider {
@@ -37,7 +44,10 @@ impl LyricsProvider for LrcLibProvider {
         );
 
         let resp = self.client.get(url).send().await.ok()?;
-        let results: serde_json::Value = resp.json().await.ok()?;
+        let results: serde_json::Value =
+            crate::common::http::read_json_capped::<serde_json::Value>(resp)
+                .await
+                .ok()?;
 
         let results_arr = results.as_array()?;
         if results_arr.is_empty() {

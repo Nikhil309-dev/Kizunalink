@@ -3,6 +3,7 @@
 
 pub mod reader;
 use std::{
+    io::Read,
     net::ToSocketAddrs,
     sync::{Arc, OnceLock},
 };
@@ -19,9 +20,10 @@ use symphonia::core::{
 use tracing::{debug, error, warn};
 
 use crate::{
-    common::types::{AnyError, AnyResult},
+    common::types::{AnyError, AnyResult, AudioFormat},
     engine::{
         AudioFrame,
+        demux::tracker::TrackerFormatReader,
         processor::{AudioProcessor, DecoderCommand},
         source::client::is_blocked_ip,
     },
@@ -70,6 +72,94 @@ fn is_unrecognized_format_error(error: &symphonia::core::errors::Error) -> bool 
     matches!(error, Error::Unsupported(_) | Error::DecodeError(_))
 }
 
+/// Decide whether `mss` is a tracker module.
+///
+/// A module URL extension is authoritative: symphonia cannot play any of these
+/// containers, and untagged 15-sample MODs carry no signature to sniff, so the
+/// extension is the only reliable signal for them. For extensionless URLs the
+/// module magic bytes are sniffed instead.
+///
+/// The prefix read for sniffing is buffered, never discarded, so a non-module
+/// stream is still handed to symphonia byte-for-byte intact.
+fn sniff_tracker(
+    mss: &mut MediaSourceStream,
+    hinted: Option<AudioFormat>,
+) -> Result<bool, ProbeError> {
+    if matches!(hinted, Some(AudioFormat::Tracker)) {
+        return Ok(true);
+    }
+
+    let mut prefix = [0u8; 1084];
+    let mut filled = 0usize;
+    while filled < prefix.len() {
+        match mss.read(&mut prefix[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(ProbeError::Fetch(e.to_string())),
+        }
+    }
+
+    Ok(crate::engine::demux::format::is_tracker_magic(
+        &prefix[..filled],
+    ))
+}
+
+/// A display title derived from the URL's last path segment.
+fn filename_of(url: &str) -> String {
+    url.split(['?', '#'])
+        .next()
+        .unwrap_or(url)
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("Unknown Title")
+        .to_owned()
+}
+
+/// Determine the audio format for a direct stream from its URL extension, falling
+/// back to sniffing the module magic when the extension is missing or unknown.
+///
+/// The reader is rewound before returning, so this is safe to call ahead of
+/// [`AudioProcessor::new`]. Only seekable readers are sniffed; a non-seekable
+/// stream is left untouched and identified by extension alone.
+fn detect_track_kind(
+    reader: &mut dyn symphonia::core::io::MediaSource,
+    url: &str,
+) -> Option<AudioFormat> {
+    if let Some(ext) = url
+        .split(['?', '#'])
+        .next()
+        .and_then(|p| std::path::Path::new(p).extension())
+        .and_then(|s| s.to_str())
+    {
+        let format = AudioFormat::from_ext(ext);
+        if format != AudioFormat::Unknown {
+            return Some(format);
+        }
+    }
+
+    if !reader.is_seekable() {
+        return None;
+    }
+
+    let mut prefix = [0u8; 1084];
+    let mut filled = 0usize;
+    while filled < prefix.len() {
+        match reader.read(&mut prefix[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
+    }
+    let _ = reader.seek(std::io::SeekFrom::Start(0));
+
+    crate::engine::demux::format::is_tracker_magic(&prefix[..filled])
+        .then_some(AudioFormat::Tracker)
+}
+
 pub struct HttpSource;
 
 impl Default for HttpSource {
@@ -87,20 +177,79 @@ impl HttpSource {
         url: String,
         local_addr: Option<std::net::IpAddr>,
     ) -> Result<TrackInfo, ProbeError> {
-        let source = reader::HttpReader::new(&url, local_addr, None)?;
+        let is_hls = url
+            .split(['?', '#'])
+            .next()
+            .is_some_and(|p| p.to_ascii_lowercase().ends_with(".m3u8"));
+
         let mut hint = Hint::new();
 
-        if let Some(content_type) = source.content_type() {
-            hint.mime_type(content_type.as_str());
-        }
-
-        let mss = MediaSourceStream::new(Box::new(source), Default::default());
-
-        if let Some(ext) = std::path::Path::new(&url)
-            .extension()
-            .and_then(|s| s.to_str())
-        {
+        // Hint the container from the URL path so symphonia does not have to
+        // guess (and so `.mod`/`.xm`/... are not mistaken for something else).
+        let path_ext = url
+            .split(['?', '#'])
+            .next()
+            .and_then(|p| std::path::Path::new(p).extension())
+            .and_then(|s| s.to_str());
+        if let Some(ext) = path_ext {
             hint.with_extension(ext);
+        }
+        let hinted_format = path_ext.map(AudioFormat::from_ext);
+
+        let source: Box<dyn symphonia::core::io::MediaSource> = if is_hls {
+            let (host, _port, addresses) = resolve_and_validate_public_url(&url)?;
+            let client = crate::engine::source::create_client_with_pinning(
+                crate::common::utils::default_user_agent(),
+                local_addr,
+                None,
+                None,
+                Some(host),
+                Some(addresses),
+            )
+            .map_err(|e| ProbeError::Fetch(e.to_string()))?;
+            Box::new(
+                crate::media::sources::youtube::hls::HlsReader::with_client(
+                    &url, client, None, None,
+                )
+                .map_err(|e| ProbeError::Format(e.to_string()))?,
+            )
+        } else {
+            let source = reader::HttpReader::new(&url, local_addr, None)?;
+
+            if let Some(content_type) = source.content_type() {
+                hint.mime_type(content_type.as_str());
+            }
+
+            if let Some(ext) = std::path::Path::new(&url)
+                .extension()
+                .and_then(|s| s.to_str())
+            {
+                hint.with_extension(ext);
+            }
+            Box::new(source)
+        };
+
+        let mut mss = MediaSourceStream::new(source, Default::default());
+
+        // Tracker modules are not a symphonia container, so a probe would fail
+        // (and consume the stream). Detect them up front from the URL extension
+        // or the module magic bytes, then hand the stream to the tracker reader.
+        if sniff_tracker(&mut mss, hinted_format)? {
+            let reader = TrackerFormatReader::open(Box::new(mss))
+                .map_err(|e| ProbeError::Format(e.to_string()))?;
+            return Ok(TrackInfo {
+                identifier: url.clone(),
+                author: "Unknown Artist".to_owned(),
+                length: reader.duration_ms(),
+                is_seekable: true,
+                is_stream: false,
+                position: 0,
+                title: filename_of(&url),
+                uri: Some(url),
+                source_name: "http".to_owned(),
+                artwork_url: None,
+                isrc: None,
+            });
         }
 
         let probed = match symphonia::default::get_probe().format(
@@ -301,6 +450,7 @@ impl SourcePlugin for HttpSource {
                 url: clean.to_owned(),
                 local_addr: routeplanner.and_then(|rp| rp.get_address()),
                 proxy: None,
+                headers: None,
             }))
         } else {
             None
@@ -312,6 +462,9 @@ pub struct HttpTrack {
     pub url: String,
     pub local_addr: Option<std::net::IpAddr>,
     pub proxy: Option<crate::config::sources::HttpProxyConfig>,
+    /// Extra headers some CDNs require (e.g. a session `Cookie` or `Referer`).
+    /// Applied to the manifest and every segment of an HLS stream.
+    pub headers: Option<reqwest::header::HeaderMap>,
 }
 
 impl PlayableTrack for HttpTrack {
@@ -323,27 +476,72 @@ impl PlayableTrack for HttpTrack {
         let url = self.url.clone();
         let local_addr = self.local_addr;
         let proxy = self.proxy.clone();
+        let headers = self.headers.clone();
 
         let handle = tokio::runtime::Handle::current();
         tokio::task::spawn_blocking(move || {
             let _guard = handle.enter();
-            let reader = match reader::HttpReader::new(&url, local_addr, proxy) {
-                Ok(r) => Box::new(r) as Box<dyn symphonia::core::io::MediaSource>,
-                Err(e) => {
-                    error!("Failed to create HttpReader for HTTP: {e}");
-                    let _ = err_tx.send(format!("Failed to open stream: {e}"));
-                    return;
+
+            // HLS manifests need the playlist reader; everything else streams
+            // directly. The m3u8 body itself is not a decodable container.
+            let is_hls = url
+                .split(['?', '#'])
+                .next()
+                .is_some_and(|p| p.to_ascii_lowercase().ends_with(".m3u8"));
+            let mut reader: Box<dyn symphonia::core::io::MediaSource> = if is_hls {
+                // Resolve and validate the manifest host the same way the direct
+                // stream path does, then reuse that pinned client so the
+                // manifest and every segment stay inside the SSRF boundary.
+                let (host, _port, addresses) = match resolve_and_validate_public_url(&url) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let _ = err_tx.send(format!("Failed to validate HLS URL: {e}"));
+                        return;
+                    }
+                };
+                let client = match crate::engine::source::create_client_with_pinning(
+                    crate::common::utils::default_user_agent(),
+                    local_addr,
+                    proxy.clone(),
+                    headers.clone(),
+                    Some(host),
+                    Some(addresses),
+                ) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let _ = err_tx.send(format!("Failed to build HLS client: {e}"));
+                        return;
+                    }
+                };
+                // The client already carries any per-track headers, so the
+                // manifest and every segment request inherit them.
+                match crate::media::sources::youtube::hls::HlsReader::with_client(
+                    &url, client, None, None,
+                ) {
+                    Ok(r) => Box::new(r),
+                    Err(e) => {
+                        error!("Failed to create HlsReader for HTTP: {e}");
+                        let _ = err_tx.send(format!("Failed to open HLS stream: {e}"));
+                        return;
+                    }
+                }
+            } else {
+                match reader::HttpReader::with_headers(&url, local_addr, proxy, headers.clone()) {
+                    Ok(r) => Box::new(r) as Box<dyn symphonia::core::io::MediaSource>,
+                    Err(e) => {
+                        error!("Failed to create HttpReader for HTTP: {e}");
+                        let _ = err_tx.send(format!("Failed to open stream: {e}"));
+                        return;
+                    }
                 }
             };
 
-            let kind = std::path::Path::new(&url)
-                .extension()
-                .and_then(|s| s.to_str())
-                .map(crate::common::types::AudioFormat::from_ext);
+            let kind = detect_track_kind(reader.as_mut(), &url);
 
             match AudioProcessor::new(reader, kind, tx, cmd_rx, Some(err_tx.clone()), config) {
                 Ok(mut processor) => {
                     let spawn_result = std::thread::Builder::new()
+                        .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                         .name(format!("http-decoder-{}", url))
                         .spawn(move || {
                             if let Err(e) = processor.run_guarded() {

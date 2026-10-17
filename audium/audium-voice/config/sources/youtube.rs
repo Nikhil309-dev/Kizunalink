@@ -109,10 +109,16 @@ fn default_search_clients() -> Vec<String> {
 }
 
 fn default_playback_clients() -> Vec<String> {
+    // Ordered by observed reliability from datacenter IPs, unauthenticated.
+    // VISIONOS and TV_DOWN need no PoToken and no player script, so they stay
+    // ahead of the clients YouTube bot-checks (ANDROID/WEB) and the TV_CAST
+    // path that currently returns "The page needs to be reloaded".
     vec![
+        "VISIONOS".to_string(),
+        "TV_DOWN".to_string(),
+        "ANDROID_VR".to_string(),
         "TV_CAST".to_string(),
         "TV_EMBEDDED".to_string(),
-        "ANDROID_VR".to_string(),
         "WEB_EMBEDDED".to_string(),
         "TV".to_string(),
         "ANDROID_MUSIC".to_string(),

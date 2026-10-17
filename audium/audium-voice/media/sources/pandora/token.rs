@@ -150,7 +150,9 @@ impl PandoraTokenTracker {
             ));
         }
 
-        let body: Value = resp.json().await.map_err(|e| e.to_string())?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .map_err(|e| e.to_string())?;
 
         if let Some(error_code) = body.get("errorCode")
             && error_code.as_i64() == Some(0)

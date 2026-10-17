@@ -24,7 +24,11 @@ impl Default for LetrasMusProvider {
 impl LetrasMusProvider {
     pub fn new() -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .timeout(std::time::Duration::from_secs(15))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 }
@@ -46,7 +50,9 @@ impl LyricsProvider for LetrasMusProvider {
             urlencoding::encode(&query)
         );
         let resp = self.client.get(search_url).send().await.ok()?;
-        let search_data: Value = resp.json().await.ok()?;
+        let search_data: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
 
         let docs = search_data["response"]["docs"].as_array()?;
         let best = docs
@@ -85,7 +91,7 @@ impl LyricsProvider for LetrasMusProvider {
                 l_id, y_id
             );
             if let Ok(api_resp) = self.client.get(api_url).send().await
-                && let Ok(api_data) = api_resp.json::<Value>().await
+                && let Ok(api_data) = crate::common::http::read_json_capped::<Value>(api_resp).await
             {
                 let sub_val = api_data["Original"]["Subtitle"]
                     .as_str()

@@ -121,7 +121,6 @@ impl HlsReader {
         player_url: Option<String>,
         proxy: Option<HttpProxyConfig>,
     ) -> AnyResult<Self> {
-        let handle = tokio::runtime::Handle::current();
         let mut builder = reqwest::Client::builder()
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
             .timeout(std::time::Duration::from_secs(15));
@@ -133,7 +132,10 @@ impl HlsReader {
         if let Some(ref proxy_cfg) = proxy
             && let Some(ref proxy_url) = proxy_cfg.url
         {
-            tracing::debug!("HLS: configuring proxy: {}", proxy_url);
+            tracing::debug!(
+                "HLS: configuring proxy: {}",
+                crate::common::utils::redact_url(proxy_url)
+            );
             let mut proxy_obj = reqwest::Proxy::all(proxy_url)?;
             if let (Some(user), Some(pass)) = (&proxy_cfg.username, &proxy_cfg.password) {
                 proxy_obj = proxy_obj.basic_auth(user, pass);
@@ -142,6 +144,20 @@ impl HlsReader {
         }
 
         let client: reqwest::Client = builder.build()?;
+        Self::with_client(manifest_url, client, cipher_manager, player_url)
+    }
+
+    /// Builds an HLS reader over a caller-supplied HTTP client. Used by the
+    /// generic `http` source so a remote manifest inherits the same SSRF
+    /// boundary (validating DNS resolver, pinned IPs, redirect policy) as the
+    /// direct stream path instead of a bare client.
+    pub fn with_client(
+        manifest_url: &str,
+        client: reqwest::Client,
+        cipher_manager: Option<Arc<YouTubeCipherManager>>,
+        player_url: Option<String>,
+    ) -> AnyResult<Self> {
+        let handle = tokio::runtime::Handle::current();
         let (segment_urls, map_url) =
             handle.block_on(async { resolve_playlist(&client, manifest_url).await })?;
 
@@ -218,6 +234,7 @@ impl HlsReader {
         let abort_flag_bg = Arc::clone(&abort_flag);
 
         let bg_thread = match std::thread::Builder::new()
+            .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
             .name("hls-prefetch".into())
             .spawn(move || {
                 prefetch_loop(

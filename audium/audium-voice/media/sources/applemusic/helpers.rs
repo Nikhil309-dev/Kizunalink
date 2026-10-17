@@ -36,6 +36,8 @@ impl AppleMusicSource {
             return None;
         }
 
-        resp.json().await.ok()
+        crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()
     }
 }

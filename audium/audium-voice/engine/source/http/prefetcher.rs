@@ -8,7 +8,7 @@ use parking_lot::{Condvar, Mutex};
 use tracing::{debug, warn};
 
 use super::HttpSource;
-use crate::engine::constants::{MAX_FETCH_RETRIES, MAX_HTTP_BUF_BYTES};
+use crate::engine::constants::{MAX_FETCH_RETRIES, max_http_buf_bytes};
 
 #[derive(Debug)]
 pub enum PrefetchCommand {
@@ -127,7 +127,7 @@ pub fn prefetch_loop(
                         break Some(pos);
                     }
                     PrefetchCommand::Continue => {
-                        if state.buffered >= MAX_HTTP_BUF_BYTES || state.done {
+                        if state.buffered >= max_http_buf_bytes() || state.done {
                             cvar.wait_for(&mut state, Duration::from_millis(200));
                             continue;
                         }
@@ -239,7 +239,7 @@ pub fn prefetch_loop(
         {
             let (lock, cvar) = &*shared;
             let mut state = lock.lock();
-            while state.buffered >= MAX_HTTP_BUF_BYTES
+            while state.buffered >= max_http_buf_bytes()
                 && matches!(state.command, PrefetchCommand::Continue)
                 && !state.done
             {

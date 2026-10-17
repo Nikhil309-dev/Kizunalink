@@ -43,6 +43,7 @@ impl PlayableTrack for QobuzTrack {
                     url,
                     local_addr: None,
                     proxy: None,
+                    headers: None,
                 };
                 let (inner_rx, inner_cmd_tx, inner_err_rx) =
                     http_track.start_decoding(config.clone());
@@ -139,7 +140,8 @@ async fn switch_media_url(
         return Ok(None);
     }
 
-    let json: serde_json::Value = resp.json().await?;
+    let json: serde_json::Value =
+        crate::common::http::read_json_capped::<serde_json::Value>(resp).await?;
     if let Some(url) = json.get("url").and_then(|v| v.as_str()) {
         let is_sample = json.get("sample").and_then(|v| v.as_bool()).or_else(|| {
             json.get("sample")

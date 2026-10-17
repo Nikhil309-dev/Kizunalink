@@ -162,6 +162,7 @@ impl SoundCloudHlsReader {
 
         let handle_clone = handle.clone();
         let bg_thread = thread::Builder::new()
+            .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
             .name("sc-hls-prefetch".into())
             .spawn(move || {
                 prefetch_loop(shared_bg, bg_client, bg_all, handle_clone);

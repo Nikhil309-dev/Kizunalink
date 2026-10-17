@@ -32,6 +32,24 @@ pub fn error_response(status: StatusCode, message: impl Into<String>, path: &str
     (status, axum::Json(error)).into_response()
 }
 
+/// Canonical `404` body for a missing session or player.
+pub fn not_found(message: impl Into<String>, path: &str) -> Response {
+    error_response(StatusCode::NOT_FOUND, message, path)
+}
+
+/// Canonical `400` body for a malformed request.
+pub fn bad_request(message: impl Into<String>, path: &str) -> Response {
+    error_response(StatusCode::BAD_REQUEST, message, path)
+}
+
+/// The full client-facing request path, for use as the `path` field of an
+/// `AudiumError` from a handler that holds the raw `OriginalUri`.
+pub fn path_of(uri: &Uri) -> String {
+    uri.path_and_query()
+        .map(|pq| pq.as_str().to_owned())
+        .unwrap_or_else(|| uri.path().to_owned())
+}
+
 /// The full client-facing request path.
 ///
 /// `nest("/v4", …)` strips the mount prefix from `Request::uri()`, so an extractor
@@ -74,7 +92,15 @@ where
                     }
                     other => other.body_text(),
                 };
-                Err(error_response(StatusCode::BAD_REQUEST, message, &path))
+                // A body that exceeds `server.max_body_bytes` is reported as 413
+                // (NodeLink parity) rather than a generic 400, so clients can tell
+                // "too big" apart from "malformed".
+                let status = if message.contains("length limit exceeded") {
+                    StatusCode::PAYLOAD_TOO_LARGE
+                } else {
+                    StatusCode::BAD_REQUEST
+                };
+                Err(error_response(status, message, &path))
             }
         }
     }
@@ -136,5 +162,49 @@ where
                 &path,
             )),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+
+    async fn body_json(resp: Response) -> serde_json::Value {
+        let (parts, body) = resp.into_parts();
+        assert!(parts.headers.get("content-type").is_some_and(|v| {
+            v.to_str()
+                .unwrap_or_default()
+                .starts_with("application/json")
+        }));
+        let bytes = to_bytes(body, 64 * 1024).await.expect("body");
+        serde_json::from_slice(&bytes).expect("json envelope")
+    }
+
+    /// Every route-level failure must carry the same five fields; a client that
+    /// parses `message` should never have to special-case one endpoint.
+    #[tokio::test]
+    async fn not_found_uses_the_canonical_envelope() {
+        let v = body_json(not_found("Session not found: x", "/v4/sessions/x/players")).await;
+        assert_eq!(v["status"], 404);
+        assert_eq!(v["error"], "Not Found");
+        assert_eq!(v["message"], "Session not found: x");
+        assert_eq!(v["path"], "/v4/sessions/x/players");
+        assert!(v["timestamp"].as_u64().unwrap_or(0) > 0);
+    }
+
+    #[tokio::test]
+    async fn bad_request_uses_the_canonical_envelope() {
+        let v = body_json(bad_request("Invalid encoded track", "/v4/lyrics")).await;
+        assert_eq!(v["status"], 400);
+        assert_eq!(v["error"], "Bad Request");
+        assert_eq!(v["message"], "Invalid encoded track");
+        assert_eq!(v["path"], "/v4/lyrics");
+    }
+
+    #[test]
+    fn path_of_keeps_query_string_and_defaults_to_root() {
+        let uri: Uri = "/v4/lyrics?track=abc&skipTrackSource=true".parse().unwrap();
+        assert_eq!(path_of(&uri), "/v4/lyrics?track=abc&skipTrackSource=true");
     }
 }

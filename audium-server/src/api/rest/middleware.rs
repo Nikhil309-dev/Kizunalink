@@ -18,32 +18,22 @@ pub async fn check_auth(
     req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let auth_header = req
-        .headers()
-        .get("authorization")
-        .and_then(|h| h.to_str().ok());
+    // A missing header is 401, a supplied-but-wrong secret is 403 — mirroring
+    // official Lavalink (RequestAuthorizationFilter.kt) so clients can tell
+    // misconfiguration (403) apart from a missing header (401). The comparison
+    // itself is the shared constant-time helper in `crate::health`.
+    let present = req.headers().contains_key("authorization");
 
-    use subtle::ConstantTimeEq;
-    match auth_header {
-        Some(auth)
-            if bool::from(
-                auth.as_bytes()
-                    .ct_eq(state.config.server.authorization.as_bytes()),
-            ) =>
-        {
-            Ok(next.run(req).await)
-        }
-        // Mirror official Lavalink: a missing password is 401, a supplied but
-        // wrong password is 403 (RequestAuthorizationFilter.kt). Clients tell
-        // misconfiguration (403) apart from a missing header (401).
-        Some(_) => {
-            warn!("REST authorization failed: invalid password");
-            Err(StatusCode::FORBIDDEN)
-        }
-        None => {
-            warn!("REST authorization failed: missing authorization header");
-            Err(StatusCode::UNAUTHORIZED)
-        }
+    if crate::health::is_authorized(&state, req.headers()) {
+        return Ok(next.run(req).await);
+    }
+
+    if present {
+        warn!("REST authorization failed: invalid password");
+        Err(StatusCode::FORBIDDEN)
+    } else {
+        warn!("REST authorization failed: missing authorization header");
+        Err(StatusCode::UNAUTHORIZED)
     }
 }
 

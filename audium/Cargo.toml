@@ -11,6 +11,11 @@ build = "build.rs"
 [lib]
 path = "audium-voice/lib.rs"
 
+# `md-5` is used via its lib name `md5` (e.g. `use md5::{Digest, Md5}` in
+# netease/bilibili/qobuz), which cargo-machete cannot see through.
+[package.metadata.cargo-machete]
+ignored = ["md-5"]
+
 # Build script provides libopus for the hand-rolled FFI in `audium-voice/opus/ffi.rs`:
 # pkg-config probe on Unix when available, otherwise a vendored CMake build of opus
 # (Windows, Android, and containerized builds). Replaces the unmaintained audiopus_sys
@@ -29,7 +34,6 @@ davey = "0.1.4"
 aes = "0.8"
 des = "0.8.1"
 cipher = "0.5.0"
-block-padding = "0.4.2"
 hex = "0.4.3"
 blowfish = "0.9"
 md-5 = "0.10"
@@ -38,7 +42,6 @@ urlencoding = "2.1.3"
 hmac = "0.12"
 sha1 = "0.10"
 sha2 = "0.10"
-perf_monitor = "0.2.1"
 
 [dependencies.base64]
 workspace = true
@@ -88,9 +91,6 @@ workspace = true
 [dependencies.sysinfo]
 workspace = true
 
-[dependencies.prometheus]
-workspace = true
-
 [dependencies.tracing-subscriber]
 workspace = true
 
@@ -103,6 +103,26 @@ workspace = true
 [dependencies.symphonia]
 version = "0.5.5"
 features = [ "aac", "mp3", "ogg", "flac", "wav", "isomp4", "mkv", "alac",]
+
+# Tracker-module (MOD/XM/S3M/IT/DW/SID) playback. Pure safe Rust, MIT, no C
+# dependency (unlike libxmp/openmpt). `xmrsplayer` renders interleaved i16
+# stereo PCM, which the engine resamples and mixes like any other codec.
+[dependencies.xmrsplayer]
+version = "0.15.0"
+default-features = false
+features = [ "std", "import_mod", "import_xm", "import_s3m", "import_it",]
+
+# `Module` (the parsed module document) is used directly to measure a module's
+# duration before playback starts.
+[dependencies.xmrs]
+version = "0.15.0"
+default-features = false
+features = [ "std", "import_mod", "import_xm", "import_s3m", "import_it",]
+
+# `XmrsPlayer` borrows the `Module` it replays, so the two must be stored
+# together. `self_cell` builds that self-referential pair safely (no `unsafe`).
+[dependencies.self_cell]
+version = "1.3"
 
 [dependencies.tokio-tungstenite]
 version = "0.26.2"
@@ -125,7 +145,4 @@ workspace = true
 workspace = true
 
 [dependencies.axum]
-workspace = true
-
-[dependencies.tower-http]
 workspace = true

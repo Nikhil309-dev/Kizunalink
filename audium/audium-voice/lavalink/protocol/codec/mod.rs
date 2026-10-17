@@ -54,6 +54,32 @@ mod tests {
         assert_eq!(reparsed.info.source_name, track.info.source_name);
     }
 
+    /// The encoder stamps the header as v3 but must also set the "has uri /
+    /// artwork / isrc" flag, otherwise `decode_track` skips those fields and the
+    /// re-encoded token silently drops `uri`, `artworkUrl`, and `isrc`.
+    #[test]
+    fn re_encode_preserves_v3_optional_fields() {
+        let original = decode_track(LAVALINK_4_2_2_RICK_ASTLEY).expect("decodes source track");
+        let encoded =
+            super::encode::encode_track(&original.info, &original.user_data).expect("re-encodes");
+        let reparsed = decode_track(&encoded).expect("round-trip decode succeeds");
+
+        assert_eq!(reparsed.info.uri, original.info.uri);
+        assert_eq!(reparsed.info.artwork_url, original.info.artwork_url);
+        assert_eq!(reparsed.info.isrc, original.info.isrc);
+        assert_eq!(reparsed.info.source_name, original.info.source_name);
+        assert_eq!(reparsed.info.position, original.info.position);
+    }
+
+    /// A string longer than the u16 wire-format length prefix must be reported
+    /// as an error rather than silently truncated (which would corrupt the token).
+    #[test]
+    fn oversized_string_is_rejected_instead_of_truncated() {
+        let mut buffer = crate::lavalink::protocol::codec::io::BinaryBuffer::new();
+        let huge = "a".repeat(u16::MAX as usize + 1);
+        assert!(buffer.write_string(&huge).is_err());
+    }
+
     /// `encode_playlist_info` / `decode_playlist_info` round-trip.
     #[test]
     fn round_trips_playlist_info() {

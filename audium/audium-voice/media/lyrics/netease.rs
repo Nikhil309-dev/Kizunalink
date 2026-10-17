@@ -7,10 +7,18 @@ use serde_json::Value;
 use super::{LyricsProvider, utils};
 use crate::lavalink::protocol::{models::LyricsData, tracks::TrackInfo};
 
-#[derive(Default)]
 pub struct NeteaseProvider {
     client: reqwest::Client,
     cookies: String,
+}
+
+impl Default for NeteaseProvider {
+    fn default() -> Self {
+        Self {
+            client: utils::build_http_client(),
+            cookies: String::new(),
+        }
+    }
 }
 
 impl NeteaseProvider {
@@ -31,7 +39,9 @@ impl NeteaseProvider {
             .send()
             .await.ok()?;
 
-        let body: Value = resp.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let songs = body["result"]["songs"].as_array()?;
 
         songs.first().cloned()
@@ -61,7 +71,9 @@ impl LyricsProvider for NeteaseProvider {
             .send()
             .await.ok()?;
 
-        let body: Value = resp.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let raw_lrc = body["lrc"]["lyric"].as_str()?;
 
         let lines = utils::parse_lrc(raw_lrc);

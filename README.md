@@ -74,18 +74,27 @@ The source implementations below are part of the project. **An implemented sourc
 
 | Source | Source | Source |
 |---|---|---|
-| YouTube | Spotify | Deezer |
-| Apple Music | SoundCloud | Tidal |
+| YouTube | Spotify | Apple Music |
+| Deezer | SoundCloud | Tidal |
 | JioSaavn | Gaana | Mixcloud |
 | NetEase | VK Music | Yandex Music |
-| Audiomack | Audius | Twitch |
-| Reddit | HTTP URLs | Local files |
+| Qobuz | Amazon Music | Anghami |
+| Audiomack | Audius | Bandcamp |
+| Last.fm | Pandora | Shazam |
+| Twitch | Reddit | Bluesky |
+| TikTok | Tumblr | Newgrounds |
+| Kwai | Telegram | Vimeo |
+| Pinterest | Google Drive | Songlink |
+| Bilibili | NicoVideo | Instagram |
+| Twitter/X | RSS/Atom feeds | iHeartRadio |
+| Google TTS | Flowery TTS | LazyPy TTS |
+| HTTP URLs | Local files | |
 
 Metadata-only results may require a playable mirror. See [config.example.toml](./config.example.toml) for source settings and resolver priorities.
 
 ## Quick start
 
-The commands below use the **hardening branch** so the configuration and build match this README. For a tagged release, use the matching tag and configuration instead.
+The commands below clone `main`, so the configuration and build match this README. For a tagged release, use the matching tag and configuration instead.
 
 ### 1. Get the project
 
@@ -140,7 +149,7 @@ Install a stable Rust toolchain and native build dependencies. On Debian/Ubuntu:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake pkg-config clang libclang-dev perl libopus-dev
+sudo apt-get install -y build-essential cmake pkg-config perl libopus-dev
 
 export LIBOPUS_STATIC=1 OPUS_STATIC=1
 cargo build --release --workspace --locked
@@ -171,6 +180,8 @@ A successful health probe checks liveness, not Discord connectivity or media-sou
 
 Use [config.example.toml](./config.example.toml) as the complete reference. By default, the server reads `config.toml` from its working directory, falling back to the example configuration. `AUDIUM_CONFIG_PATH` selects an explicit configuration path.
 
+The server takes no command-line arguments; it exits with an error if given any (there is no `--config` flag — use `AUDIUM_CONFIG_PATH` instead).
+
 | Environment variable | Setting |
 |---|---|
 | `AUDIUM_CONFIG_PATH` | Configuration file path |
@@ -181,6 +192,7 @@ Use [config.example.toml](./config.example.toml) as the complete reference. By d
 | `AUDIUM_LOG_LEVEL` | `logging.level` |
 | `AUDIUM_TLS_ENABLED` | `server.tls.enabled` |
 | `AUDIUM_METRICS_ENABLED` | `metrics.prometheus.enabled` |
+| `AUDIUM_HTTP_BUF_BYTES` | Per-playing-track HTTP prefetch cap (default 512 KiB; 256 KiB–64 MiB) |
 
 A variable that is set but empty (for example `AUDIUM_ADDRESS=`, or a blank
 entry in a Compose `environment:` list) is rejected at startup by name rather
@@ -347,7 +359,7 @@ flowchart TD
 
 ## REST and WebSocket API
 
-`/v4/*` and enabled metrics require the `Authorization` header. `/health` is unauthenticated. The metrics path is configurable.
+`/v4/*` and enabled metrics require the `Authorization` header. `/health` answers unauthenticated with `{"status":"ok"}`; send the header to also receive `uptimeMs` and the current `players` count. The metrics path is configurable.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -355,7 +367,7 @@ flowchart TD
 | `GET` | `/v4/info` | Version, sources, and filters |
 | `GET` | `/v4/stats` | Node statistics |
 | `GET` | `/v4/loadtracks?identifier=` | Search or resolve a track |
-| `GET` | `/v4/loadsearch?identifier=` | Search extension |
+| `GET` | `/v4/loadsearch?query=&types=` | Multi-type search extension (Audium-only) |
 | `GET` | `/v4/decodetrack?encodedTrack=` | Decode one track |
 | `POST` | `/v4/decodetracks` | Decode multiple tracks |
 | `GET` | `/v4/sessions/{session}/players` | List players |

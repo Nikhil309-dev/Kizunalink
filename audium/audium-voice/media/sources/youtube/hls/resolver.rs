@@ -32,7 +32,7 @@ struct ResolutionContext {
 /// Boxed future returned by [`resolve_playlist_inner`]; the recursion has to be
 /// boxed so the compiler can name its type.
 type PlaylistFuture<'a> = std::pin::Pin<
-    Box<dyn std::future::Future<Output = AnyResult<(Vec<Resource>, Option<Resource>)>> + 'a>,
+    Box<dyn std::future::Future<Output = AnyResult<(Vec<Resource>, Option<Resource>)>> + Send + 'a>,
 >;
 
 pub async fn resolve_playlist(
@@ -141,7 +141,7 @@ pub async fn fetch_text(client: &reqwest::Client, url: &str) -> AnyResult<String
         return Err(format!("HLS playlist fetch failed {}: {}", res.status(), url).into());
     }
 
-    let text = res.text().await?;
+    let text = crate::common::http::read_text_capped(res).await?;
     Ok(text)
 }
 

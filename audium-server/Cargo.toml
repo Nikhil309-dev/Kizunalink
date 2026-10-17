@@ -13,9 +13,6 @@ subtle = "2.6"
 [dependencies.audium]
 path = "../audium"
 
-[dependencies.base64]
-workspace = true
-
 [dependencies.bytes]
 workspace = true
 
@@ -31,31 +28,13 @@ workspace = true
 [dependencies.futures]
 workspace = true
 
-[dependencies.async-trait]
-workspace = true
-
 [dependencies.serde_json]
-workspace = true
-
-[dependencies.byteorder]
 workspace = true
 
 [dependencies.regex]
 workspace = true
 
-[dependencies.ipnet]
-workspace = true
-
-[dependencies.rand]
-workspace = true
-
-[dependencies.toml]
-workspace = true
-
 [dependencies.parking_lot]
-workspace = true
-
-[dependencies.thiserror]
 workspace = true
 
 [dependencies.sysinfo]
@@ -64,19 +43,10 @@ workspace = true
 [dependencies.prometheus]
 workspace = true
 
-[dependencies.perf_monitor]
-workspace = true
-
-[dependencies.tracing-subscriber]
-workspace = true
-
 [dependencies.serde]
 workspace = true
 
 [dependencies.time]
-workspace = true
-
-[dependencies.uuid]
 workspace = true
 
 [dependencies.reqwest]
@@ -96,15 +66,3 @@ workspace = true
 
 [dependencies.rustls]
 workspace = true
-
-[dev-dependencies.tower]
-version = "0.5"
-
-[dev-dependencies.http-body-util]
-version = "0.1"
-
-[dev-dependencies.tokio-tungstenite]
-version = "0.26"
-
-[dev-dependencies.futures-util]
-version = "0.3"

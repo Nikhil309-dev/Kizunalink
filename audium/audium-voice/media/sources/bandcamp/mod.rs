@@ -58,7 +58,7 @@ impl BandcampSource {
             return LoadResult::Empty {};
         }
 
-        let body = match resp.text().await {
+        let body = match crate::common::http::read_text_capped(resp).await {
             Ok(t) => t,
             Err(_) => return LoadResult::Empty {},
         };
@@ -231,7 +231,7 @@ impl BandcampSource {
             return None;
         }
 
-        let body = resp.text().await.ok()?;
+        let body = crate::common::http::read_text_capped(resp).await.ok()?;
 
         let tralbum_re = TRALBUM_PATTERN
             .get_or_init(|| Regex::new(r#"data-tralbum=["'](.+?)["']"#).expect("valid regex"));

@@ -38,7 +38,56 @@ pub fn detect_format(header: &[u8]) -> AudioFormat {
         return AudioFormat::Mp3;
     }
 
+    if is_tracker_magic(header) {
+        return AudioFormat::Tracker;
+    }
+
     AudioFormat::Unknown
+}
+
+/// True when `header` begins a tracker module Audium can replay.
+///
+/// Only the formats the bundled replayer imports are recognised — MOD, XM, S3M
+/// and IT. Advertising a signature we cannot decode would turn a load into a
+/// runtime failure, so related-but-unsupported magics are deliberately omitted.
+///
+/// `header` should hold the first ~1084 bytes so the MOD signature at offset
+/// 1080 is visible; shorter buffers still match the leading-magic formats.
+pub fn is_tracker_magic(header: &[u8]) -> bool {
+    if header.len() < 4 {
+        return false;
+    }
+
+    // XM: "Extended Module: "
+    if header.starts_with(b"Extended Module: ") {
+        return true;
+    }
+    // IT: "IMPM"
+    if header.starts_with(b"IMPM") {
+        return true;
+    }
+    // S3M: "SCRM" at offset 44
+    if header.len() >= 48 && &header[44..48] == b"SCRM" {
+        return true;
+    }
+    // MOD: a 4-byte signature at offset 1080.
+    if header.len() >= 1084 {
+        let sig = &header[1080..1084];
+        // ProTracker / FastTracker / Octalyser / Composer family signatures.
+        const SIGS: [&[u8; 4]; 12] = [
+            b"M.K.", b"M!K!", b"M&K!", b"N.T.", b"FLT4", b"FLT8", b"4CHN", b"6CHN", b"8CHN",
+            b"OCTA", b"OKTA", b"CD81",
+        ];
+        if SIGS.iter().any(|s| s.as_slice() == sig) {
+            return true;
+        }
+        // Channel-count signatures such as "10CH" / "32CH".
+        if sig[2] == b'C' && sig[3] == b'H' && sig[0].is_ascii_digit() && sig[1].is_ascii_digit() {
+            return true;
+        }
+    }
+
+    false
 }
 
 #[cfg(test)]
@@ -68,5 +117,43 @@ mod tests {
             detect_format(&[0x00, 0x00, 0x00, 0x00]),
             AudioFormat::Unknown
         );
+    }
+
+    #[test]
+    fn detect_xm_module() {
+        let mut hdr = b"Extended Module: ".to_vec();
+        hdr.extend(vec![0u8; 60]);
+        assert_eq!(detect_format(&hdr), AudioFormat::Tracker);
+    }
+
+    #[test]
+    fn detect_it_module() {
+        let mut hdr = b"IMPM".to_vec();
+        hdr.extend(vec![0u8; 60]);
+        assert_eq!(detect_format(&hdr), AudioFormat::Tracker);
+    }
+
+    #[test]
+    fn detect_s3m_module() {
+        let mut hdr = vec![0u8; 44];
+        hdr.extend(b"SCRM");
+        hdr.extend(vec![0u8; 16]);
+        assert_eq!(detect_format(&hdr), AudioFormat::Tracker);
+    }
+
+    #[test]
+    fn detect_mod_module() {
+        let mut hdr = vec![0u8; 1080];
+        hdr.extend(b"M.K.");
+        hdr.extend(vec![0u8; 16]);
+        assert_eq!(detect_format(&hdr), AudioFormat::Tracker);
+    }
+
+    #[test]
+    fn mod_magic_needs_the_signature_offset() {
+        // A short buffer cannot be a MOD: the signature lives at byte 1080.
+        assert!(!is_tracker_magic(&[0u8; 512]));
+        // Nor does arbitrary leading data match the leading-magic formats.
+        assert!(!is_tracker_magic(b"RIFFxxxxWAVE"));
     }
 }

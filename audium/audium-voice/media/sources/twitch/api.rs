@@ -72,7 +72,7 @@ impl TwitchGqlClient {
             }
         }
 
-        let body = match resp.text().await {
+        let body = match crate::common::http::read_text_capped(resp).await {
             Ok(b) => b,
             Err(e) => {
                 warn!("Twitch: failed to read main page body: {e}");
@@ -114,7 +114,7 @@ impl TwitchGqlClient {
             return None;
         }
 
-        match resp.json::<Value>().await {
+        match crate::common::http::read_json_capped::<Value>(resp).await {
             Ok(v) => Some(v),
             Err(e) => {
                 debug!("Twitch GQL JSON parse error: {e}");
@@ -198,7 +198,7 @@ impl TwitchGqlClient {
         }
 
         match req.send().await {
-            Ok(resp) => match resp.text().await {
+            Ok(resp) => match crate::common::http::read_text_capped(resp).await {
                 Ok(t) => Some(t),
                 Err(e) => {
                     debug!("Twitch: failed to read response body from '{url}': {e}");

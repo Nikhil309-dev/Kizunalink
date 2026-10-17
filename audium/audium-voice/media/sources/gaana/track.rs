@@ -96,6 +96,7 @@ impl PlayableTrack for GaanaTrack {
                 match setup_res {
                     Ok(mut processor) => {
                         if let Err(e) = std::thread::Builder::new()
+                            .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                             .name(format!("gaana-decoder-{}", track_id_for_log))
                             .spawn(move || {
                                 if let Err(e) = processor.run_guarded() {
@@ -156,7 +157,9 @@ pub(super) async fn fetch_stream_url_internal(
         return None;
     }
 
-    let data: serde_json::Value = resp.json().await.ok()?;
+    let data: serde_json::Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+        .await
+        .ok()?;
     let encrypted_path = data.get("data")?.get("stream_path")?.as_str()?;
 
     decrypt_stream_path(encrypted_path)

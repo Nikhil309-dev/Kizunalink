@@ -20,6 +20,7 @@ impl PlayableTrack for VkMusicTrack {
             url: self.stream_url.clone(),
             local_addr: self.local_addr,
             proxy: self.proxy.clone(),
+            headers: None,
         }
         .start_decoding(config)
     }

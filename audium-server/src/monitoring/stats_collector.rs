@@ -39,7 +39,6 @@ pub fn collect_stats(app_state: &AppState, session: Option<&Session>) -> protoco
         let mut stat = app_state.process_stat.lock();
         stat.cpu().unwrap_or(0.0).clamp(0.0, logical_cores as f64) / logical_cores as f64
     };
-
     let process_used_memory = system.process(pid).map(|p| p.memory()).unwrap_or(0);
 
     let system_load = if system.cpus().is_empty() {
@@ -80,6 +79,9 @@ pub fn collect_stats(app_state: &AppState, session: Option<&Session>) -> protoco
         },
         frame_stats: session
             .and_then(|sess| FrameMetrics::calculate(sess, app_state.config.server.stats_interval)),
+        // Filled by the REST/WS layer when `monitoring.detailed_stats` is on;
+        // `collect_stats` stays pure so WS per-tick stats don't rebuild it.
+        detailed_stats: None,
     }
 }
 

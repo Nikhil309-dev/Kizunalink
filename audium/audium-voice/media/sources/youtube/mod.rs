@@ -32,8 +32,9 @@ use cipher::YouTubeCipherManager;
 use clients::{
     YouTubeClient, android::AndroidClient, android_vr::AndroidVrClient, ios::IosClient,
     music_android::MusicAndroidClient, tv::TvClient, tv_cast::TvCastClient,
-    tv_embedded::TvEmbeddedClient, web::WebClient, web_embedded::WebEmbeddedClient,
-    web_parent_tools::WebParentToolsClient, web_remix::WebRemixClient,
+    tv_downgraded::TvDowngradedClient, tv_embedded::TvEmbeddedClient, vision_os::VisionOsClient,
+    web::WebClient, web_embedded::WebEmbeddedClient, web_parent_tools::WebParentToolsClient,
+    web_remix::WebRemixClient,
 };
 use oauth::YouTubeOAuth;
 use pot::SharedPotProvider;
@@ -174,6 +175,10 @@ impl YouTubeSource {
                     Some(Arc::new(MusicAndroidClient::new(http.clone())))
                 }
                 "ANDROID_VR" | "ANDROIDVR" => Some(Arc::new(AndroidVrClient::new(http.clone()))),
+                "VISIONOS" | "VISION_OS" => Some(Arc::new(VisionOsClient::new(http.clone()))),
+                "TV_DOWN" | "TV_DOWNGRADED" => {
+                    Some(Arc::new(TvDowngradedClient::new(http.clone())))
+                }
                 "WEB_EMBEDDED" | "WEBEMBEDDED" => {
                     Some(Arc::new(WebEmbeddedClient::new(http.clone())))
                 }
@@ -270,7 +275,7 @@ impl YouTubeSource {
             .await
         {
             Ok(res) if res.status().is_success() => {
-                if let Ok(text) = res.text().await {
+                if let Ok(text) = crate::common::http::read_text_capped(res).await {
                     let re = regex::Regex::new(r#""VISITOR_DATA":"([^"]+)""#).ok();
                     if let Some(vd) = re.as_ref().and_then(|r| r.captures(&text)).and_then(|c| c.get(1)) {
                         let raw = vd.as_str();
@@ -307,7 +312,7 @@ impl YouTubeSource {
             .await
         {
             Ok(res) => {
-                if let Ok(json) = res.json::<Value>().await
+                if let Ok(json) = crate::common::http::read_json_capped::<Value>(res).await
                     && let Some(vd) = json
                         .get("responseContext")
                         .and_then(|rc| rc.get("visitorData"))

@@ -20,8 +20,7 @@ on:
         default: ""
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -186,6 +185,9 @@ jobs:
     name: 🐳 Build & Push Docker Image
     needs: build-linux
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: 📥 Checkout source
@@ -244,6 +246,8 @@ jobs:
     name: 📦 Publish Release Assets
     needs: [build-linux, build-linux-musl]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     if: always() && needs.build-linux.result == 'success' && needs.build-linux-musl.result == 'success'
 
     steps:

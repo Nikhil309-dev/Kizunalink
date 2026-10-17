@@ -32,11 +32,7 @@ impl GoogleTtsSource {
     }
 
     fn build_track_info(&self, language: &str, text: &str) -> TrackInfo {
-        let title_text = if text.len() > 50 {
-            format!("{}...", &text[..47])
-        } else {
-            text.to_string()
-        };
+        let title_text = crate::common::utils::truncate_chars(text, 50);
 
         TrackInfo {
             identifier: format!("gtts://{}:{}", language, text),
@@ -133,6 +129,7 @@ impl SourcePlugin for GoogleTtsSource {
             url,
             local_addr: routeplanner.and_then(|rp| rp.get_address()),
             proxy: None, // Google TTS doesn't currently support proxy config directly in the new implementation, similar to Spotify
+            headers: None,
         }))
     }
 

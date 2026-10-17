@@ -123,7 +123,8 @@ impl YouTubeClient for WebRemixClient {
             return Err(format!("Music search failed: {}", res.status()).into());
         }
 
-        let response: Value = res.json().await?;
+        let response: Value =
+            crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
         let mut tracks = Vec::new();
 
         // Improved navigation for YouTube Music search results
@@ -391,7 +392,8 @@ impl YouTubeClient for WebRemixClient {
             return Ok(None);
         }
 
-        let response: Value = res.json().await?;
+        let response: Value =
+            crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
 
         Ok(crate::media::sources::youtube::extractor::extract_from_next(&response, "youtube"))
     }

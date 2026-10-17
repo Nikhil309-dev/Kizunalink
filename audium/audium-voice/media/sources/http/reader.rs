@@ -20,6 +20,17 @@ impl HttpReader {
         local_addr: Option<std::net::IpAddr>,
         proxy: Option<crate::config::sources::HttpProxyConfig>,
     ) -> AnyResult<Self> {
+        Self::with_headers(url, local_addr, proxy, None)
+    }
+
+    /// Opens a reader that sends `headers` on every request. Used by sources
+    /// whose CDN requires a `Cookie` or `Referer` (e.g. NicoVideo, Bilibili).
+    pub fn with_headers(
+        url: &str,
+        local_addr: Option<std::net::IpAddr>,
+        proxy: Option<crate::config::sources::HttpProxyConfig>,
+        headers: Option<reqwest::header::HeaderMap>,
+    ) -> AnyResult<Self> {
         // Validate URL and resolve DNS to prevent SSRF (SEC-001) and avoid blocking workers (PERF-001)
         // This runs inside spawn_blocking, so blocking DNS resolution is acceptable here.
         let (host, _port, addresses) = super::resolve_and_validate_public_url(url)?;
@@ -29,7 +40,7 @@ impl HttpReader {
             user_agent,
             local_addr,
             proxy,
-            None,
+            headers,
             Some(host),
             Some(addresses),
         )?;

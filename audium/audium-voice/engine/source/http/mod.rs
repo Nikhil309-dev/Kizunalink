@@ -51,6 +51,7 @@ impl HttpSource {
         let handle_clone = handle.clone();
 
         thread::Builder::new()
+            .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
             .name("http-prefetch".into())
             .spawn(move || {
                 prefetch_loop(

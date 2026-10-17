@@ -62,13 +62,17 @@ impl HifiClient {
 
             if !resp.status().is_success() {
                 let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
+                let body = crate::common::http::read_text_capped(resp)
+                    .await
+                    .unwrap_or_default();
                 debug!("HiFi: {} → {} — {}", url, status, &body);
                 last_err = TidalError::ApiError { status, body };
                 continue;
             }
 
-            return resp.json::<Value>().await.map_err(TidalError::Request);
+            return crate::common::http::read_json_capped::<Value>(resp)
+                .await
+                .map_err(TidalError::Other);
         }
 
         Err(last_err)

@@ -198,6 +198,7 @@ fn run_processor(
     match AudioProcessor::new(reader, kind, tx, cmd_rx, Some(err_tx.clone()), config) {
         Ok(mut p) => {
             if let Err(e) = std::thread::Builder::new()
+                .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                 .name(format!("soundcloud-decoder-{}", identifier))
                 .spawn(move || {
                     if let Err(e) = p.run_guarded() {

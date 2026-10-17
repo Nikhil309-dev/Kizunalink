@@ -41,6 +41,38 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Audium takes no command-line arguments: configuration comes from
+    /// `config.toml` (or `AUDIUM_CONFIG_PATH`) and the `AUDIUM_*` environment
+    /// variables.
+    ///
+    /// Any argument is rejected rather than ignored. Silently ignoring one — for
+    /// example a `--config /etc/audium.toml` from an operator used to another
+    /// daemon — would start the node on whatever config happens to sit in the
+    /// working directory, which may be the bundled *example* config (with its
+    /// placeholder secret). Failing fast turns that into an obvious startup error.
+    ///
+    /// The iterator is expected to yield `argv` including `argv[0]` (the program
+    /// path), which is skipped; it may be empty when spawned without one.
+    pub fn reject_unknown_args<I>(args: I) -> AnyResult<()>
+    where
+        I: IntoIterator<Item = String>,
+    {
+        let mut args = args.into_iter();
+        let _program = args.next();
+
+        if let Some(arg) = args.next() {
+            return Err(format!(
+                "unexpected argument {arg:?}: audium-server takes no command-line \
+                 arguments.\n\
+                 Configure it with config.toml (or the AUDIUM_CONFIG_PATH environment \
+                 variable) and the AUDIUM_* environment variables (for example \
+                 AUDIUM_AUTHORIZATION)."
+            )
+            .into());
+        }
+        Ok(())
+    }
+
     /// Resolve the configuration file path.
     ///
     /// Resolution order:
@@ -92,30 +124,7 @@ impl AppConfig {
 
         if let Some(cs_val) = raw_val.get("config_server") {
             let cs: ConfigServerConfig = cs_val.clone().try_into()?;
-
-            let client = reqwest::Client::builder()
-                .connect_timeout(std::time::Duration::from_secs(10))
-                .timeout(std::time::Duration::from_secs(30))
-                .build()?;
-            let mut request = client.get(&cs.url);
-
-            if let (Some(u), Some(p)) = (&cs.username, &cs.password) {
-                use base64::{Engine as _, engine::general_purpose};
-                let auth = format!("{}:{}", u, p);
-                let encoded = general_purpose::STANDARD.encode(auth);
-                request = request.header("Authorization", format!("Basic {}", encoded));
-            }
-
-            let response = request.send().await?;
-            if !response.status().is_success() {
-                return Err(format!(
-                    "Failed to fetch remote config: status {}",
-                    response.status()
-                )
-                .into());
-            }
-
-            let remote_toml = response.text().await?;
+            let remote_toml = fetch_remote_config(&cs).await?;
             let mut config: Self = toml::from_str(&remote_toml)?;
             // AUDIUM_* overrides must win regardless of where the TOML came from, so
             // secrets injected through the environment still take effect with a remote
@@ -243,6 +252,18 @@ impl AppConfig {
             .into());
         }
 
+        // A zero body cap would reject every POST; require a sane floor/ceiling.
+        if self.server.max_body_bytes == 0 {
+            return Err("server.max_body_bytes must be > 0".into());
+        }
+        if self.server.max_body_bytes > 64 * 1024 * 1024 {
+            return Err(format!(
+                "server.max_body_bytes must be <= 67108864 (64 MiB), got {}",
+                self.server.max_body_bytes
+            )
+            .into());
+        }
+
         // TLS must have a cert + key when enabled.
         if self.server.tls.enabled
             && (self.server.tls.cert_path.is_none() || self.server.tls.key_path.is_none())
@@ -276,6 +297,67 @@ impl AppConfig {
 
         Ok(())
     }
+}
+
+/// Upper bound on a remote config document read into memory. A config file is a
+/// few KiB; capping the read means a malicious or corrupted config server cannot
+/// exhaust memory at startup.
+const MAX_REMOTE_CONFIG_BYTES: usize = 1024 * 1024;
+
+/// Fetch the remote configuration document named by `[config_server]`.
+///
+/// The URL is operator-controlled (it comes from the trusted local `config.toml`),
+/// so it is deliberately *not* subject to the source-layer SSRF address policy —
+/// pointing at an internal config service is a valid deployment. The hardening
+/// here is limited to what is safe unconditionally: only `http(s)` schemes are
+/// accepted, and the body is read with a hard byte cap so a hostile or broken
+/// endpoint cannot exhaust memory before validation runs.
+async fn fetch_remote_config(cs: &ConfigServerConfig) -> AnyResult<String> {
+    if !(cs.url.starts_with("http://") || cs.url.starts_with("https://")) {
+        return Err(format!("config_server.url must be an http(s) URL, got {:?}", cs.url).into());
+    }
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
+    let mut request = client.get(&cs.url);
+
+    if let (Some(u), Some(p)) = (&cs.username, &cs.password) {
+        use base64::{Engine as _, engine::general_purpose};
+        let auth = format!("{}:{}", u, p);
+        let encoded = general_purpose::STANDARD.encode(auth);
+        request = request.header("Authorization", format!("Basic {}", encoded));
+    }
+
+    let mut response = request.send().await?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Failed to fetch remote config: status {}",
+            response.status()
+        )
+        .into());
+    }
+    if response
+        .content_length()
+        .is_some_and(|len| len > MAX_REMOTE_CONFIG_BYTES as u64)
+    {
+        return Err(
+            format!("Remote config exceeds the {MAX_REMOTE_CONFIG_BYTES}-byte limit").into(),
+        );
+    }
+
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if chunk.len() > MAX_REMOTE_CONFIG_BYTES.saturating_sub(body.len()) {
+            return Err(
+                format!("Remote config exceeds the {MAX_REMOTE_CONFIG_BYTES}-byte limit").into(),
+            );
+        }
+        body.extend_from_slice(&chunk);
+    }
+
+    Ok(String::from_utf8(body).map_err(|e| format!("Remote config is not valid UTF-8: {e}"))?)
 }
 
 /// Read an environment variable, distinguishing "unset" from "set but blank".
@@ -649,6 +731,35 @@ mod tests {
     }
 
     #[test]
+    fn no_cli_args_is_accepted() {
+        // argv[0] only (the normal case), plus the empty-argv case for a spawn
+        // that provides no program path.
+        AppConfig::reject_unknown_args(["audium-server".to_string()]).unwrap();
+        AppConfig::reject_unknown_args(Vec::<String>::new()).unwrap();
+    }
+
+    #[test]
+    fn unknown_cli_arg_is_rejected() {
+        // A `--config` style flag must not be silently ignored: the error names
+        // the offending argument and points at the supported configuration path.
+        let err = AppConfig::reject_unknown_args([
+            "audium-server".to_string(),
+            "--config".to_string(),
+            "/etc/audium.toml".to_string(),
+        ])
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("--config"),
+            "error should name the argument: {err}"
+        );
+        assert!(
+            err.contains("AUDIUM_CONFIG_PATH"),
+            "error should point at the supported mechanism: {err}"
+        );
+    }
+
+    #[test]
     fn config_path_override_is_honoured() {
         let _guard = ENV_LOCK.lock().unwrap();
         let previous = std::env::var("AUDIUM_CONFIG_PATH").ok();
@@ -667,5 +778,98 @@ mod tests {
             Some(v) => unsafe { std::env::set_var("AUDIUM_CONFIG_PATH", v) },
             None => unsafe { std::env::remove_var("AUDIUM_CONFIG_PATH") },
         }
+    }
+
+    /// The shipped `config.example.toml` is the first thing a new operator
+    /// copies, and `resolve_config_path` falls back to it when no `config.toml`
+    /// exists. Pin two properties so it cannot rot silently: it must still
+    /// parse into [`AppConfig`], and its `authorization` must remain a
+    /// placeholder that `validate` rejects, so an unchanged copy cannot start.
+    ///
+    /// Note: a *renamed or typo'd* key inside the example is still dropped by
+    /// serde without an error (no `deny_unknown_fields`). Catching that needs
+    /// `serde_ignored`; see the audit report rather than adding a dependency
+    /// for one assertion.
+    #[test]
+    fn shipped_example_config_parses_and_is_not_a_usable_secret() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../config.example.toml");
+        let raw = std::fs::read_to_string(path).expect("config.example.toml is readable");
+
+        let example: AppConfig = toml::from_str(&raw).expect("config.example.toml must parse");
+        assert!(
+            is_insecure_placeholder(&example.server.authorization),
+            "the example must keep a rejected placeholder so an unchanged copy cannot start"
+        );
+
+        // Validate the file as a *fresh copy* would be validated at startup:
+        // with no ambient `AUDIUM_*` overrides in play, so a documented live-node
+        // shell cannot make the assertion pass by accident.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let ambient: Vec<(String, String)> = std::env::vars()
+            .filter(|(k, _)| k.starts_with("AUDIUM_"))
+            .collect();
+        for (k, _) in &ambient {
+            unsafe { std::env::remove_var(k) };
+        }
+
+        let mut copy = example;
+        let result = copy.apply_env_overrides().and_then(|()| copy.validate());
+
+        for (k, v) in ambient {
+            unsafe { std::env::set_var(k, v) };
+        }
+
+        assert!(
+            result.is_err(),
+            "an unedited config.example.toml must fail validation instead of starting"
+        );
+    }
+
+    /// Every `[sources.<name>]` block must correspond to a real `SourcesConfig`
+    /// field, and — the failure this pins — every `SourcesConfig` field must
+    /// have a block in the example. A source can be fully implemented and
+    /// registered while being absent from the example, leaving operators unable
+    /// to enable it (that happened to tiktok, tumblr, newgrounds, kwai and
+    /// telegram). `serde` silently ignores unknown keys, so nothing else catches
+    /// this drift.
+    #[test]
+    fn every_source_config_field_has_an_example_block() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../config.example.toml");
+        let raw = std::fs::read_to_string(path).expect("config.example.toml is readable");
+
+        let example = cfg_from_toml(&raw);
+
+        // Field names declared in `SourcesConfig`, via serde's own view of it.
+        let sources = serde_json::to_value(&example.sources)
+            .expect("SourcesConfig serializes")
+            .as_object()
+            .expect("SourcesConfig serializes to an object")
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let documented = raw
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("[sources."))
+            .filter_map(|l| l.strip_suffix(']'))
+            // `[sources.youtube.cipher]` is a nested sub-table of `youtube`,
+            // not a source of its own, so only the first segment names a source.
+            .filter_map(|l| l.split('.').next())
+            .map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let undocumented: Vec<_> = sources.difference(&documented).collect();
+        assert!(
+            undocumented.is_empty(),
+            "these SourcesConfig fields have no [sources.*] block in \
+             config.example.toml: {undocumented:?}"
+        );
+
+        let unknown: Vec<_> = documented.difference(&sources).collect();
+        assert!(
+            unknown.is_empty(),
+            "these [sources.*] blocks in config.example.toml match no \
+             SourcesConfig field: {unknown:?}"
+        );
     }
 }

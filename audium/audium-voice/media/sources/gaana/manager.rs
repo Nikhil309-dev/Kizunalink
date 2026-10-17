@@ -105,7 +105,7 @@ impl GaanaSource {
             return None;
         }
 
-        let text = resp.text().await.ok()?;
+        let text = crate::common::http::read_text_capped(resp).await.ok()?;
         serde_json::from_str::<Value>(&text).ok()
     }
 

@@ -31,7 +31,7 @@ pub async fn get_json(client: &reqwest::Client, params: &[(&str, &str)]) -> Opti
         return None;
     }
 
-    let text = match resp.text().await {
+    let text = match crate::common::http::read_text_capped(resp).await {
         Ok(text) => text,
         Err(e) => {
             warn!("Failed to read JioSaavn response body: {e}");

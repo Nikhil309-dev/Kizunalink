@@ -152,7 +152,7 @@ impl YouTubeOAuth {
             .send()
             .await?;
 
-        Ok(res.json().await?)
+        Ok(crate::common::http::read_json_capped::<serde_json::Value>(res).await?)
     }
 
     /// Device-flow poll cadence. Google returns `interval` in seconds; a zero
@@ -243,7 +243,7 @@ impl YouTubeOAuth {
             .send()
             .await?;
 
-        Ok(res.json().await?)
+        Ok(crate::common::http::read_json_capped::<serde_json::Value>(res).await?)
     }
 
     pub async fn get_access_token(&self, idx: usize) -> Option<String> {
@@ -315,7 +315,8 @@ impl YouTubeOAuth {
 
         let status = res.status();
         if status == 200 {
-            let body: Value = res.json().await?;
+            let body: Value =
+                crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
             if let Some(access_token) = body.get("access_token").and_then(|t| t.as_str()) {
                 let expires_in = body
                     .get("expires_in")
@@ -368,7 +369,8 @@ impl YouTubeOAuth {
             .await?;
 
         let status = res.status();
-        let body: serde_json::Value = res.json().await?;
+        let body: serde_json::Value =
+            crate::common::http::read_json_capped::<serde_json::Value>(res).await?;
 
         if status.is_success() {
             Ok(body)

@@ -576,6 +576,14 @@ async fn start_playback(
     crate::monitoring::prometheus::observe_track_load(load_start.elapsed().as_secs_f64());
 }
 
+/// Stores a client-supplied resume timeout, clamped to the shared maximum.
+fn store_resume_timeout(session: &Arc<Session>, timeout: u64) {
+    session.resume_timeout.store(
+        crate::api::ws::clamp_resume_timeout(timeout),
+        std::sync::atomic::Ordering::Relaxed,
+    );
+}
+
 /// PATCH /v4/sessions/{sessionId}
 pub async fn update_session(
     ApiPath(session_id): ApiPath<audium::common::types::SessionId>,
@@ -601,9 +609,10 @@ pub async fn update_session(
             .store(resuming, std::sync::atomic::Ordering::Relaxed);
     }
     if let Some(timeout) = body.timeout {
-        session
-            .resume_timeout
-            .store(timeout, std::sync::atomic::Ordering::Relaxed);
+        // Clamp like the `configureResuming` opcode does: an unclamped client
+        // value would let one session retain its players/mixer/decoder tasks for
+        // an arbitrarily long window after disconnect.
+        store_resume_timeout(&session, timeout);
     }
 
     let info = protocol::SessionInfo {

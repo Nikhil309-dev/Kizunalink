@@ -20,7 +20,9 @@ pub struct YandexProvider {
 
 impl YandexProvider {
     pub fn new(config: &YandexLyricsConfig, proxy_config: Option<&HttpProxyConfig>) -> Self {
-        let mut client_builder = reqwest::Client::builder();
+        let mut client_builder = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(15));
 
         if let Some(proxy_cfg) = proxy_config
             && let Some(url) = &proxy_cfg.url
@@ -34,7 +36,10 @@ impl YandexProvider {
                 client_builder = client_builder.proxy(proxy_obj);
                 tracing::info!("Yandex Lyrics Provider: HTTP Proxy configured");
             } else {
-                tracing::warn!("Yandex Lyrics Provider: Invalid proxy URL: {}", url);
+                tracing::warn!(
+                    "Yandex Lyrics Provider: Invalid proxy URL: {}",
+                    crate::common::utils::redact_url(url)
+                );
             }
         }
 
@@ -90,7 +95,10 @@ impl LyricsProvider for YandexProvider {
                 .await
                 .ok()?;
 
-            let search_body: Value = search_resp.json().await.ok()?;
+            let search_body: Value =
+                crate::common::http::read_json_capped::<serde_json::Value>(search_resp)
+                    .await
+                    .ok()?;
             search_body["result"]["tracks"]["results"]
                 .as_array()?
                 .first()?
@@ -114,7 +122,9 @@ impl LyricsProvider for YandexProvider {
             .await
             .ok()?;
 
-        let body: Value = resp.json().await.ok()?;
+        let body: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let download_url = body["result"]["downloadUrl"].as_str()?;
 
         let lrc_resp = self
@@ -125,7 +135,7 @@ impl LyricsProvider for YandexProvider {
             .await
             .ok()?;
 
-        let lrc_text = lrc_resp.text().await.ok()?;
+        let lrc_text = crate::common::http::read_text_capped(lrc_resp).await.ok()?;
         let lines = utils::parse_lrc(&lrc_text);
 
         if lines.is_empty() {

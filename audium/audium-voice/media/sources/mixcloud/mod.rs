@@ -81,7 +81,9 @@ impl MixcloudSource {
         if !resp.status().is_success() {
             return None;
         }
-        resp.json::<Value>().await.ok()
+        crate::common::http::read_json_capped::<Value>(resp)
+            .await
+            .ok()
     }
 
     fn parse_track_data(&self, data: &Value) -> Option<Track> {
@@ -341,10 +343,11 @@ impl MixcloudSource {
             Err(_) => return LoadResult::Empty {},
         };
 
-        let body: Value = match resp.json().await {
-            Ok(v) => v,
-            Err(_) => return LoadResult::Empty {},
-        };
+        let body: Value =
+            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                Ok(v) => v,
+                Err(_) => return LoadResult::Empty {},
+            };
 
         let mut tracks = Vec::new();
         if let Some(data) = body["data"].as_array() {
@@ -528,5 +531,7 @@ async fn graphql_request_internal(client: &Arc<reqwest::Client>, query: &str) ->
     if !resp.status().is_success() {
         return None;
     }
-    resp.json::<Value>().await.ok()
+    crate::common::http::read_json_capped::<Value>(resp)
+        .await
+        .ok()
 }

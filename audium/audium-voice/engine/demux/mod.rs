@@ -2,6 +2,7 @@
 // Licensed under the MIT License
 
 pub mod format;
+pub mod tracker;
 pub mod webm_opus;
 
 pub use format::detect_format;
@@ -13,6 +14,7 @@ use symphonia::core::{
     meta::MetadataOptions,
     probe::Hint,
 };
+pub use tracker::TrackerFormatReader;
 pub use webm_opus::WebmOpusDemuxer;
 
 pub use crate::common::types::AudioFormat;
@@ -32,6 +34,39 @@ pub fn open_format(
     source: Box<dyn MediaSource>,
     kind: Option<crate::common::types::AudioFormat>,
 ) -> Result<DemuxResult, Error> {
+    // Tracker modules have no container timestamps and no symphonia probe
+    // support; they get a dedicated reader + decoder. Checked first because the
+    // module magic bytes cannot be mistaken for any probed container.
+    if matches!(kind, Some(AudioFormat::Tracker)) {
+        let format = TrackerFormatReader::open(source)?;
+        let track = format.tracks().first().ok_or_else(|| {
+            Error::IoError(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "no tracker track found",
+            ))
+        })?;
+        let track_id = track.id;
+        let sample_rate = track.codec_params.sample_rate.unwrap_or(TARGET_SAMPLE_RATE);
+        let channels = track
+            .codec_params
+            .channels
+            .map(|c| c.count())
+            .unwrap_or(MIXER_CHANNELS);
+        let decoder: Box<dyn Decoder> = Box::new(
+            crate::engine::codec::tracker_decoder::TrackerCodecDecoder::with_module(
+                &track.codec_params,
+                format.module_bytes(),
+            )?,
+        );
+        return Ok(DemuxResult::Transcode {
+            format: Box::new(format),
+            track_id,
+            decoder,
+            sample_rate,
+            channels,
+        });
+    }
+
     let mss = MediaSourceStream::new(source, Default::default());
 
     let mut hint = Hint::new();

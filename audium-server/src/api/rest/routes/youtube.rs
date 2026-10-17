@@ -6,30 +6,34 @@ use std::sync::Arc;
 use axum::{
     Json,
     body::Body,
-    extract::State,
+    extract::{OriginalUri, State},
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
 use serde::Deserialize;
 
-use crate::api::rest::json::{ApiPath, ApiQuery};
+use crate::api::rest::json::{self, ApiPath, ApiQuery};
 use crate::{
     server::AppState,
     sources::youtube::clients::common::{resolve_format_url, select_best_audio_format},
 };
 
-pub async fn get_youtube_info(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+pub async fn get_youtube_info(
+    OriginalUri(uri): OriginalUri,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let path = json::path_of(&uri);
     tracing::info!("GET /youtube");
 
     let ctx = match &state.youtube {
         Some(ctx) => ctx.clone(),
         None => {
             tracing::warn!("GET /youtube: YouTube source is not enabled");
-            return (
+            return json::error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "YouTube source is not enabled"})),
-            )
-                .into_response();
+                "YouTube source is not enabled",
+                &path,
+            );
         }
     };
 
@@ -45,20 +49,22 @@ pub async fn get_youtube_info(State(state): State<Arc<AppState>>) -> impl IntoRe
 }
 
 pub async fn youtube_oauth_refresh(
+    OriginalUri(uri): OriginalUri,
     ApiPath(refresh_token): ApiPath<String>,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    let path = json::path_of(&uri);
     tracing::info!("GET /youtube/oauth: refreshing configured token");
 
     let ctx = match &state.youtube {
         Some(ctx) => ctx.clone(),
         None => {
             tracing::warn!("GET /youtube/oauth: YouTube source is not enabled");
-            return (
+            return json::error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "YouTube source is not enabled"})),
-            )
-                .into_response();
+                "YouTube source is not enabled",
+                &path,
+            );
         }
     };
 
@@ -66,24 +72,18 @@ pub async fn youtube_oauth_refresh(
         Ok(body) => {
             if let Some(err) = body.get("error").and_then(|e| e.as_str()) {
                 tracing::warn!("GET /youtube/oauth: token refresh returned error: {}", err);
-                return (
+                return json::error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({
-                        "error": format!("Refreshing access token returned error: {}", err)
-                    })),
-                )
-                    .into_response();
+                    format!("Refreshing access token returned error: {err}"),
+                    &path,
+                );
             }
             tracing::debug!("GET /youtube/oauth: token refreshed successfully");
             (StatusCode::OK, Json(body)).into_response()
         }
         Err(e) => {
             tracing::error!("GET /youtube/oauth: refresh failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-                .into_response()
+            json::error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string(), &path)
         }
     }
 }
@@ -95,12 +95,24 @@ pub struct StreamQuery {
     pub with_client: Option<String>,
 }
 
+/// YouTube video ids are exactly 11 characters from `[A-Za-z0-9_-]`. Validating
+/// the path segment before it is interpolated into upstream YouTube/cipher URLs
+/// rejects malformed or injected ids up front.
+fn is_valid_video_id(video_id: &str) -> bool {
+    video_id.len() == 11
+        && video_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 pub async fn youtube_stream(
+    OriginalUri(uri): OriginalUri,
     ApiPath(video_id): ApiPath<String>,
     ApiQuery(params): ApiQuery<StreamQuery>,
     headers: HeaderMap,
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
+    let path = json::path_of(&uri);
     tracing::info!(
         "GET /youtube/stream/{} itag={:?} withClient={:?} Range={:?}",
         video_id,
@@ -109,12 +121,16 @@ pub async fn youtube_stream(
         headers.get(header::RANGE)
     );
 
+    if !is_valid_video_id(&video_id) {
+        return json::error_response(StatusCode::BAD_REQUEST, "Invalid YouTube video id", &path);
+    }
+
     let Some(ctx) = &state.youtube else {
-        return (
+        return json::error_response(
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "YouTube source is not enabled"})),
-        )
-            .into_response();
+            "YouTube source is not enabled",
+            &path,
+        );
     };
 
     let clients = match get_target_clients(ctx, params.with_client.as_deref()) {
@@ -181,6 +197,17 @@ pub async fn youtube_stream(
 
         found_formats = true;
         last_was_exception = false;
+
+        // An explicit itag request must keep using the direct-URL path, so HLS
+        // is only considered when the caller did not ask for a specific format.
+        if params.itag.is_none()
+            && let Some(hls_url) = streaming_data
+                .get("hlsManifestUrl")
+                .and_then(|v| v.as_str())
+            && let Some(resp) = stream_via_hls(ctx, hls_url, client.name(), &video_id).await
+        {
+            return resp;
+        }
 
         let format = if let Some(target_itag) = params.itag {
             let found = find_format_by_itag(adaptive, formats, target_itag);
@@ -269,7 +296,8 @@ pub async fn youtube_stream(
             }
         };
 
-        let (start, end) = parse_range_header(headers.get(header::RANGE), content_length);
+        let (start, end) = parse_range_header(headers.get(header::RANGE), content_length)
+            .unwrap_or((0, content_length.saturating_sub(1)));
         final_url
             .query_pairs_mut()
             .append_pair("range", &format!("{}-{}", start, end));
@@ -360,13 +388,209 @@ pub async fn youtube_stream(
     };
 
     tracing::warn!("GET /youtube/stream/{}: {}", video_id, error_msg);
-    (status, Json(serde_json::json!({ "error": error_msg }))).into_response()
+    json::error_response(status, error_msg, &path)
 }
 
 type ClientFilterResult = Result<
     Vec<Arc<dyn audium::media::sources::youtube::clients::YouTubeClient>>,
     (StatusCode, Json<serde_json::Value>),
 >;
+
+/// Extracts the `n` parameter from a googlevideo URL, if present. The value
+/// must be translated by the cipher manager before the URL will be accepted.
+fn extract_n_param(url: &str) -> Option<&str> {
+    if let Some(pos) = url.find("/n/") {
+        return url[pos + 3..].split('/').next();
+    }
+    url.split("&n=")
+        .nth(1)
+        .or_else(|| url.split("?n=").nth(1))
+        .and_then(|s| s.split('&').next())
+}
+
+/// Resolves a single HLS resource URL, applying n-param translation when needed.
+async fn resolve_seg_url(
+    url: &str,
+    cipher: &Arc<audium::media::sources::youtube::cipher::YouTubeCipherManager>,
+    player_url: &str,
+) -> Result<String, String> {
+    let Some(n) = extract_n_param(url) else {
+        return Ok(url.to_string());
+    };
+    cipher
+        .resolve_url(url, player_url, Some(n), None)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Streams audio over YouTube's HLS manifest.
+///
+/// Direct `videoplayback` URLs are increasingly refused with HTTP 403 unless a
+/// PoToken is attached, while the HLS manifest for the same video keeps
+/// working. The manifest itself is still fetchable from a blocked IP; only the
+/// media segments are gated. This therefore returns `None` (so the caller can
+/// fall back to the direct-URL path) whenever the manifest cannot be resolved
+/// or the first segment cannot be read, and only commits to an HLS response
+/// once a real segment has been fetched.
+async fn stream_via_hls(
+    ctx: &audium::media::sources::youtube::YoutubeStreamContext,
+    hls_url: &str,
+    client_name: &str,
+    video_id: &str,
+) -> Option<axum::response::Response> {
+    use audium::media::sources::youtube::hls::{
+        fetcher::fetch_segment_into, resolver::resolve_playlist,
+    };
+
+    let (segments, map) = match resolve_playlist(&ctx.http, hls_url).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!(
+                "GET /youtube/stream/{}: HLS playlist resolution failed for client '{}': {}",
+                video_id,
+                client_name,
+                e
+            );
+            return None;
+        }
+    };
+
+    if segments.is_empty() {
+        tracing::debug!(
+            "GET /youtube/stream/{}: HLS playlist for client '{}' had no segments",
+            video_id,
+            client_name
+        );
+        return None;
+    }
+
+    let cipher = ctx.cipher_manager.clone();
+    let player_url = format!("https://www.youtube.com/watch?v={}", video_id);
+
+    // The init/map segment carries the codec configuration, so it must lead the
+    // body. Both it and the media segments may carry an n-param that has to be
+    // translated before the fetch will be accepted.
+    let mut body = Vec::new();
+    if let Some(map_res) = &map {
+        let mut resolved = map_res.clone();
+        resolved.url = match resolve_seg_url(&map_res.url, &cipher, &player_url).await {
+            Ok(u) => u,
+            Err(e) => {
+                tracing::debug!(
+                    "GET /youtube/stream/{}: HLS map URL resolution failed: {}",
+                    video_id,
+                    e
+                );
+                return None;
+            }
+        };
+        if let Err(e) = fetch_segment_into(&ctx.http, &resolved, &mut body).await {
+            tracing::debug!(
+                "GET /youtube/stream/{}: HLS init segment fetch failed for client '{}': {}",
+                video_id,
+                client_name,
+                e
+            );
+            return None;
+        }
+    }
+
+    // Fetch the first media segment. Success here is the proof that HLS is
+    // actually usable, so it gates the decision to serve an HLS response.
+    let first = &segments[0];
+    let mut resolved_first = first.clone();
+    resolved_first.url = match resolve_seg_url(&first.url, &cipher, &player_url).await {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::debug!(
+                "GET /youtube/stream/{}: HLS segment URL resolution failed: {}",
+                video_id,
+                e
+            );
+            return None;
+        }
+    };
+    let mut first_data = Vec::new();
+    if let Err(e) = fetch_segment_into(&ctx.http, &resolved_first, &mut first_data).await {
+        tracing::debug!(
+            "GET /youtube/stream/{}: HLS segment fetch failed for client '{}': {}",
+            video_id,
+            client_name,
+            e
+        );
+        return None;
+    }
+    body.extend_from_slice(&first_data);
+
+    // A client that only ever receives the first segment will stop reading; the
+    // channel bounds how far ahead the fetcher may run so a slow consumer cannot
+    // grow memory without limit.
+    const PREFETCH_AHEAD: usize = 3;
+    let (tx, rx) = flume::bounded::<Result<bytes::Bytes, String>>(PREFETCH_AHEAD);
+    let rest = segments[1..].to_vec();
+    let http = ctx.http.clone();
+    let cipher_bg = cipher.clone();
+    let player_url_bg = player_url.clone();
+    let total = segments.len();
+
+    tokio::spawn(async move {
+        {
+            for seg in rest {
+                if tx.is_disconnected() {
+                    return;
+                }
+                let url = match resolve_seg_url(&seg.url, &cipher_bg, &player_url_bg).await {
+                    Ok(u) => u,
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("HLS URL resolution: {e}")));
+                        return;
+                    }
+                };
+                let mut resolved = seg.clone();
+                resolved.url = url;
+                let mut buf = Vec::new();
+                match fetch_segment_into(&http, &resolved, &mut buf).await {
+                    Ok(()) => {
+                        if tx.send(Ok(bytes::Bytes::from(buf))).is_err() {
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("HLS segment fetch: {e}")));
+                        return;
+                    }
+                }
+            }
+        }
+    });
+
+    let mut resp_headers = HeaderMap::new();
+    resp_headers.insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("video/mp2t"),
+    );
+
+    let first_chunk = bytes::Bytes::from(body);
+    let stream = futures::stream::unfold((Some(first_chunk), rx), |(pending, rx)| async move {
+        if let Some(chunk) = pending {
+            return Some((Ok(chunk), (None, rx)));
+        }
+        match rx.recv_async().await {
+            Ok(Ok(chunk)) => Some((Ok(chunk), (None, rx))),
+            Ok(Err(e)) => Some((Err(std::io::Error::other(e)), (None, rx))),
+            Err(_) => None,
+        }
+    });
+
+    tracing::info!(
+        "GET /youtube/stream/{}: streaming via HLS with client '{}' ({} segment(s))",
+        video_id,
+        client_name,
+        total
+    );
+
+    Some((StatusCode::OK, resp_headers, Body::from_stream(stream)).into_response())
+}
 
 fn get_target_clients(
     ctx: &audium::media::sources::youtube::YoutubeStreamContext,
@@ -439,26 +663,132 @@ fn find_format_by_itag<'a>(
         })
 }
 
+/// Parses a single-range `bytes=` header into a clamped inclusive `[start, end]`.
+///
+/// Returns `None` for absent, unparseable, or unsatisfiable ranges so callers
+/// fall back to the full `[0, content_length - 1]` range rather than forwarding
+/// a malformed range upstream. Open-ended (`bytes=1000-`) and suffix
+/// (`bytes=-500`) forms are supported.
 fn parse_range_header(
     range_header: Option<&axum::http::HeaderValue>,
     content_length: u64,
-) -> (u64, u64) {
-    let Some(range_val) = range_header.and_then(|v| v.to_str().ok()) else {
-        return (0, content_length.saturating_sub(1));
-    };
+) -> Option<(u64, u64)> {
+    let last = content_length.checked_sub(1)?;
+    let range_val = range_header?.to_str().ok()?;
 
-    let regex = regex::Regex::new(r"bytes=(\d+)-(\d+)?").expect("invalid regex");
-    if let Some(caps) = regex.captures(range_val) {
-        let start = caps
-            .get(1)
-            .and_then(|m| m.as_str().parse::<u64>().ok())
-            .unwrap_or(0);
-        let end = caps
-            .get(2)
-            .and_then(|m| m.as_str().parse::<u64>().ok())
-            .unwrap_or(content_length.saturating_sub(1));
-        (start, end)
-    } else {
-        (0, content_length.saturating_sub(1))
+    let regex = regex::Regex::new(r"^bytes=(\d*)-(\d*)$").expect("invalid regex");
+    let caps = regex.captures(range_val.trim())?;
+    let start_str = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+    let end_str = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+
+    // A suffix range (`bytes=-N`) requests the final N bytes.
+    if start_str.is_empty() {
+        if end_str.is_empty() {
+            return None;
+        }
+        let suffix = end_str.parse::<u64>().ok()?;
+        if suffix == 0 {
+            return None;
+        }
+        return Some((content_length.saturating_sub(suffix).min(last), last));
+    }
+
+    let start = start_str.parse::<u64>().ok()?;
+    if start > last {
+        return None;
+    }
+    // Clamp the end to the last byte; RFC 9110 treats an over-long end as the
+    // end of the representation, and an absent end as "to the end".
+    let end = match end_str.parse::<u64>() {
+        Ok(end) => end.min(last),
+        Err(_) => last,
+    };
+    if end < start {
+        return None;
+    }
+    Some((start, end))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_valid_video_id, parse_range_header};
+    use axum::http::HeaderValue;
+
+    fn range(value: &str) -> Option<HeaderValue> {
+        HeaderValue::from_str(value).ok()
+    }
+
+    #[test]
+    fn absent_range_falls_back_to_the_caller_default() {
+        // The caller substitutes the full `[0, len - 1]` range on `None`.
+        assert_eq!(parse_range_header(None, 1000), None);
+    }
+
+    #[test]
+    fn parses_bounded_open_and_suffix_ranges() {
+        assert_eq!(
+            parse_range_header(range("bytes=0-499").as_ref(), 1000),
+            Some((0, 499))
+        );
+        assert_eq!(
+            parse_range_header(range("bytes=500-").as_ref(), 1000),
+            Some((500, 999))
+        );
+        assert_eq!(
+            parse_range_header(range("bytes=-200").as_ref(), 1000),
+            Some((800, 999))
+        );
+    }
+
+    #[test]
+    fn clamps_an_over_long_end_to_the_last_byte() {
+        // RFC 9110: an end past the representation means "to the end".
+        assert_eq!(
+            parse_range_header(range("bytes=900-99999").as_ref(), 1000),
+            Some((900, 999))
+        );
+    }
+
+    #[test]
+    fn rejects_unsatisfiable_or_malformed_ranges() {
+        // Start past the end.
+        assert_eq!(
+            parse_range_header(range("bytes=5000-6000").as_ref(), 1000),
+            None
+        );
+        // Inverted.
+        assert_eq!(
+            parse_range_header(range("bytes=800-100").as_ref(), 1000),
+            None
+        );
+        // Zero-length suffix and garbage.
+        assert_eq!(parse_range_header(range("bytes=-0").as_ref(), 1000), None);
+        assert_eq!(parse_range_header(range("bytes=abc").as_ref(), 1000), None);
+        // Multiple ranges are not supported; fall back to the full range.
+        assert_eq!(
+            parse_range_header(range("bytes=0-1,5-6").as_ref(), 1000),
+            None
+        );
+        // Empty representation has no satisfiable range.
+        assert_eq!(parse_range_header(None, 0), None);
+    }
+
+    #[test]
+    fn accepts_well_formed_video_ids() {
+        assert!(is_valid_video_id("dQw4w9WgXcQ"));
+        assert!(is_valid_video_id("_-aB3cD4eF5"));
+    }
+
+    #[test]
+    fn rejects_malformed_or_injected_video_ids() {
+        // Wrong length.
+        assert!(!is_valid_video_id("dQw4w9WgXc"));
+        assert!(!is_valid_video_id("dQw4w9WgXcQQ"));
+        // Path/query metacharacters used to escape the interpolated URL.
+        assert!(!is_valid_video_id("aaaaaaaaa/ "));
+        assert!(!is_valid_video_id("a?b=c&d=e#f"));
+        assert!(!is_valid_video_id("../../etc/x"));
+        assert!(!is_valid_video_id("dQw4w9WgXc\n"));
+        assert!(!is_valid_video_id(""));
     }
 }

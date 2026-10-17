@@ -135,7 +135,9 @@ impl SoundCloudSource {
             );
             return None;
         }
-        let json: Value = resp.json().await.ok()?;
+        let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         trace!("SoundCloud: API resolve response: {:?}", json);
         Some(json)
     }
@@ -339,7 +341,9 @@ impl SoundCloudSource {
         if !resp.status().is_success() {
             return None;
         }
-        let json: Value = resp.json().await.ok()?;
+        let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let stream_url = json
             .get("url")
             .and_then(|v| v.as_str())
@@ -427,14 +431,15 @@ impl SoundCloudSource {
             )));
         }
 
-        let json: Value = match resp.json().await {
-            Ok(v) => v,
-            Err(e) => {
-                return LoadResult::Error(load_error(format!(
-                    "SoundCloud returned invalid JSON: {e}"
-                )));
-            }
-        };
+        let json: Value =
+            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                Ok(v) => v,
+                Err(e) => {
+                    return LoadResult::Error(load_error(format!(
+                        "SoundCloud returned invalid JSON: {e}"
+                    )));
+                }
+            };
 
         let tracks: Vec<Track> = json
             .get("collection")
@@ -541,7 +546,7 @@ impl SoundCloudSource {
             let builder = self.client.get(&batch_url);
 
             if let Ok(resp) = builder.send().await
-                && let Ok(json) = resp.json::<Value>().await
+                && let Ok(json) = crate::common::http::read_json_capped::<Value>(resp).await
                 && let Some(arr) = json.as_array()
             {
                 for item in arr {
@@ -576,7 +581,7 @@ impl SoundCloudSource {
         };
 
         let html = match self.client.get(url).send().await {
-            Ok(r) => match r.text().await {
+            Ok(r) => match crate::common::http::read_text_capped(r).await {
                 Ok(t) => t,
                 Err(_) => return LoadResult::Empty {},
             },
@@ -599,10 +604,11 @@ impl SoundCloudSource {
             Err(_) => return LoadResult::Empty {},
         };
 
-        let json: Value = match resp.json().await {
-            Ok(v) => v,
-            Err(_) => return LoadResult::Empty {},
-        };
+        let json: Value =
+            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                Ok(v) => v,
+                Err(_) => return LoadResult::Empty {},
+            };
 
         let tracks: Vec<Track> = json
             .get("collection")
@@ -780,7 +786,7 @@ impl SoundCloudSource {
 
         let mut tracks: Vec<Track> = Vec::new();
 
-        if let Ok(json) = resp.json::<Value>().await {
+        if let Ok(json) = crate::common::http::read_json_capped::<Value>(resp).await {
             let collection = json.get("collection").and_then(|v| v.as_array());
             if let Some(items) = collection {
                 for item in items {

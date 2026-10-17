@@ -18,7 +18,10 @@ pub async fn get_info(State(state): State<Arc<AppState>>) -> Json<protocol::Info
             .unwrap_or(0),
         git: protocol::GitInfo {
             branch: option_env!("GIT_BRANCH").unwrap_or("unknown").to_string(),
-            commit: option_env!("GIT_COMMIT").unwrap_or("unknown").to_string(),
+            commit: option_env!("GIT_COMMIT_SHORT")
+                .or(option_env!("GIT_COMMIT"))
+                .unwrap_or("unknown")
+                .to_string(),
             commit_time: option_env!("GIT_COMMIT_TIME")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0),
@@ -30,7 +33,7 @@ pub async fn get_info(State(state): State<Arc<AppState>>) -> Json<protocol::Info
             .into_iter()
             .filter(|name| state.config.filters.is_enabled(name))
             .collect(),
-        plugins: vec![],
+        plugins: audium::lavalink::plugins::advertised(&state.config),
     })
 }
 
@@ -99,7 +102,37 @@ fn protocol_version() -> protocol::Version {
 
 pub async fn get_stats(State(state): State<Arc<AppState>>) -> Json<protocol::Stats> {
     tracing::info!("GET /v4/stats");
-    Json(crate::monitoring::collect_stats(&state, None))
+    let mut stats = crate::monitoring::collect_stats(&state, None);
+
+    if state.config.metrics.detailed_stats {
+        let counters = &state.detailed_counters;
+        // The registry only holds sources that are both compiled-in and
+        // config-enabled, so `loaded == enabled`; `top` needs a per-source
+        // resolve counter the engine does not track yet.
+        let loaded = state.source_manager.sources.len();
+        let detailed = counters.snapshot(loaded, loaded, None, stats.cpu.cores.max(0) as usize);
+        stats.detailed_stats = Some(protocol::DetailedStats {
+            total_requests: detailed.total_requests,
+            total_errors: detailed.total_errors,
+            process: protocol::DetailedProcess {
+                process_id: detailed.process.process_id,
+                threads: detailed.process.threads,
+                cpu_cores: detailed.process.cpu_cores,
+            },
+            sources: protocol::DetailedSources {
+                loaded: detailed.sources.loaded,
+                enabled: detailed.sources.enabled,
+                top: detailed.sources.top,
+            },
+            playback: protocol::DetailedPlayback {
+                tracks_started: detailed.playback.tracks_started,
+                tracks_ended: detailed.playback.tracks_ended,
+                exceptions: detailed.playback.exceptions,
+            },
+        });
+    }
+
+    Json(stats)
 }
 
 pub async fn get_version() -> String {

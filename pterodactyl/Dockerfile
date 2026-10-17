@@ -30,7 +30,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git bash tar xz-utils \
-        build-essential cmake pkg-config libclang-dev clang perl \
+        build-essential cmake pkg-config perl \
         libopus0 \
         tini \
         && rm -rf /var/lib/apt/lists/*

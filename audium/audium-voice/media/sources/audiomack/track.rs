@@ -22,6 +22,7 @@ impl PlayableTrack for AudiomackTrack {
             url: self.stream_url.clone(),
             local_addr: self.local_addr,
             proxy: None,
+            headers: None,
         };
         http_track.start_decoding(config)
     }
@@ -80,7 +81,7 @@ async fn parse_response(resp: reqwest::Response) -> Option<String> {
         return None;
     }
 
-    let text = resp.text().await.ok()?;
+    let text = crate::common::http::read_text_capped(resp).await.ok()?;
 
     // Helper to determine if a URL is likely a direct audio stream
     let is_stream = |url: &str| {

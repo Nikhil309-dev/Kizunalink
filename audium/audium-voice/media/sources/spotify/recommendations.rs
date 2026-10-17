@@ -74,7 +74,7 @@ impl SpotifyRecommendations {
 
             if let Some(resp) = resp
                 && resp.status().is_success()
-                && let Ok(json) = resp.json::<Value>().await
+                && let Ok(json) = crate::common::http::read_json_capped::<Value>(resp).await
                 && let Some(playlist_uri) =
                     json.pointer("/mediaItems/0/uri").and_then(|v| v.as_str())
                 && let Some(id) = playlist_uri.split(':').next_back()

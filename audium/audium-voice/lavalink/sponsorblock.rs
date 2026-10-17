@@ -131,7 +131,8 @@ pub async fn fetch_segments(
     match resp.status() {
         // 200: segments found.
         rs if rs.is_success() => {
-            let body: Value = resp.json().await?;
+            let body: Value =
+                crate::common::http::read_json_capped::<serde_json::Value>(resp).await?;
             let arr = body.as_array().cloned().unwrap_or_default();
             let mut out = Vec::with_capacity(arr.len());
             for v in arr {

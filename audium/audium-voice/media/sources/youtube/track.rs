@@ -323,6 +323,7 @@ impl PlayableTrack for YoutubeTrack {
                 let identifier_for_thread = identifier_async.clone();
 
                 if let Err(e) = std::thread::Builder::new()
+                    .stack_size(crate::engine::constants::DECODE_THREAD_STACK_SIZE)
                     .name(format!("youtube-decoder-{}", identifier_async))
                     .spawn(move || {
                         let result = match crate::engine::processor::AudioProcessor::new(

@@ -31,7 +31,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libclang-dev clang build-essential perl libopus-dev
+          sudo apt-get install -y cmake pkg-config build-essential perl libopus-dev
       - name: "Guard: every `| tee` pipeline sets `set -o pipefail`"
         run: python3 scripts/check_ci_pipefail.py
       - name: cargo check
@@ -109,7 +109,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libclang-dev clang build-essential perl libopus-dev
+          sudo apt-get install -y cmake pkg-config build-essential perl libopus-dev
       - name: cargo clippy
         run: |
           set -o pipefail
@@ -154,7 +154,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libclang-dev clang build-essential perl libopus-dev
+          sudo apt-get install -y cmake pkg-config build-essential perl libopus-dev
       - name: cargo test
         run: |
           set -o pipefail
@@ -200,7 +200,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libclang-dev clang build-essential perl libopus-dev
+          sudo apt-get install -y cmake pkg-config build-essential perl libopus-dev
       - name: Install system deps (macOS)
         if: runner.os == 'macOS'
         run: brew install opus cmake pkg-config
@@ -258,6 +258,11 @@ jobs:
               }
             }
           '
+      # Bans (duplicate/blocked crates + wildcard deps), licenses, and crate
+      # sources are enforced in deny.toml but were previously only run locally.
+      # Gate them in CI so a regression cannot merge unreviewed.
+      - name: cargo deny check bans licenses sources
+        run: cargo deny check bans licenses sources
       - name: Surface deny summary
         if: failure()
         run: |

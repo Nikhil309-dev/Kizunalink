@@ -12,25 +12,47 @@ use crate::{
         audiomack::AudiomackSource,
         audius::AudiusSource,
         bandcamp::BandcampSource,
+        bilibili::BilibiliSource,
+        bluesky::BlueskySource,
+        clypit::ClypitSource,
         deezer::DeezerSource,
         flowery::FlowerySource,
         gaana::GaanaSource,
+        getyarn::GetyarnSource,
         google_tts::GoogleTtsSource,
+        googledrive::GoogleDriveSource,
         http::HttpSource,
+        iheartradio::IheartradioSource,
+        instagram::InstagramSource,
         jiosaavn::JioSaavnSource,
+        kwai::KwaiSource,
         lastfm::LastFMSource,
+        lazypytts::LazypyttsSource,
         local::LocalSource,
         mixcloud::MixcloudSource,
         netease::NeteaseSource,
+        newgrounds::NewgroundsSource,
+        nicovideo::NicovideoSource,
+        ocremix::OcremixSource,
         pandora::PandoraSource,
+        pinterest::PinterestSource,
+        pixeldrain::PixeldrainSource,
         plugin::BoxedSource,
         qobuz::QobuzSource,
         reddit::RedditSource,
+        rss::RssSource,
         shazam::ShazamSource,
+        songlink::SonglinkSource,
         soundcloud::SoundCloudSource,
+        soundgasm::SoundgasmSource,
         spotify::SpotifySource,
+        telegram::TelegramSource,
         tidal::TidalSource,
+        tiktok::TiktokSource,
+        tumblr::TumblrSource,
         twitch::TwitchSource,
+        twitter::TwitterSource,
+        vimeo::VimeoSource,
         vkmusic::VkMusicSource,
         yandexmusic::YandexMusicSource,
         youtube::{YouTubeSource, YoutubeStreamContext, cipher::YouTubeCipherManager},
@@ -64,6 +86,25 @@ fn register_core_sources(
     Option<Arc<YoutubeStreamContext>>,
 ) {
     let mut yt_ctx = (None, None);
+
+    /// Registers a source that takes only `(config, http_client)` and is
+    /// skipped when its config is absent or disabled.
+    macro_rules! register_simple {
+        ($cfg:expr, $name:literal, $ctor:path) => {
+            if let Some(c) = $cfg.as_ref()
+                && c.enabled
+            {
+                let proxy = c.proxy.clone();
+                match $ctor(c.clone(), http_pool.get(proxy)) {
+                    Ok(src) => {
+                        tracing::info!("Loaded source: {}", $name);
+                        sources.push(Box::new(src));
+                    }
+                    Err(e) => tracing::error!("{} source failed to initialize: {}", $name, e),
+                }
+            }
+        };
+    }
 
     macro_rules! register {
         ($enabled:expr, $name:literal, $proxy:expr, $ctor:expr) => {
@@ -344,6 +385,98 @@ fn register_core_sources(
     register_netease(sources, config, http_pool);
     register_twitch(sources, config, http_pool);
     register_amazonmusic(sources, config, http_pool);
+
+    // RSS must be registered before the HTTP catch-all, which claims any URL.
+    if let Some(c) = config.sources.rss.as_ref()
+        && c.enabled
+    {
+        let proxy = c.proxy.clone();
+        match RssSource::new(c.clone(), http_pool.get(proxy.clone())) {
+            Ok(src) => {
+                tracing::info!("Loaded source: RSS");
+                sources.push(Box::new(src));
+            }
+            Err(e) => tracing::error!("RSS source failed to initialize: {e}"),
+        }
+    }
+
+    // iHeartRadio likewise handles specific iheart.com/live/<id> URLs only.
+    if let Some(c) = config.sources.iheartradio.as_ref()
+        && c.enabled
+    {
+        let proxy = c.proxy.clone();
+        match IheartradioSource::new(c.clone(), http_pool.get(proxy.clone())) {
+            Ok(src) => {
+                tracing::info!("Loaded source: iHeartRadio");
+                sources.push(Box::new(src));
+            }
+            Err(e) => tracing::error!("iHeartRadio source failed to initialize: {e}"),
+        }
+    }
+
+    // Simple page-scraping sources (each claims only its own URL shape).
+    register_simple!(config.sources.tumblr, "Tumblr", TumblrSource::new);
+    register_simple!(
+        config.sources.newgrounds,
+        "Newgrounds",
+        NewgroundsSource::new
+    );
+    register_simple!(config.sources.kwai, "Kwai", KwaiSource::new);
+    register_simple!(config.sources.telegram, "Telegram", TelegramSource::new);
+
+    // Sources ported from the DuncteBot plugin's extra source managers.
+    register_simple!(config.sources.ocremix, "OCReMix", OcremixSource::new);
+    register_simple!(config.sources.clypit, "Clypit", ClypitSource::new);
+    register_simple!(config.sources.getyarn, "Getyarn", GetyarnSource::new);
+    register_simple!(config.sources.soundgasm, "Soundgasm", SoundgasmSource::new);
+    register_simple!(
+        config.sources.pixeldrain,
+        "Pixeldrain",
+        PixeldrainSource::new
+    );
+
+    register_simple!(config.sources.bilibili, "Bilibili", BilibiliSource::new);
+    register_simple!(config.sources.nicovideo, "NicoVideo", NicovideoSource::new);
+    register_simple!(config.sources.instagram, "Instagram", InstagramSource::new);
+    register_simple!(config.sources.twitter, "Twitter", TwitterSource::new);
+    register_simple!(config.sources.pinterest, "Pinterest", PinterestSource::new);
+    register_simple!(
+        config.sources.googledrive,
+        "Google Drive",
+        GoogleDriveSource::new
+    );
+    register_simple!(config.sources.lazypytts, "LazyPy TTS", LazypyttsSource::new);
+    // Songlink is a cross-platform resolver: it never serves media itself.
+    register_simple!(config.sources.songlink, "Songlink", SonglinkSource::new);
+    register_simple!(config.sources.vimeo, "Vimeo", VimeoSource::new);
+
+    // TikTok handles tiktok.com / vm.tiktok.com video URLs only.
+    if let Some(c) = config.sources.tiktok.as_ref()
+        && c.enabled
+    {
+        let proxy = c.proxy.clone();
+        match TiktokSource::new(c.clone(), http_pool.get(proxy.clone())) {
+            Ok(src) => {
+                tracing::info!("Loaded source: TikTok");
+                sources.push(Box::new(src));
+            }
+            Err(e) => tracing::error!("TikTok source failed to initialize: {e}"),
+        }
+    }
+
+    // Bluesky handles bsky.app post URLs only.
+    if let Some(c) = config.sources.bluesky.as_ref()
+        && c.enabled
+    {
+        let proxy = c.proxy.clone();
+        match BlueskySource::new(c.clone(), http_pool.get(proxy.clone())) {
+            Ok(src) => {
+                tracing::info!("Loaded source: Bluesky");
+                sources.push(Box::new(src));
+            }
+            Err(e) => tracing::error!("Bluesky source failed to initialize: {e}"),
+        }
+    }
 
     // HTTP Source
     if config.sources.http.as_ref().is_some_and(|c| c.enabled) {

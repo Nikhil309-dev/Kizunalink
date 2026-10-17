@@ -46,6 +46,18 @@ pub struct ServerConfig {
     #[serde(default = "default_rate_limit_per_minute")]
     pub rate_limit_per_minute: u32,
 
+    /// Maximum size of a JSON request body in **bytes** before the server rejects
+    /// it with `413 Payload Too Large`. Default 8 MiB — comfortably above any
+    /// legitimate `decodetracks` batch, and 8× NodeLink's 1 MiB cap.
+    #[serde(default = "default_max_body_bytes")]
+    pub max_body_bytes: usize,
+
+    /// Maximum number of simultaneously open HTTP/WebSocket connections
+    /// (`0` = unlimited). Caps file-descriptor and task growth under connection
+    /// floods. Default 1024.
+    #[serde(default = "default_max_connections")]
+    pub max_connections: usize,
+
     /// Optional TLS termination (HTTPS/WSS). See [`TlsConfig`].
     #[serde(default)]
     pub tls: TlsConfig,
@@ -64,6 +76,8 @@ impl Default for ServerConfig {
             websocket_ping_interval: default_websocket_ping_interval(),
             max_event_queue_size: default_max_event_queue_size(),
             rate_limit_per_minute: default_rate_limit_per_minute(),
+            max_body_bytes: default_max_body_bytes(),
+            max_connections: default_max_connections(),
             tls: TlsConfig::default(),
         }
     }
@@ -98,6 +112,12 @@ fn default_max_event_queue_size() -> usize {
 }
 fn default_rate_limit_per_minute() -> u32 {
     2000
+}
+fn default_max_body_bytes() -> usize {
+    8 * 1024 * 1024
+}
+fn default_max_connections() -> usize {
+    1024
 }
 fn default_player_update_interval() -> Duration {
     Duration::from_secs(5)

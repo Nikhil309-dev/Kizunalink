@@ -22,6 +22,11 @@ use tracing::info;
 /// word into child threads — every tokio worker and every audio thread spawned from this
 /// main thread then inherits the denormal-free setting for free.
 fn main() -> AnyResult<()> {
+    // Reject unknown CLI arguments before doing anything else. Audium is
+    // configured entirely through files/env; silently ignoring an argument such
+    // as `--config <path>` would run the node on the wrong configuration.
+    audium::config::AppConfig::reject_unknown_args(std::env::args())?;
+
     // Installed before the runtime exists so no spawned task can start a TLS handshake
     // without a provider selected (see `audium::common::tls`).
     audium::common::tls::install_crypto_provider();
@@ -92,11 +97,7 @@ async fn run() -> AnyResult<()> {
     let lyrics_manager = Arc::new(audium::media::lyrics::LyricsManager::new(&config));
     let youtube_ctx = source_manager.youtube_stream_ctx.clone();
 
-    let process_stat = perf_monitor::cpu::ProcessStat::cur().map_err(|e| {
-        Box::new(std::io::Error::other(format!(
-            "failed to init ProcessStat: {e}"
-        ))) as audium::common::types::AnyError
-    })?;
+    let process_stat = audium_server::monitoring::sysstat::ProcessStat::cur();
 
     let shared_state = Arc::new(AppState {
         start_time: std::time::Instant::now(),
@@ -113,6 +114,9 @@ async fn run() -> AnyResult<()> {
         rate_limiter: Arc::new(audium_server::api::RateLimiter::new(
             config.server.rate_limit_per_minute,
         )),
+        connection_limit: (config.server.max_connections > 0)
+            .then(|| Arc::new(tokio::sync::Semaphore::new(config.server.max_connections))),
+        detailed_counters: audium_server::monitoring::detailed::DetailedCounters::new(),
     });
 
     audium_server::monitoring::prometheus::init(shared_state.clone());
@@ -124,13 +128,22 @@ async fn run() -> AnyResult<()> {
         .route("/v4/websocket", get(ws::websocket_handler))
         .with_state(shared_state.clone())
         .merge(rest::router(shared_state.clone()))
-        .layer(DefaultBodyLimit::max(4 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(config.server.max_body_bytes))
         .layer(tower_http::trace::TraceLayer::new_for_http())
-        // S06: outermost layer so flood traffic is rejected before auth work.
-        // Needs ConnectInfo below, hence `into_make_service_with_connect_info`.
         .layer(axum::middleware::from_fn_with_state(
             shared_state.clone(),
             audium_server::api::rate_limit::rate_limit,
+        ))
+        // Admission control: cap concurrent connections before handler work.
+        .layer(axum::middleware::from_fn_with_state(
+            shared_state.clone(),
+            audium_server::api::conn_limit::connection_limit,
+        ))
+        // detailedStats: outermost so every request/error (including 429/503
+        // rejections) is counted. Cheap atomic bumps only.
+        .layer(axum::middleware::from_fn_with_state(
+            shared_state.clone(),
+            audium_server::monitoring::prometheus::count_requests,
         ));
 
     if config.metrics.prometheus.enabled {

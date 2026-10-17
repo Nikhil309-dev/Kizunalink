@@ -28,6 +28,21 @@ static CLEAN_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 static LRC_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\[(\d+):(\d{2})(?:\.(\d{2,3}))?\]"#).expect("valid regex"));
 
+/// Build the shared `reqwest::Client` used by lyrics providers.
+///
+/// Every lyrics provider hangs off a spawned fetch task, so a provider that
+/// never answers would otherwise pin its task (and, transitively, hold the
+/// lyrics mutex) forever. A client-level timeout bounds that. Falls back to a
+/// default client (which still has no timeout, but never fails to build) in the
+/// practically impossible event the builder is rejected.
+pub fn build_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
 pub fn clean_text(text: &str) -> String {
     let mut result = text.to_string();
     for re in CLEAN_PATTERNS.iter() {

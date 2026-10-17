@@ -43,7 +43,9 @@ pub async fn get_json(client: &Arc<reqwest::Client>, url: &str) -> Option<Value>
         return None;
     }
 
-    res.json().await.ok()
+    crate::common::http::read_json_capped::<serde_json::Value>(res)
+        .await
+        .ok()
 }
 
 pub fn unescape_html(input: &str) -> String {

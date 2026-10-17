@@ -29,7 +29,9 @@ impl Default for DeezerProvider {
 
 impl DeezerProvider {
     pub fn new(proxy_config: Option<&HttpProxyConfig>) -> Self {
-        let mut client_builder = reqwest::Client::builder();
+        let mut client_builder = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(15));
 
         if let Some(proxy_cfg) = proxy_config
             && let Some(p_obj) = proxy_cfg
@@ -63,7 +65,9 @@ impl DeezerProvider {
                     .await
                     .ok()?;
 
-                let data: Value = resp.json().await.ok()?;
+                let data: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+                    .await
+                    .ok()?;
                 data.get("jwt")
                     .and_then(|t| t.as_str())
                     .map(|s| s.to_string())
@@ -81,7 +85,9 @@ impl DeezerProvider {
             .await
             .ok()?;
 
-        let data: Value = resp.json().await.ok()?;
+        let data: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         data.get("data")
             .and_then(|d| d.as_array())
             .and_then(|a| a.first())
@@ -171,7 +177,9 @@ impl LyricsProvider for DeezerProvider {
             .await
             .ok()?;
 
-        let data: Value = resp.json().await.ok()?;
+        let data: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+            .await
+            .ok()?;
         let lyrics = data
             .get("data")
             .and_then(|d| d.get("track"))

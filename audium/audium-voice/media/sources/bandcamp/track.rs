@@ -51,6 +51,7 @@ impl PlayableTrack for BandcampTrack {
                         url,
                         local_addr,
                         proxy: None,
+                        headers: None,
                     };
                     let (inner_rx, inner_cmd_tx, inner_err_rx) =
                         http_track.start_decoding(config.clone());
@@ -103,7 +104,7 @@ pub async fn fetch_stream_url(client: &Arc<reqwest::Client>, uri: &str) -> Optio
         return None;
     }
 
-    let body = resp.text().await.ok()?;
+    let body = crate::common::http::read_text_capped(resp).await.ok()?;
     extract_stream_url(&body)
 }
 
