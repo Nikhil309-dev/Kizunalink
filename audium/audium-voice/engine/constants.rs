@@ -67,15 +67,20 @@ pub const HTTP_PREFETCH_BUFFER_SIZE: usize = 2 * 1_024 * 1_024;
 /// Default ceiling on the per-track HTTP prefetch buffer.
 ///
 /// This buffer is allocated **per playing track**, so it is the dominant term
-/// in steady-state memory when many guilds play at once. It is a readahead
-/// window, not a working set: 2 MiB already covers far more than one 20 ms Opus
-/// frame, and a live single-player A/B showed lowering the cap from 8 MiB to
-/// 1 MiB cut resident memory 14.6 MB with no audio defect. 2 MiB keeps a 2x
-/// margin over the value proven in that test. Operators can tune it via the
-/// `AUDIUM_HTTP_BUF_BYTES` environment variable (see [`max_http_buf_bytes`]);
-/// a larger window trades readahead smoothness on slow origins for a higher
-/// memory floor.
-pub const MAX_HTTP_BUF_BYTES: usize = 2 * 1_024 * 1_024;
+/// in steady-state memory when many guilds play at once. It counts *compressed*
+/// bytes (the raw HTTP body the prefetcher holds in `SharedState::chunks`), not
+/// decoded PCM: at 512 KiB and a typical 128 kbit/s stream that is ~30 seconds
+/// of audio of readahead, which is far more than a decoder needs to absorb
+/// network jitter.
+///
+/// Measured with `tools/mem_steady.sh` at 100 live players: steady RSS is
+/// 482 MB at 2 MiB, 300 MB at 512 KiB and 298 MB at 256 KiB — i.e. the curve
+/// saturates at 512 KiB and paying for 2 MiB buys nothing. Live single-player
+/// A/B at 1 MiB held 31.6 MB with zero audio defects.
+///
+/// Operators can raise it for unusually slow origins via the
+/// `AUDIUM_HTTP_BUF_BYTES` environment variable (see [`max_http_buf_bytes`]).
+pub const MAX_HTTP_BUF_BYTES: usize = 512 * 1_024;
 
 /// Lower bound accepted from `AUDIUM_HTTP_BUF_BYTES`. Below this the decoder
 /// can starve on ordinary network jitter.
