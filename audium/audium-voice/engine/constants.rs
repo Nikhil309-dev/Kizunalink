@@ -109,6 +109,22 @@ fn resolve_http_buf_bytes(raw: Option<&str>) -> usize {
         .unwrap_or(MAX_HTTP_BUF_BYTES)
 }
 
+/// Upper bound on a tracker module read fully into memory for playback. Real
+/// MOD/XM/S3M/IT files are a few MiB at most; the cap only stops a hostile or
+/// mislabeled URL from exhausting memory.
+pub const MAX_MODULE_BYTES: usize = 32 * 1_024 * 1_024;
+pub const HTTP_INITIAL_BUF_CAPACITY: usize = 256 * 1_024;
+pub const HTTP_SOCKET_SKIP_LIMIT: u64 = 1_000_000;
+pub const HTTP_FETCH_CHUNK_LIMIT: u64 = 2 * 1_024 * 1_024;
+
+// ── Effects ──────────────────────────────────────────────────────────────────
+
+pub const HALF_PI: f32 = std::f32::consts::PI / 2.0;
+
+// ── Route Planner ────────────────────────────────────────────────────────────
+
+pub const ROUTE_PLANNER_FAIL_EXPIRE_MS: u64 = 7 * 24 * 60 * 60 * 1_000;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,18 +147,3 @@ mod tests {
         assert_eq!(resolve_http_buf_bytes(Some("1048576")), 1_048_576);
     }
 }
-/// Upper bound on a tracker module read fully into memory for playback. Real
-/// MOD/XM/S3M/IT files are a few MiB at most; the cap only stops a hostile or
-/// mislabeled URL from exhausting memory.
-pub const MAX_MODULE_BYTES: usize = 32 * 1_024 * 1_024;
-pub const HTTP_INITIAL_BUF_CAPACITY: usize = 256 * 1_024;
-pub const HTTP_SOCKET_SKIP_LIMIT: u64 = 1_000_000;
-pub const HTTP_FETCH_CHUNK_LIMIT: u64 = 2 * 1_024 * 1_024;
-
-// ── Effects ──────────────────────────────────────────────────────────────────
-
-pub const HALF_PI: f32 = std::f32::consts::PI / 2.0;
-
-// ── Route Planner ────────────────────────────────────────────────────────────
-
-pub const ROUTE_PLANNER_FAIL_EXPIRE_MS: u64 = 7 * 24 * 60 * 60 * 1_000;
