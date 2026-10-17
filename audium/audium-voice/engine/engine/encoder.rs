@@ -5,6 +5,14 @@ use crate::opus::{Application, Bitrate, Channels, Encoder as OpusEncoder, Sample
 
 use crate::common::types::AnyResult;
 
+/// Expected UDP loss on the Discord voice link, in percent.
+///
+/// libopus uses this to size the in-band FEC redundancy it emits and to bias
+/// bit allocation towards robustness. Discord's own voice client reports a
+/// similar figure, and the value only affects the encoder when `inband_fec` is
+/// enabled.
+pub const ASSUMED_PACKET_LOSS_PERCENT: u8 = 10;
+
 pub struct Encoder {
     encoder: OpusEncoder,
 }
@@ -15,6 +23,16 @@ impl Encoder {
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
         encoder
             .set_bitrate(Bitrate::Auto)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        // Voice UDP is lossy and has no retransmission. In-band FEC embeds a
+        // redundant copy of the previous frame so the receiver can conceal a
+        // single lost packet instead of producing an audible gap. libopus
+        // defaults both of these to 0 (off), which is wrong for this transport.
+        encoder
+            .set_packet_loss_perc(ASSUMED_PACKET_LOSS_PERCENT)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        encoder
+            .set_inband_fec(true)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
         Ok(Self { encoder })
     }
@@ -36,6 +54,20 @@ mod tests {
     fn test_encoder_new() {
         let result = Encoder::new();
         assert!(result.is_ok(), "Encoder creation should succeed");
+    }
+
+    #[test]
+    fn voice_encoder_enables_fec_and_packet_loss_estimate() {
+        let encoder = Encoder::new().unwrap();
+        assert!(
+            encoder.encoder.inband_fec().unwrap(),
+            "in-band FEC must be on for a lossy UDP voice link"
+        );
+        assert_eq!(
+            encoder.encoder.packet_loss_perc().unwrap(),
+            ASSUMED_PACKET_LOSS_PERCENT,
+            "encoder must be tuned for the assumed UDP loss rate"
+        );
     }
 
     #[test]

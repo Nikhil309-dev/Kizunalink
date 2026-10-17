@@ -202,6 +202,18 @@ impl Encoder {
         )
     }
 
+    /// Gets whether in-band forward error correction is enabled.
+    pub fn inband_fec(&self) -> Result<bool> {
+        self.encoder_ctl_get(ffi::OPUS_GET_INBAND_FEC_REQUEST)
+            .map(|v| v != 0)
+    }
+
+    /// Gets the expected packet loss percentage the encoder is tuned for.
+    pub fn packet_loss_perc(&self) -> Result<u8> {
+        self.encoder_ctl_get(ffi::OPUS_GET_PACKET_LOSS_PERC_REQUEST)
+            .map(|v| v.clamp(0, 100) as u8)
+    }
+
     /// Enables or disables variable bitrate (VBR) encoding.
     pub fn set_vbr(&self, enabled: bool) -> Result<()> {
         self.encoder_ctl_set(ffi::OPUS_SET_VBR_REQUEST, if enabled { 1 } else { 0 })

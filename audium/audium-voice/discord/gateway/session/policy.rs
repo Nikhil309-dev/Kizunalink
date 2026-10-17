@@ -35,6 +35,8 @@ impl FailurePolicy {
             4006 | // SESSION_NO_LONGER_VALID
             4009 | // SESSION_TIMEOUT
             4012 | // UNKNOWN_PROTOCOL
+            4013 | // WEBRTC_CRASHED (resume)
+            4014 | // DISCONNECTED (voice-server move; see classify)
             4015 | // VOICE_SERVER_CRASHED
             4016 | // UNKNOWN_ENCRYPTION_MODE
             4020 | // BAD_REQUEST
@@ -43,12 +45,48 @@ impl FailurePolicy {
     }
 
     /// Maps a Discord closure code to a high-level session outcome.
+    ///
+    /// Codes are taken from Discord's voice close-code table. The three outcomes
+    /// are deliberately distinct:
+    /// - `Shutdown`: the session cannot be recovered by this node (bad token,
+    ///   kicked, rate limited, channel gone). Reconnecting would loop.
+    /// - `Identify`: the websocket is fine but the session is stale, so a fresh
+    ///   identify is required rather than a bare reconnect.
+    /// - `Reconnect`: a plain reconnect is the right recovery.
     pub fn classify(&self, code: u16) -> SessionOutcome {
         match code {
+            // Terminal: bad auth, server not found, rate limited, channel
+            // deleted / voice server changed / call ended.
             4004 | 4011 | 4021 | 4022 => SessionOutcome::Shutdown,
+            // Stale session: re-identify instead of reconnecting.
+            //
+            // 4014 is "disconnected" and the docs say not to reconnect, but the
+            // same code is raised on a benign voice-server change when the bot
+            // moves channels. Re-identifying is the recovery that keeps playback
+            // working across a move, which is the behaviour users expect.
             4006 | 4009 | 4014 => SessionOutcome::Identify,
+            // E2EE required. Audium implements DAVE, so this should not fire; if
+            // it does, it means the negotiated protocol version was one we do not
+            // support. Reconnecting immediately would hot-loop exactly like the
+            // broken clients in the wild, so surface it as a terminal error with
+            // a nameable cause instead.
+            4017 => SessionOutcome::Shutdown,
             _ => SessionOutcome::Reconnect,
         }
+    }
+
+    /// True when a close code indicates the node is misconfigured or
+    /// unsupported, as opposed to a transient network failure.
+    ///
+    /// Callers use this to log an actionable message and stop retrying rather
+    /// than emitting a bare "reconnecting" line.
+    pub const fn is_configuration_failure(code: u16) -> bool {
+        matches!(
+            code,
+            4004 | // AUTHENTICATION_FAILED
+            4011 | // SERVER_NOT_FOUND
+            4017 // E2EE_REQUIRED (unsupported DAVE version)
+        )
     }
 }
 
@@ -159,5 +197,35 @@ mod tests {
         // No retries allowed
         assert!(!policy.is_retryable(1000, 0));
         assert!(!policy.is_retryable(4000, 0));
+    }
+
+    #[test]
+    fn e2ee_required_is_terminal_not_a_reconnect_loop() {
+        let policy = FailurePolicy::new(5);
+        assert_eq!(policy.classify(4017), SessionOutcome::Shutdown);
+        assert!(FailurePolicy::is_configuration_failure(4017));
+    }
+
+    #[test]
+    fn webrtc_crash_is_retryable() {
+        let policy = FailurePolicy::new(5);
+        assert!(policy.is_retryable(4013, 0));
+        assert_eq!(policy.classify(4013), SessionOutcome::Reconnect);
+    }
+
+    #[test]
+    fn voice_server_move_reidentifies_and_is_retryable() {
+        let policy = FailurePolicy::new(5);
+        assert_eq!(policy.classify(4014), SessionOutcome::Identify);
+        assert!(policy.is_retryable(4014, 0));
+    }
+
+    #[test]
+    fn only_misconfiguration_codes_are_configuration_failures() {
+        assert!(!FailurePolicy::is_configuration_failure(4022));
+        assert!(!FailurePolicy::is_configuration_failure(4021));
+        assert!(!FailurePolicy::is_configuration_failure(4014));
+        assert!(FailurePolicy::is_configuration_failure(4004));
+        assert!(FailurePolicy::is_configuration_failure(4011));
     }
 }

@@ -340,6 +340,16 @@ impl VoiceGateway {
 
                 debug!("[{}] Gateway closed: {} ({})", self.guild_id, code, reason);
 
+                if FailurePolicy::is_configuration_failure(code) {
+                    error!(
+                        "[{}] Voice gateway refused the session (close {}): {}. \
+                         This is a configuration/protocol mismatch, not a transient \
+                         network error; check the DAVE protocol version and the \
+                         voice credentials.",
+                        self.guild_id, code, reason
+                    );
+                }
+
                 if !self.policy.is_retryable(code, attempt) {
                     self.emit_close(code, reason);
                 }
