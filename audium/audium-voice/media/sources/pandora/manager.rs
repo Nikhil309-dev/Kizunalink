@@ -81,7 +81,9 @@ impl PandoraSource {
             };
 
             let status = resp.status();
-            let body_res: Value = resp.json::<Value>().await.ok()?;
+            let body_res: Value = crate::common::http::read_json_capped::<Value>(resp)
+                .await
+                .ok()?;
 
             let error_code = body_res
                 .get("errorCode")

@@ -91,7 +91,7 @@ impl LyricsProvider for LetrasMusProvider {
                 l_id, y_id
             );
             if let Ok(api_resp) = self.client.get(api_url).send().await
-                && let Ok(api_data) = api_resp.json::<Value>().await
+                && let Ok(api_data) = crate::common::http::read_json_capped::<Value>(api_resp).await
             {
                 let sub_val = api_data["Original"]["Subtitle"]
                     .as_str()

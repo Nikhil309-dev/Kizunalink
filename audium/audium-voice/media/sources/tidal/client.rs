@@ -70,7 +70,9 @@ impl HifiClient {
                 continue;
             }
 
-            return resp.json::<Value>().await.map_err(TidalError::Request);
+            return crate::common::http::read_json_capped::<Value>(resp)
+                .await
+                .map_err(TidalError::Other);
         }
 
         Err(last_err)

@@ -312,7 +312,7 @@ impl YouTubeSource {
             .await
         {
             Ok(res) => {
-                if let Ok(json) = res.json::<Value>().await
+                if let Ok(json) = crate::common::http::read_json_capped::<Value>(res).await
                     && let Some(vd) = json
                         .get("responseContext")
                         .and_then(|rc| rc.get("visitorData"))

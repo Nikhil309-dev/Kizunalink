@@ -69,7 +69,9 @@ impl AnghamiSource {
             return None;
         }
 
-        resp.json::<Value>().await.ok()
+        crate::common::http::read_json_capped::<Value>(resp)
+            .await
+            .ok()
     }
 
     fn build_artwork_url(json: &Value) -> Option<String> {

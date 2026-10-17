@@ -546,7 +546,7 @@ impl SoundCloudSource {
             let builder = self.client.get(&batch_url);
 
             if let Ok(resp) = builder.send().await
-                && let Ok(json) = resp.json::<Value>().await
+                && let Ok(json) = crate::common::http::read_json_capped::<Value>(resp).await
                 && let Some(arr) = json.as_array()
             {
                 for item in arr {
@@ -786,7 +786,7 @@ impl SoundCloudSource {
 
         let mut tracks: Vec<Track> = Vec::new();
 
-        if let Ok(json) = resp.json::<Value>().await {
+        if let Ok(json) = crate::common::http::read_json_capped::<Value>(resp).await {
             let collection = json.get("collection").and_then(|v| v.as_array());
             if let Some(items) = collection {
                 for item in items {

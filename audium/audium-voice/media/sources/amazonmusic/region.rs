@@ -316,7 +316,9 @@ async fn fetch_from_endpoint(
         return None;
     }
 
-    resp.json::<Value>().await.ok()
+    crate::common::http::read_json_capped::<Value>(resp)
+        .await
+        .ok()
 }
 
 #[allow(clippy::too_many_arguments)]

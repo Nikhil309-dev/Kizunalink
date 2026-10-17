@@ -114,7 +114,7 @@ impl TwitchGqlClient {
             return None;
         }
 
-        match resp.json::<Value>().await {
+        match crate::common::http::read_json_capped::<Value>(resp).await {
             Ok(v) => Some(v),
             Err(e) => {
                 debug!("Twitch GQL JSON parse error: {e}");

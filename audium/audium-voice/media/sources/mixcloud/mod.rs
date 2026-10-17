@@ -81,7 +81,9 @@ impl MixcloudSource {
         if !resp.status().is_success() {
             return None;
         }
-        resp.json::<Value>().await.ok()
+        crate::common::http::read_json_capped::<Value>(resp)
+            .await
+            .ok()
     }
 
     fn parse_track_data(&self, data: &Value) -> Option<Track> {
@@ -529,5 +531,7 @@ async fn graphql_request_internal(client: &Arc<reqwest::Client>, query: &str) ->
     if !resp.status().is_success() {
         return None;
     }
-    resp.json::<Value>().await.ok()
+    crate::common::http::read_json_capped::<Value>(resp)
+        .await
+        .ok()
 }
