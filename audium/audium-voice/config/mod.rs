@@ -169,6 +169,10 @@ impl AppConfig {
     /// shell or `environment: - AUDIUM_ADDRESS` in Compose) is treated as a
     /// misconfiguration and reported by name, rather than being applied as an
     /// empty string that later fails with a cryptic parse error.
+    ///
+    /// The optional TLS path variables are the deliberate exception: container
+    /// platforms export every declared variable, so a blank `AUDIUM_TLS_CERT` /
+    /// `AUDIUM_TLS_KEY` means "no override" rather than an error.
     fn apply_env_overrides(&mut self) -> AnyResult<()> {
         if let Some(v) = non_empty_env("AUDIUM_ADDRESS")? {
             self.server.address = v;
@@ -193,10 +197,10 @@ impl AppConfig {
                 .parse()
                 .map_err(|e| format!("AUDIUM_TLS_ENABLED must be true or false, got {v:?}: {e}"))?;
         }
-        if let Some(v) = non_empty_env("AUDIUM_TLS_CERT")? {
+        if let Some(v) = blank_is_unset_env("AUDIUM_TLS_CERT")? {
             self.server.tls.cert_path = Some(v);
         }
-        if let Some(v) = non_empty_env("AUDIUM_TLS_KEY")? {
+        if let Some(v) = blank_is_unset_env("AUDIUM_TLS_KEY")? {
             self.server.tls.key_path = Some(v);
         }
         if let Some(v) = non_empty_env("AUDIUM_LOG_LEVEL")? {
@@ -373,6 +377,25 @@ fn non_empty_env(name: &str) -> AnyResult<Option<String>> {
              non-empty value."
         )
         .into()),
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            Err(format!("{name} is set to a non-UTF-8 value, which is not supported.").into())
+        }
+    }
+}
+
+/// Like [`non_empty_env`], but treats a set-but-blank value as "unset".
+///
+/// Container platforms (Pterodactyl, Docker Compose, Kubernetes) export *every*
+/// declared variable, including ones the operator left blank. For a variable
+/// whose only meaningful "disabled" encoding is the empty string — such as the
+/// optional TLS certificate and key paths — a blank value is therefore normal
+/// rather than a misconfiguration. A non-blank value is still returned verbatim,
+/// and a non-UTF-8 value is still rejected.
+fn blank_is_unset_env(name: &str) -> AnyResult<Option<String>> {
+    match std::env::var(name) {
+        Ok(value) if value.trim().is_empty() => Ok(None),
         Ok(value) => Ok(Some(value)),
         Err(std::env::VarError::NotPresent) => Ok(None),
         Err(std::env::VarError::NotUnicode(_)) => {
@@ -620,8 +643,6 @@ mod tests {
             "AUDIUM_AUTHORIZATION",
             "AUDIUM_RATE_LIMIT_PER_MINUTE",
             "AUDIUM_TLS_ENABLED",
-            "AUDIUM_TLS_CERT",
-            "AUDIUM_TLS_KEY",
             "AUDIUM_LOG_LEVEL",
             "AUDIUM_METRICS_ENABLED",
         ] {
@@ -635,6 +656,45 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn blank_optional_tls_paths_are_treated_as_unset() {
+        // Pterodactyl (and Compose/Kubernetes) export *every* declared variable,
+        // so a TLS path the operator left blank arrives as an empty string. That
+        // must mean "no override", not a fatal misconfiguration, or the server
+        // can never boot from the panel.
+        for name in ["AUDIUM_TLS_CERT", "AUDIUM_TLS_KEY"] {
+            for value in ["", "   "] {
+                let cfg = cfg_with_envs(&[(name, value)]);
+                assert_eq!(
+                    cfg.server.tls.cert_path, None,
+                    "blank {name} must not set a cert path"
+                );
+                assert_eq!(
+                    cfg.server.tls.key_path, None,
+                    "blank {name} must not set a key path"
+                );
+            }
+        }
+
+        // A blank pair must still validate while TLS is disabled …
+        let cfg = cfg_with_envs(&[("AUDIUM_TLS_CERT", ""), ("AUDIUM_TLS_KEY", "")]);
+        cfg.validate()
+            .expect("blank TLS paths with TLS off must validate");
+
+        // … but blank paths must NOT silently satisfy TLS enabled.
+        let cfg = cfg_with_envs(&[
+            ("AUDIUM_TLS_ENABLED", "true"),
+            ("AUDIUM_TLS_CERT", ""),
+            ("AUDIUM_TLS_KEY", ""),
+        ]);
+        cfg.validate()
+            .expect_err("blank TLS paths with TLS on must fail validation");
+
+        // … and a non-blank value must still be honoured.
+        let cfg = cfg_with_envs(&[("AUDIUM_TLS_CERT", "/certs/c.pem")]);
+        assert_eq!(cfg.server.tls.cert_path.as_deref(), Some("/certs/c.pem"));
     }
 
     #[test]

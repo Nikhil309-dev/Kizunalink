@@ -10,7 +10,7 @@ the host. It is the path to use when the panel image lacks native build tools.
 > below replace the startup command with one that runs the uploaded binary.
 
 > **Automatic (recommended):** instead of uploading anything by hand, import
-> [`pterodactyl/egg-audium-binary.json`](../pterodactyl/egg-audium-binary.json).
+> [`pterodactyl/egg-audium-binary.json`](./pterodactyl/egg-audium-binary.json).
 > Its installer detects the host architecture, downloads **only** the matching
 > release binary, verifies the SHA-256, and installs the version-matched
 > `config.toml`. There is no `start.sh`: the binary reads the panel's `AUDIUM_*`
