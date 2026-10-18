@@ -129,13 +129,46 @@ pub fn init(config: &LoggingConfig) {
     }
 }
 
+/// Transport crates whose `trace` output is enormous and not actionable.
+///
+/// At `trace` level `hyper`, `h2` and `rustls` emit every HTTP/2 frame, header
+/// table update and TLS certificate chain. In practice that is thousands of
+/// lines per request and buries Audium's own diagnostics: a live capture showed
+/// 2758 log lines of which only ~50 came from Audium. Capping these at `debug`
+/// keeps `trace` usable for our own modules.
+///
+/// These directives are inserted *before* the user-supplied filters, so an
+/// operator who explicitly wants `hyper=trace` still gets it.
+const TRACE_NOISE_TARGETS: &[&str] = &[
+    "hyper",
+    "h2",
+    "rustls",
+    "reqwest",
+    "h2::codec",
+    "hyper::proto",
+];
+
 /// Builds the `EnvFilter` directive string from the configured level and the
 /// optional per-target filter overrides (e.g. `audium=debug,davey=off`).
 fn filter_string(level: &str, filters: Option<&str>) -> String {
-    match filters {
-        Some(f) if !f.is_empty() => format!("{level},{f}"),
-        _ => level.to_string(),
+    let noise = if level.eq_ignore_ascii_case("trace") {
+        TRACE_NOISE_TARGETS
+            .iter()
+            .map(|t| format!("{t}=debug"))
+            .collect::<Vec<_>>()
+            .join(",")
+    } else {
+        String::new()
+    };
+
+    let mut parts: Vec<&str> = vec![level];
+    if !noise.is_empty() {
+        parts.push(&noise);
     }
+    if let Some(f) = filters.filter(|f| !f.is_empty()) {
+        parts.push(f);
+    }
+    parts.join(",")
 }
 
 /// Which console streams an event at `level` is written to.
@@ -178,9 +211,36 @@ mod tests {
 
     #[test]
     fn filter_string_accepts_valid_levels() {
-        for level in ["trace", "debug", "info", "warn", "error", "off"] {
+        for level in ["debug", "info", "warn", "error", "off"] {
             assert_eq!(filter_string(level, None), level);
         }
+    }
+
+    #[test]
+    fn trace_damps_noisy_transport_crates() {
+        let directives = filter_string("trace", None);
+        assert!(directives.starts_with("trace,"));
+        for target in TRACE_NOISE_TARGETS {
+            assert!(
+                directives.contains(&format!("{target}=debug")),
+                "missing {target}=debug in {directives}"
+            );
+        }
+        let upper = filter_string("TRACE", None);
+        assert!(upper.starts_with("TRACE,"));
+        assert!(upper.contains("hyper=debug"));
+    }
+
+    #[test]
+    fn below_trace_keeps_the_level_bare() {
+        assert_eq!(filter_string("debug", None), "debug");
+        assert!(!filter_string("debug", None).contains("hyper"));
+    }
+
+    #[test]
+    fn operator_filters_still_win_over_noise_caps() {
+        let directives = filter_string("trace", Some("hyper=trace,audium=debug"));
+        assert!(directives.ends_with("hyper=trace,audium=debug"));
     }
 
     #[test]
