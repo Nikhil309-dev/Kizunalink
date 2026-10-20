@@ -299,7 +299,7 @@ impl SoundCloudTokenTracker {
 #[cfg(test)]
 mod tests {
     use super::{
-        CachedClientId, CLIENT_ID_REFRESH_INTERVAL, CLIENT_ID_REFRESH_RETRY_INTERVAL,
+        CLIENT_ID_REFRESH_INTERVAL, CLIENT_ID_REFRESH_RETRY_INTERVAL, CachedClientId,
         extract_client_id, is_valid_client_id, script_src_re,
     };
     use std::time::{Duration, Instant};
@@ -361,7 +361,8 @@ mod tests {
     #[test]
     fn an_id_past_the_refresh_interval_is_stale() {
         let mut cache = fresh("QhVEWrrJKvW4uSU5u5EoI0FTXYUGzy5k");
-        cache.last_updated = Some(Instant::now() - CLIENT_ID_REFRESH_INTERVAL - Duration::from_secs(1));
+        cache.last_updated =
+            Some(Instant::now() - CLIENT_ID_REFRESH_INTERVAL - Duration::from_secs(1));
         assert!(cache.is_stale());
     }
 
@@ -371,7 +372,8 @@ mod tests {
     #[test]
     fn a_recent_failure_suppresses_the_refresh_attempt() {
         let mut cache = fresh("QhVEWrrJrgluuy");
-        cache.last_updated = Some(Instant::now() - CLIENT_ID_REFRESH_INTERVAL - Duration::from_secs(1));
+        cache.last_updated =
+            Some(Instant::now() - CLIENT_ID_REFRESH_INTERVAL - Duration::from_secs(1));
         cache.last_failed = Some(Instant::now());
 
         assert!(cache.is_stale(), "the id is past its refresh interval");
