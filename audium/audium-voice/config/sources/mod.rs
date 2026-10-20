@@ -11,26 +11,18 @@ pub mod audius;
 pub mod bandcamp;
 pub mod bilibili;
 pub mod bluesky;
-pub mod clypit;
 pub mod deezer;
-pub mod flowery;
 pub mod gaana;
-pub mod getyarn;
-pub mod google_tts;
 pub mod googledrive;
 pub mod http;
 pub mod iheartradio;
 pub mod instagram;
 pub mod jiosaavn;
-pub mod kwai;
 pub mod lastfm;
-pub mod lazypytts;
 pub mod local;
 pub mod mixcloud;
 pub mod netease;
-pub mod newgrounds;
 pub mod nicovideo;
-pub mod ocremix;
 pub mod pandora;
 pub mod pinterest;
 pub mod pixeldrain;
@@ -40,7 +32,6 @@ pub mod rss;
 pub mod shazam;
 pub mod songlink;
 pub mod soundcloud;
-pub mod soundgasm;
 pub mod spotify;
 pub mod telegram;
 pub mod tidal;
@@ -61,26 +52,18 @@ pub use audius::*;
 pub use bandcamp::*;
 pub use bilibili::*;
 pub use bluesky::*;
-pub use clypit::*;
 pub use deezer::*;
-pub use flowery::*;
 pub use gaana::*;
-pub use getyarn::*;
-pub use google_tts::*;
 pub use googledrive::*;
 pub use http::*;
 pub use iheartradio::*;
 pub use instagram::*;
 pub use jiosaavn::*;
-pub use kwai::*;
 pub use lastfm::*;
-pub use lazypytts::*;
 pub use local::*;
 pub use mixcloud::*;
 pub use netease::*;
-pub use newgrounds::*;
 pub use nicovideo::*;
-pub use ocremix::*;
 pub use pandora::*;
 pub use pinterest::*;
 pub use pixeldrain::*;
@@ -90,7 +73,6 @@ pub use rss::*;
 pub use shazam::*;
 pub use songlink::*;
 pub use soundcloud::*;
-pub use soundgasm::*;
 pub use spotify::*;
 pub use telegram::*;
 pub use tidal::*;
@@ -136,8 +118,6 @@ pub struct SourcesConfig {
     pub netease: Option<NeteaseMusicConfig>,
     pub vkmusic: Option<VkMusicConfig>,
     pub yandexmusic: Option<YandexMusicConfig>,
-    pub google_tts: Option<GoogleTtsConfig>,
-    pub flowery: Option<FloweryConfig>,
     pub reddit: Option<RedditConfig>,
     pub lastfm: Option<LastFmConfig>,
     pub rss: Option<RssConfig>,
@@ -145,16 +125,9 @@ pub struct SourcesConfig {
     pub bluesky: Option<BlueskyConfig>,
     pub tiktok: Option<TiktokConfig>,
     pub tumblr: Option<TumblrConfig>,
-    pub newgrounds: Option<NewgroundsConfig>,
-    pub kwai: Option<KwaiConfig>,
-    pub ocremix: Option<OcremixConfig>,
-    pub clypit: Option<ClypitConfig>,
-    pub getyarn: Option<GetyarnConfig>,
-    pub soundgasm: Option<SoundgasmConfig>,
     pub pixeldrain: Option<PixeldrainConfig>,
     pub telegram: Option<TelegramConfig>,
     pub googledrive: Option<GoogleDriveConfig>,
-    pub lazypytts: Option<LazypyttsConfig>,
     pub pinterest: Option<PinterestConfig>,
     pub songlink: Option<SonglinkConfig>,
     pub vimeo: Option<VimeoConfig>,

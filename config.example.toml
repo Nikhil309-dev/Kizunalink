@@ -315,18 +315,6 @@ enabled = false
 # Required when enabling local playback; paths outside this directory are rejected.
 media_dir = "./media"
 
-[sources.google_tts]
-enabled = false
-language = "en-US"
-
-[sources.flowery]
-enabled = false
-voice = "Salli"
-translate = false
-silence = 0
-speed = 1.0
-enforce_config = false
-
 [sources.reddit]
 enabled = false
 # proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
@@ -390,12 +378,6 @@ enabled = false
 enabled = false
 # proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
 
-[sources.lazypytts]
-# Text-to-speech via a LazyPy TTS endpoint. Query form: "lazypytts:<text>".
-enabled = false
-# api_url = "http://localhost:8080"
-# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
-
 [sources.songlink]
 # Resolver, not a media source: expands a streaming-service share link
 # (song.link / album.link / a supported provider URL) into its cross-service
@@ -441,39 +423,8 @@ enabled = false
 enabled = false
 # proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
 
-[sources.newgrounds]
-# Resolves Newgrounds audio pages (newgrounds.com/audio/listen/<id>).
-enabled = false
-# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
-
-[sources.kwai]
-# Resolves Kwai video links (kwai.com/video/<id>), including the m. mobile host.
-enabled = false
-# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
-
 [sources.telegram]
 # Resolves public Telegram post links (t.me/<channel>/<id>) to their media.
-enabled = false
-# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
-
-[sources.ocremix]
-# Resolves OC ReMix community remixes (ocremix.org/remix/OCR<id>) via their
-# public XML metadata, streaming from a public OC ReMix mirror host.
-enabled = false
-# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
-
-[sources.clypit]
-# Resolves Clyp.it audio clips (clyp.it/<id>) via the public api.clyp.it JSON.
-enabled = false
-# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
-
-[sources.getyarn]
-# Resolves getyarn.io clips (getyarn.io/yarn-clip/<id>) to y.yarn.co streams.
-enabled = false
-# proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
-
-[sources.soundgasm]
-# Resolves Soundgasm audio pages (soundgasm.net/u/<author>/<slug>).
 enabled = false
 # proxy = { url = "http://proxy:8080", username = "user", password = "pass" }
 

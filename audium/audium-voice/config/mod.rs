@@ -826,9 +826,8 @@ mod tests {
     /// field, and — the failure this pins — every `SourcesConfig` field must
     /// have a block in the example. A source can be fully implemented and
     /// registered while being absent from the example, leaving operators unable
-    /// to enable it (that happened to tiktok, tumblr, newgrounds, kwai and
-    /// telegram). `serde` silently ignores unknown keys, so nothing else catches
-    /// this drift.
+    /// to enable it (that happened to tiktok, tumblr and telegram). `serde`
+    /// silently ignores unknown keys, so nothing else catches this drift.
     #[test]
     fn every_source_config_field_has_an_example_block() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../config.example.toml");
