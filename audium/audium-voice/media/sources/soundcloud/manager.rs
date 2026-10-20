@@ -111,35 +111,47 @@ impl SoundCloudSource {
     }
 
     /// Resolve a URL via the SoundCloud resolve API.
-    async fn api_resolve(&self, url: &str, client_id: &str) -> Option<Value> {
-        let req_url = format!(
-            "{}/resolve?url={}&client_id={}",
-            BASE_URL,
-            urlencoding::encode(url),
-            client_id
-        );
-        debug!("SoundCloud: Resolving URL: {}", req_url);
-
-        let builder = self.client.get(&req_url);
-
-        let resp = builder.send().await.ok()?;
-        if resp.status().as_u16() == 401 {
-            self.token_tracker.invalidate().await;
-            return None;
-        }
-        if !resp.status().is_success() {
-            warn!(
-                "SoundCloud: API resolve failed with status: {} for {}",
-                resp.status(),
-                url
+    ///
+    /// A 401 means the credential was revoked, not that the request was invalid,
+    /// so the id is invalidated and the resolve is retried once with a freshly
+    /// scraped one. Without the retry a single expired `client_id` made the
+    /// current search/resolve return nothing, which clients surface as playback
+    /// silently stopping.
+    async fn api_resolve(&self, url: &str) -> Option<Value> {
+        for attempt in 0..2 {
+            let client_id = self.token_tracker.get_client_id().await?;
+            let req_url = format!(
+                "{}/resolve?url={}&client_id={}",
+                BASE_URL,
+                urlencoding::encode(url),
+                client_id
             );
-            return None;
+            debug!("SoundCloud: Resolving URL: {}", req_url);
+
+            let resp = self.client.get(&req_url).send().await.ok()?;
+            if resp.status().as_u16() == 401 {
+                self.token_tracker.invalidate().await;
+                if attempt == 0 {
+                    warn!("SoundCloud: API resolve got HTTP 401; retrying with a fresh client_id");
+                    continue;
+                }
+                return None;
+            }
+            if !resp.status().is_success() {
+                warn!(
+                    "SoundCloud: API resolve failed with status: {} for {}",
+                    resp.status(),
+                    url
+                );
+                return None;
+            }
+            let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+                .await
+                .ok()?;
+            trace!("SoundCloud: API resolve response: {:?}", json);
+            return Some(json);
         }
-        let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
-            .await
-            .ok()?;
-        trace!("SoundCloud: API resolve response: {:?}", json);
-        Some(json)
+        None
     }
 
     /// Build a Track from a SC API track JSON object.
@@ -324,39 +336,50 @@ impl SoundCloudSource {
     }
 
     /// Resolve the actual stream URL from a transcoding lookup URL.
-    async fn resolve_stream_url(&self, lookup_url: &str, client_id: &str) -> Option<String> {
-        let url = format!("{}?client_id={}", lookup_url, client_id);
-        let builder = self.client.get(&url);
+    ///
+    /// Like [`Self::api_resolve`], a 401 invalidates the credential and retries
+    /// once, so a revoked `client_id` does not leave playback permanently broken.
+    async fn resolve_stream_url(&self, lookup_url: &str) -> Option<String> {
+        for attempt in 0..2 {
+            let client_id = self.token_tracker.get_client_id().await?;
+            let url = format!("{}?client_id={}", lookup_url, client_id);
 
-        let resp = builder.send().await.ok()?;
-        if resp.status().as_u16() == 401 {
-            self.token_tracker.invalidate().await;
-            return None;
+            let resp = self.client.get(&url).send().await.ok()?;
+            if resp.status().as_u16() == 401 {
+                self.token_tracker.invalidate().await;
+                if attempt == 0 {
+                    warn!(
+                        "SoundCloud: stream URL lookup got HTTP 401; retrying with a fresh client_id"
+                    );
+                    continue;
+                }
+                return None;
+            }
+            if !resp.status().is_success() {
+                return None;
+            }
+            let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
+                .await
+                .ok()?;
+            let stream_url = json
+                .get("url")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned());
+            if let Some(ref url) = stream_url {
+                debug!("SoundCloud: Resolved playback URL: {}", url);
+            }
+            return stream_url;
         }
-        if !resp.status().is_success() {
-            return None;
-        }
-        let json: Value = crate::common::http::read_json_capped::<serde_json::Value>(resp)
-            .await
-            .ok()?;
-        let stream_url = json
-            .get("url")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_owned());
-        if let Some(ref url) = stream_url {
-            debug!("SoundCloud: Resolved playback URL: {}", url);
-        }
-        stream_url
+        None
     }
 
     /// Resolve a track URL and return a PlayableTrack.
     async fn get_track_from_url(
         &self,
         url: &str,
-        client_id: &str,
         local_addr: Option<std::net::IpAddr>,
     ) -> Option<Box<dyn PlayableTrack>> {
-        let json = self.api_resolve(url, client_id).await?;
+        let json = self.api_resolve(url).await?;
 
         if json.get("kind").and_then(|v| v.as_str()) != Some("track") {
             return None;
@@ -377,7 +400,7 @@ impl SoundCloudSource {
         let (kind, lookup_url) = Self::select_format(&transcodings)?;
         trace!("SoundCloud: Selected format {:?} for {}", kind, url);
 
-        let stream_url = self.resolve_stream_url(&lookup_url, client_id).await?;
+        let stream_url = self.resolve_stream_url(&lookup_url).await?;
 
         if stream_url.contains("cf-preview-media.sndcdn.com") || stream_url.contains("/preview/") {
             warn!("SoundCloud: Track {} only has a preview URL, skipping", url);
@@ -394,69 +417,79 @@ impl SoundCloudSource {
     }
 
     async fn search_tracks(&self, query: &str) -> LoadResult {
-        let client_id = match self.token_tracker.get_client_id().await {
-            Some(id) => id,
-            None => return LoadResult::Empty {},
-        };
-
         let limit = self.config.search_limit;
-        let req_url = format!(
-            "{}/search/tracks?q={}&client_id={}&limit={}&offset=0",
-            BASE_URL,
-            urlencoding::encode(query),
-            client_id,
-            limit
-        );
 
-        let builder = self.client.get(&req_url);
+        for attempt in 0..2 {
+            let Some(client_id) = self.token_tracker.get_client_id().await else {
+                return LoadResult::Empty {};
+            };
 
-        let resp = match builder.send().await {
-            Ok(r) => r,
-            Err(e) => {
-                error!("SoundCloud search error: {}", e);
-                return LoadResult::Error(load_error(format!("SoundCloud request failed: {e}")));
-            }
-        };
+            let req_url = format!(
+                "{}/search/tracks?q={}&client_id={}&limit={}&offset=0",
+                BASE_URL,
+                urlencoding::encode(query),
+                client_id,
+                limit
+            );
 
-        if !resp.status().is_success() {
-            return LoadResult::Error(load_error(format!(
-                "SoundCloud returned HTTP {}",
-                resp.status()
-            )));
-        }
-
-        let json: Value =
-            match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
-                Ok(v) => v,
+            let resp = match self.client.get(&req_url).send().await {
+                Ok(r) => r,
                 Err(e) => {
+                    error!("SoundCloud search error: {}", e);
                     return LoadResult::Error(load_error(format!(
-                        "SoundCloud returned invalid JSON: {e}"
+                        "SoundCloud request failed: {e}"
                     )));
                 }
             };
 
-        let tracks: Vec<Track> = json
-            .get("collection")
-            .and_then(|v| v.as_array())
-            .unwrap_or(&vec![])
-            .iter()
-            .filter_map(|item| self.parse_track(item).ok())
-            .collect();
+            if resp.status().as_u16() == 401 {
+                self.token_tracker.invalidate().await;
+                if attempt == 0 {
+                    warn!("SoundCloud search got HTTP 401; retrying with a fresh client_id");
+                    continue;
+                }
+                return LoadResult::Error(load_error(
+                    "SoundCloud search unauthorized after refreshing client_id".to_string(),
+                ));
+            }
 
-        if tracks.is_empty() {
-            LoadResult::Empty {}
-        } else {
-            LoadResult::Search(tracks)
+            if !resp.status().is_success() {
+                return LoadResult::Error(load_error(format!(
+                    "SoundCloud returned HTTP {}",
+                    resp.status()
+                )));
+            }
+
+            let json: Value =
+                match crate::common::http::read_json_capped::<serde_json::Value>(resp).await {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return LoadResult::Error(load_error(format!(
+                            "SoundCloud returned invalid JSON: {e}"
+                        )));
+                    }
+                };
+
+            let tracks: Vec<Track> = json
+                .get("collection")
+                .and_then(|v| v.as_array())
+                .unwrap_or(&vec![])
+                .iter()
+                .filter_map(|item| self.parse_track(item).ok())
+                .collect();
+
+            return if tracks.is_empty() {
+                LoadResult::Empty {}
+            } else {
+                LoadResult::Search(tracks)
+            };
         }
+
+        LoadResult::Empty {}
     }
 
     async fn load_single_track(&self, url: &str) -> LoadResult {
-        let client_id = match self.token_tracker.get_client_id().await {
-            Some(id) => id,
-            None => return LoadResult::Empty {},
-        };
-
-        let json = match self.api_resolve(url, &client_id).await {
+        let json = match self.api_resolve(url).await {
             Some(v) => v,
             None => return LoadResult::Empty {},
         };
@@ -483,12 +516,7 @@ impl SoundCloudSource {
     }
 
     async fn load_playlist(&self, url: &str) -> LoadResult {
-        let client_id = match self.token_tracker.get_client_id().await {
-            Some(id) => id,
-            None => return LoadResult::Empty {},
-        };
-
-        let json = match self.api_resolve(url, &client_id).await {
+        let json = match self.api_resolve(url).await {
             Some(v) => v,
             None => return LoadResult::Empty {},
         };
@@ -622,11 +650,6 @@ impl SoundCloudSource {
     }
 
     async fn load_user(&self, url: &str) -> LoadResult {
-        let client_id = match self.token_tracker.get_client_id().await {
-            Some(id) => id,
-            None => return LoadResult::Empty {},
-        };
-
         let caps = match user_url_re().captures(url) {
             Some(c) => c,
             None => return LoadResult::Empty {},
@@ -636,7 +659,7 @@ impl SoundCloudSource {
 
         let clean_url = format!("https://soundcloud.com/{username}");
 
-        let json = match self.api_resolve(&clean_url, &client_id).await {
+        let json = match self.api_resolve(&clean_url).await {
             Some(v) => v,
             None => return LoadResult::Empty {},
         };
@@ -914,10 +937,9 @@ impl SourcePlugin for SoundCloudSource {
                 .unwrap_or_else(|| identifier.to_owned())
         };
 
-        let client_id = self.token_tracker.get_client_id().await?;
         let local_addr = routeplanner.and_then(|rp| rp.get_address());
 
-        self.get_track_from_url(&url, &client_id, local_addr).await
+        self.get_track_from_url(&url, local_addr).await
     }
 
     fn get_proxy_config(&self) -> Option<crate::config::sources::HttpProxyConfig> {
