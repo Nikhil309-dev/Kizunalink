@@ -14,26 +14,18 @@ use crate::{
         bandcamp::BandcampSource,
         bilibili::BilibiliSource,
         bluesky::BlueskySource,
-        clypit::ClypitSource,
         deezer::DeezerSource,
-        flowery::FlowerySource,
         gaana::GaanaSource,
-        getyarn::GetyarnSource,
-        google_tts::GoogleTtsSource,
         googledrive::GoogleDriveSource,
         http::HttpSource,
         iheartradio::IheartradioSource,
         instagram::InstagramSource,
         jiosaavn::JioSaavnSource,
-        kwai::KwaiSource,
         lastfm::LastFMSource,
-        lazypytts::LazypyttsSource,
         local::LocalSource,
         mixcloud::MixcloudSource,
         netease::NeteaseSource,
-        newgrounds::NewgroundsSource,
         nicovideo::NicovideoSource,
-        ocremix::OcremixSource,
         pandora::PandoraSource,
         pinterest::PinterestSource,
         pixeldrain::PixeldrainSource,
@@ -44,7 +36,6 @@ use crate::{
         shazam::ShazamSource,
         songlink::SonglinkSource,
         soundcloud::SoundCloudSource,
-        soundgasm::SoundgasmSource,
         spotify::SpotifySource,
         telegram::TelegramSource,
         tidal::TidalSource,
@@ -393,18 +384,8 @@ fn register_core_sources(
     }
 
     register_simple!(config.sources.tumblr, "Tumblr", TumblrSource::new);
-    register_simple!(
-        config.sources.newgrounds,
-        "Newgrounds",
-        NewgroundsSource::new
-    );
-    register_simple!(config.sources.kwai, "Kwai", KwaiSource::new);
     register_simple!(config.sources.telegram, "Telegram", TelegramSource::new);
 
-    register_simple!(config.sources.ocremix, "OCReMix", OcremixSource::new);
-    register_simple!(config.sources.clypit, "Clypit", ClypitSource::new);
-    register_simple!(config.sources.getyarn, "Getyarn", GetyarnSource::new);
-    register_simple!(config.sources.soundgasm, "Soundgasm", SoundgasmSource::new);
     register_simple!(
         config.sources.pixeldrain,
         "Pixeldrain",
@@ -421,7 +402,6 @@ fn register_core_sources(
         "Google Drive",
         GoogleDriveSource::new
     );
-    register_simple!(config.sources.lazypytts, "LazyPy TTS", LazypyttsSource::new);
 
     register_simple!(config.sources.songlink, "Songlink", SonglinkSource::new);
     register_simple!(config.sources.vimeo, "Vimeo", VimeoSource::new);
@@ -635,20 +615,6 @@ fn register_amazonmusic(
 }
 
 fn register_extra_sources(sources: &mut Vec<BoxedSource>, config: &crate::config::AppConfig) {
-    if let Some(c) = config.sources.google_tts.as_ref()
-        && c.enabled
-    {
-        tracing::info!("Loaded source: Google TTS");
-        sources.push(Box::new(GoogleTtsSource::new(c.clone())));
-    }
-
-    if let Some(c) = config.sources.flowery.as_ref()
-        && c.enabled
-    {
-        tracing::info!("Loaded source: Flowery");
-        sources.push(Box::new(FlowerySource::new(c.clone())));
-    }
-
     if let Some(c) = config.sources.local.as_ref()
         && c.enabled
     {

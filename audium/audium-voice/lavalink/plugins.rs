@@ -27,7 +27,6 @@ pub const SPONSORBLOCK: &str = "sponsorblock-plugin";
 pub const YOUTUBE: &str = "youtube-plugin";
 pub const LAVADSPX: &str = "lavadspx-plugin";
 pub const FILTER_PLUGIN: &str = "lavalink-filter-plugin";
-pub const TTS: &str = "tts-plugin";
 pub const JIOSAAVN: &str = "jiosaavn-plugin";
 
 /// Versions are the upstream release lines clients pin against (e.g. Shoukaku
@@ -39,7 +38,6 @@ const SPONSORBLOCK_VERSION: &str = "3.0.0";
 const YOUTUBE_VERSION: &str = "1.13.0";
 const LAVADSPX_VERSION: &str = "0.0.5";
 const FILTER_PLUGIN_VERSION: &str = "0.0.4";
-const TTS_VERSION: &str = "1.0.0";
 const JIOSAAVN_VERSION: &str = "1.0.0";
 
 fn entry(name: &str, version: &str) -> Plugin {
@@ -110,10 +108,6 @@ pub fn advertised(config: &AppConfig) -> Vec<Plugin> {
 
     if f.echo || f.reverb {
         plugins.push(entry(FILTER_PLUGIN, FILTER_PLUGIN_VERSION));
-    }
-
-    if source_on(&config.sources.google_tts, |c| c.enabled) {
-        plugins.push(entry(TTS, TTS_VERSION));
     }
 
     if source_on(&config.sources.jiosaavn, |c| c.enabled) {
@@ -210,10 +204,8 @@ mod tests {
     }
 
     #[test]
-    fn tts_and_jiosaavn_are_gated_on_their_sources() {
-        assert!(!has(&cfg(""), TTS));
+    fn jiosaavn_is_gated_on_its_source() {
         assert!(!has(&cfg(""), JIOSAAVN));
-        assert!(has(&cfg("[sources.google_tts]\nenabled = true"), TTS));
         assert!(has(&cfg("[sources.jiosaavn]\nenabled = true"), JIOSAAVN));
     }
 
@@ -222,7 +214,6 @@ mod tests {
         let full = cfg("[sources.youtube]\nenabled = true\n\
              [sources.spotify]\nenabled = true\n\
              [sources.jiosaavn]\nenabled = true\n\
-             [sources.google_tts]\nenabled = true\n\
              [lyrics]\nlrclib = true\n\
              [player.sponsorblock]\nenabled = true");
         for plugin in advertised(&full) {

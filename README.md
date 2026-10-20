@@ -82,13 +82,11 @@ The source implementations below are part of the project. **An implemented sourc
 | Audiomack | Audius | Bandcamp |
 | Last.fm | Pandora | Shazam |
 | Twitch | Reddit | Bluesky |
-| TikTok | Tumblr | Newgrounds |
-| Kwai | Telegram | Vimeo |
-| Pinterest | Google Drive | Songlink |
-| Bilibili | NicoVideo | Instagram |
-| Twitter/X | RSS/Atom feeds | iHeartRadio |
-| Google TTS | Flowery TTS | LazyPy TTS |
-| HTTP URLs | Local files | |
+| TikTok | Tumblr | Telegram |
+| Vimeo | Pinterest | Google Drive |
+| Songlink | Bilibili | NicoVideo |
+| Instagram | Twitter/X | RSS/Atom feeds |
+| iHeartRadio | HTTP URLs | Local files |
 
 Metadata-only results may require a playable mirror. See [config.example.toml](./config.example.toml) for source settings and resolver priorities.
 
