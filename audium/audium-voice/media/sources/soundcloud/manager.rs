@@ -516,6 +516,11 @@ impl SoundCloudSource {
     }
 
     async fn load_playlist(&self, url: &str) -> LoadResult {
+        let client_id = match self.token_tracker.get_client_id().await {
+            Some(id) => id,
+            None => return LoadResult::Empty {},
+        };
+
         let json = match self.api_resolve(url).await {
             Some(v) => v,
             None => return LoadResult::Empty {},
@@ -650,6 +655,11 @@ impl SoundCloudSource {
     }
 
     async fn load_user(&self, url: &str) -> LoadResult {
+        let client_id = match self.token_tracker.get_client_id().await {
+            Some(id) => id,
+            None => return LoadResult::Empty {},
+        };
+
         let caps = match user_url_re().captures(url) {
             Some(c) => c,
             None => return LoadResult::Empty {},
